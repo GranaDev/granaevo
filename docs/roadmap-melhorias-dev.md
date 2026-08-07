@@ -1483,9 +1483,29 @@ Coleções que precisam de diff, por frequência de uso no código:
     "substitua tudo" — ou seja, **fechar a aba desligava o merge por perfil** e
     sobrescrevia o trabalho dos outros membros. Corrigido junto (declara os
     tocados e carimba ids).
-- **37.1c** 🔴 Estender a `metas`, `cartoesCredito`, `contasFixas`, `orcamentos`,
-  `conquistas`.
-- **37.1d** 🔴 Campos escalares do perfil (nome, foto, config) como `set`.
+- **37.1c** ✅ Estendido a **todas** as coleções, percorrendo `COLECOES` (não uma
+  lista escrita à mão — uma coleção nova ficaria de fora em silêncio, que é o
+  modo de falhar deste passo: nada quebra, o dado da outra aba só some).
+  O motivo da falha passa a dizer QUAL coleção (`metas:sem_id`) — o conserto é
+  num ponto de criação específico, e saber onde é metade do trabalho.
+  · **`orcamentos` e `conquistas` NÃO entram**: são mapas chaveados por nome, não
+    listas; a própria chave já é a identidade. Vão como campo escalar no 37.1d.
+  · **O "resto" do perfil agora é conferido.** Nome, foto, config, orçamentos,
+    conquistas e saldo não são descritos por operação nenhuma. Um perfil que só
+    foi renomeado gera ZERO operações — se o servidor aplicasse só elas, o nome
+    antigo voltaria. Enquanto o 37.1d não existe, mudança no resto marca
+    `ops_completo = false`, e a sombra mede quantas vezes isso acontece.
+- **37.1d** 🔴 Campos escalares do perfil (nome, foto, config, `orcamentos`,
+  `conquistas`, saldo) como operação `set`. É o que falta para `ops_completo`
+  poder significar "as operações descrevem TUDO" — sem isso o 37.2a não pode
+  aplicar só operações.
+  **Falta:** derivar o `set` a partir do `#restoDoPerfil` (que já existe e já é
+  comparado), decidir a granularidade (campo a campo × o resto inteiro) e cobrir
+  com teste de reconstrução como as coleções.
+  📋 **A sombra precisa responder antes:** o dashboard reconstrói cada registro
+  pelo allowlist antes de salvar. Se algum dado legado tiver campo fora da lista,
+  o PRIMEIRO save da sessão sai como "editei tudo" — o log de dev
+  (`🔬 sombra: N operação(ões)`) mostra o número na hora.
 
 **37.2 · O SERVIDOR APLICA**
 - **37.2a** 🔴 Aplicar as operações sobre o blob decifrado, em vez de substituir.

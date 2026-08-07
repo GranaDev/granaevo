@@ -1,6 +1,6 @@
 // ========== DATA MANAGER - SISTEMA UNIFICADO DE SALVAMENTO ==========
 import { supabase, getValidAccessToken, refreshSession as hybridRefresh } from '../services/supabase-client.js?v=2';
-import { backfillIds, carimbarNovos, serializarEstavel } from './registro-id.js?v=1';
+import { backfillIds, carimbarNovos, serializarEstavel, COLECOES } from './registro-id.js?v=1';
 import { diffColecao, aplicarOperacoes, comEndereco } from './diff-registros.js?v=1';
 import { captureError } from './error-tracking.js';
 
@@ -141,6 +141,20 @@ class DataManager {
     // que grava todo o dinheiro do app.
     #opsAvisado = false;
 
+    /**
+     * Tudo no perfil que NÃO é uma das coleções: nome, foto, config, orçamentos,
+     * conquistas, saldo. Nenhuma operação descreve isso ainda (é o 37.1d), então
+     * um perfil cujo "resto" mudou não pode ser declarado completo — se o
+     * servidor aplicasse só as operações, um perfil renomeado voltaria ao nome
+     * antigo. Medir isto agora diz quantas vezes acontece de verdade.
+     */
+    #restoDoPerfil(p) {
+        const out = {};
+        if (!p || typeof p !== 'object') return out;
+        for (const k of Object.keys(p)) if (!COLECOES.includes(k)) out[k] = p[k];
+        return out;
+    }
+
     #derivarOperacoes(profiles, tocados) {
         const alvo = new Set(tocados.map(String));
         const ops = [];
@@ -154,19 +168,26 @@ class DataManager {
             let antes = null;
             const bruto = this.#retrato.get(id);
             if (bruto !== undefined) { try { antes = JSON.parse(bruto); } catch { /* retrato ilegível */ } }
-            // Sem retrato: perfil que nasceu nesta sessão. Tudo nele é inserção.
+            // Sem retrato: perfil que nasceu nesta sessão. Tudo nele é inserção —
+            // e o "resto" abaixo vai acusar isso, porque perfil novo não é
+            // descritível só por operações de coleção.
             const base = (antes && typeof antes === 'object') ? antes : {};
 
-            const d = diffColecao(base.transacoes, p.transacoes);
-            if (d.ok !== true) { completo = false; motivos.add(d.motivo); continue; }
+            for (const col of COLECOES) {
+                const d = diffColecao(base[col], p?.[col]);
+                if (d.ok !== true) { completo = false; motivos.add(`${col}:${d.motivo}`); continue; }
 
-            // O AUTOTESTE. É ele que transforma a sombra em prova.
-            const refeito = aplicarOperacoes(base.transacoes || [], d);
-            if (serializarEstavel(refeito) !== serializarEstavel(p.transacoes || [])) {
-                completo = false; motivos.add('reconstrucao_divergente'); continue;
+                // O AUTOTESTE. É ele que transforma a sombra em prova.
+                const refeito = aplicarOperacoes(base[col] || [], d);
+                if (serializarEstavel(refeito) !== serializarEstavel(p?.[col] || [])) {
+                    completo = false; motivos.add(`${col}:reconstrucao_divergente`); continue;
+                }
+                ops.push(...comEndereco(d.ops, id, col));
             }
 
-            ops.push(...comEndereco(d.ops, id, 'transacoes'));
+            if (serializarEstavel(this.#restoDoPerfil(base)) !== serializarEstavel(this.#restoDoPerfil(p))) {
+                completo = false; motivos.add('campos_fora_das_colecoes');
+            }
         }
 
         // Divergência é a notícia; acordo é o esperado. Uma vez por sessão, para

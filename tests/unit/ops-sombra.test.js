@@ -20,7 +20,14 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { diffColecao, aplicarOperacoes, comEndereco } from '../../src/scripts/modules/diff-registros.js'
-import { serializarEstavel, carimbarNovos } from '../../src/scripts/modules/registro-id.js'
+import { serializarEstavel, carimbarNovos, COLECOES } from '../../src/scripts/modules/registro-id.js'
+
+/** O "resto" do perfil — tudo que não é coleção. Espelha `#restoDoPerfil`. */
+const resto = (p) => {
+  const out = {}
+  for (const k of Object.keys(p || {})) if (!COLECOES.includes(k)) out[k] = p[k]
+  return out
+}
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const DM = readFileSync(join(RAIZ, 'src/scripts/modules/data-manager.js'), 'utf8')
@@ -89,6 +96,80 @@ describe('o autoteste RECLAMA quando não deveria confiar', () => {
     const perfil = { id: 'p1', transacoes: [tx('a'), { valor: 5, descricao: 'nova' }] }
     carimbarNovos([perfil])
     assert.equal(bate([tx('a')], perfil.transacoes).ok, true)
+  })
+})
+
+describe('37.1c — todas as coleções, não só transações', () => {
+  test('o laço percorre COLECOES, e não uma lista escrita à mão', () => {
+    // Escrever os nomes aqui deixaria uma coleção nova (uma futura `reservas`,
+    // por exemplo) fora do diff em silêncio — que é o modo de falhar deste passo
+    // inteiro: nada quebra, o dado de outra aba só some.
+    const fn = DM.match(/#derivarOperacoes\([\s\S]*?\n {4}\}/)[0]
+    assert.match(fn, /for \(const col of COLECOES\)/)
+    assert.match(fn, /diffColecao\(base\[col\], p\?\.\[col\]\)/)
+    assert.match(fn, /comEndereco\(d\.ops, id, col\)/)
+    assert.match(DM, /import \{[^}]*COLECOES[^}]*\} from '\.\/registro-id\.js/)
+  })
+
+  test('o motivo diz QUAL coleção falhou', () => {
+    // "sem_id" sozinho não ajuda em nada: o conserto é num ponto de criação
+    // específico, e saber se foi em metas ou em cartões é metade do trabalho.
+    const fn = DM.match(/#derivarOperacoes\([\s\S]*?\n {4}\}/)[0]
+    assert.match(fn, /motivos\.add\(`\$\{col\}:\$\{d\.motivo\}`\)/)
+    assert.match(fn, /motivos\.add\(`\$\{col\}:reconstrucao_divergente`\)/)
+  })
+
+  test('cada coleção derivada isoladamente reconstrói o estado', () => {
+    const antes = {
+      transacoes: [tx('t1')],
+      metas: [{ id: 'm1', descricao: 'Viagem', saved: 100, monthly: { '2026-08': 100 } }],
+      cartoesCredito: [{ id: 'c1', nomeBanco: 'Nu', limite: 1000, usado: 0 }],
+      contasFixas: [{ id: 'f1', descricao: 'Luz', valor: 180, compras: [] }],
+      assinaturas: [{ id: 'a1', nome: 'Netflix', valor: 40, ativa: true }],
+    }
+    const depois = {
+      transacoes: [tx('t1'), tx('t2')],
+      metas: [{ id: 'm1', descricao: 'Viagem', saved: 150, monthly: { '2026-08': 150 } }],
+      cartoesCredito: [],
+      contasFixas: [{ id: 'f1', descricao: 'Luz', valor: 180, compras: [{ id: 'cp1', valorParcela: 90 }] }],
+      assinaturas: [{ id: 'a1', nome: 'Netflix', valor: 40, ativa: true }, { id: 'a2', nome: 'Spotify' }],
+    }
+    for (const col of Object.keys(antes)) {
+      assert.equal(bate(antes[col], depois[col]).ok, true, col)
+    }
+  })
+})
+
+describe('37.1c — o que as operações de coleção NÃO descrevem', () => {
+  test('mudar só o nome do perfil não gera operação nenhuma', () => {
+    // Se o servidor aplicasse só as operações, o perfil renomeado voltaria ao
+    // nome antigo. É por isso que o `resto` precisa marcar incompleto até o
+    // 37.1d transformar campo escalar em operação `set`.
+    const antes = { id: 'p1', name: 'Lucas', transacoes: [tx('a')] }
+    const depois = { id: 'p1', name: 'Lucas Oliveira', transacoes: [tx('a')] }
+    assert.equal(bate(antes.transacoes, depois.transacoes).n, 0)
+    assert.notEqual(serializarEstavel(resto(antes)), serializarEstavel(resto(depois)))
+  })
+
+  test('orçamentos e conquistas caem no resto — são mapas, não listas', () => {
+    // A chave já é a identidade neles, então não entram em COLECOES.
+    const antes = { id: 'p1', orcamentos: { Mercado: { limite: 600 } }, conquistas: { desbloqueadas: [] } }
+    const depois = { id: 'p1', orcamentos: { Mercado: { limite: 800 } }, conquistas: { desbloqueadas: [] } }
+    assert.notEqual(serializarEstavel(resto(antes)), serializarEstavel(resto(depois)))
+    assert.ok(!COLECOES.includes('orcamentos'))
+    assert.ok(!COLECOES.includes('conquistas'))
+  })
+
+  test('mexer só nas coleções deixa o resto idêntico', () => {
+    const antes = { id: 'p1', name: 'Lucas', transacoes: [tx('a')] }
+    const depois = { id: 'p1', name: 'Lucas', transacoes: [tx('a'), tx('b')] }
+    assert.equal(serializarEstavel(resto(antes)), serializarEstavel(resto(depois)))
+  })
+
+  test('o data-manager compara o resto e marca incompleto', () => {
+    const fn = DM.match(/#derivarOperacoes\([\s\S]*?\n {4}\}/)[0]
+    assert.match(fn, /#restoDoPerfil\(base\)\) !== serializarEstavel\(this\.#restoDoPerfil\(p\)\)/)
+    assert.match(fn, /motivos\.add\('campos_fora_das_colecoes'\)/)
   })
 })
 
