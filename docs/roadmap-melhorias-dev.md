@@ -1541,11 +1541,28 @@ Coleções que precisam de diff, por frequência de uso no código:
 **37.2 · O SERVIDOR APLICA**
 - **37.2a** 🔴 Aplicar as operações sobre o blob decifrado, em vez de substituir.
   Reusa o que a guarda anti-wipe e o merge por perfil já fazem.
-- **37.2b** 🔴 **Idempotência:** cada operação leva um id; a Edge guarda os
-  últimos N aplicados e ignora repetição. Hoje um retry após timeout **DUPLICA**
-  a transação — isso é bug em produção, não hipótese.
-- **37.2c** 🔴 Operação desconhecida ou malformada → recusa, sem aplicar nada
-  parcialmente.
+- **37.2b** ✅ **Idempotência — e SEM o livro-caixa que eu tinha planejado.**
+  O plano era a Edge guardar os últimos N ids aplicados. Não precisa: **toda
+  operação já é idempotente por construção**, e isso é mais forte — não expira,
+  não ocupa espaço e não pode dessincronizar.
+  `add` de id que já existe é IGNORADO (não duplica **e não sobrescreve**: se o
+  registro mudou nesse meio-tempo, quem manda é quem está lá); `edit`/`set` são
+  idempotentes por natureza; `rm` do que já sumiu não faz nada.
+  · **O caso real que isso conserta:** o save chega ao servidor, é gravado, e a
+    RESPOSTA se perde. O cliente não atualiza o retrato, então o save seguinte
+    deriva as MESMAS operações — e a transação apareceria duas vezes no extrato.
+- **37.2c** ✅ `validarOperacoes` recusa a **remessa inteira** ao primeiro
+  problema (aplicar metade de um save deixa o dado num estado que ninguém sabe
+  descrever). Cobre: operação desconhecida, coleção inventada, registro sem id,
+  `edit` com id divergente do registro, remessa acima de 5000 operações.
+  · 🔒 **Poluição de protótipo barrada:** `{op:'set', k:'__proto__'}` escreveria
+    no protótipo de Object e mudaria o comportamento de TODO objeto do processo —
+    inclusive o de outro usuário atendido pela mesma instância da função.
+    Bloqueados: `__proto__`, `constructor`, `prototype`.
+  · 🔒 **`set` no `id` do perfil barrado** — permitiria renomear a chave de um
+    perfil pelo caminho de dados e cair em cima do perfil de outro membro.
+  · 🔒 **`set` numa COLEÇÃO barrado** — substituiria a coleção inteira: o "manda
+    tudo" que este passo veio eliminar, entrando pela porta dos fundos.
 - **37.2d** 🔴 **Compatibilidade:** payload sem operações continua funcionando
   como hoje. Sem isso, um cliente com bundle velho (Service Worker em cache)
   perde dados no dia do deploy.
