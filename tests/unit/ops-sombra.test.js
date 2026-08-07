@@ -261,19 +261,40 @@ describe('como o data-manager liga isso — ordem e condições', () => {
   test('o diagnóstico da sombra é ligável em PRODUÇÃO, por ?opsdebug=1', () => {
     // A pergunta que o 37.2a precisa responder — "as operações descrevem o save
     // inteiro, com dados REAIS e legados?" — não tem resposta em localhost: lá
-    // os dados são novos e já nasceram com id. Preso a IS_DEV, o log nunca
-    // apareceria onde importa.
+    // os dados são novos e já nasceram com id.
     assert.match(DM, /opsdebug'\) === '1'/)
     assert.match(DM, /if \(IS_DEV \|\| OPS_DEBUG\)/)
   })
 
-  test('o diagnóstico imprime CONTAGEM, nunca o conteúdo', () => {
-    // É o dinheiro do usuário passando por um console que pode estar aberto na
-    // frente de outra pessoa — e num print de tela que ele me manda.
+  test('em produção o canal é ATRIBUIÇÃO, não console.log', () => {
+    // O build roda terser com `drop_console: true`: toda chamada a console.*
+    // some do bundle. Um log aqui não seria "difícil de achar" — ele não existe
+    // no arquivo que roda. Já custou duas instruções erradas ao dono.
+    const VITE = readFileSync(join(RAIZ, 'vite.config.js'), 'utf8')
+    assert.match(VITE, /drop_console:\s*true/, 'se isto mudar, o raciocínio abaixo muda')
+
+    const bloco = DM.match(/if \(OPS_DEBUG\) \{[\s\S]*?\n {12}\}/)[0]
+    assert.match(bloco, /window\.__sombra\.push\(/)
+    assert.ok(!/console\./.test(bloco), 'console.* não sobrevive ao build de produção')
+  })
+
+  test('o console.log fica só no dev, onde ele existe', () => {
+    const log = DM.match(/if \(IS_DEV\) \{\s*console\.log\([\s\S]*?\n {12}\}/)
+    assert.ok(log, 'o log de dev continua útil em localhost')
+  })
+
+  test('o diagnóstico registra CONTAGEM, nunca o conteúdo', () => {
+    // É o dinheiro do usuário num objeto que ele vai abrir no console e me
+    // mandar por print. Contagem por tipo responde a pergunta; valor, não.
     const bloco = DM.match(/if \(IS_DEV \|\| OPS_DEBUG\) \{[\s\S]*?\n {8}\}/)[0]
     assert.match(bloco, /porTipo\[o\.op\] = \(porTipo\[o\.op\] \|\| 0\) \+ 1/)
     assert.ok(!/o\.r\b|o\.v\b|JSON\.stringify\(ops/.test(bloco),
-      'o log não pode imprimir registro nem valor de campo')
+      'não pode registrar registro nem valor de campo')
+  })
+
+  test('o acumulador tem teto — diagnóstico não vira vazamento de memória', () => {
+    const bloco = DM.match(/if \(OPS_DEBUG\) \{[\s\S]*?\n {12}\}/)[0]
+    assert.match(bloco, /__sombra\.length < 20/)
   })
 
   test('telemetria quebrada não derruba o save', () => {

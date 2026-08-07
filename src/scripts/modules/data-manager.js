@@ -231,10 +231,29 @@ class DataManager {
             // ser respondido antes de o servidor confiar nas operações.
             const porTipo = {};
             for (const o of ops) porTipo[o.op] = (porTipo[o.op] || 0) + 1;
-            console.log(
-                `🔬 [SOMBRA] ${ops.length} operação(ões)`, porTipo,
-                `· completo=${completo}`, completo ? '' : `· ${[...motivos].join(', ')}`,
-            );
+
+            // Em PRODUÇÃO isto tem de ser uma ATRIBUIÇÃO, não um console.log:
+            // o build roda terser com `drop_console: true`, que apaga toda
+            // chamada a console.* do bundle. Um log aqui não seria "difícil de
+            // achar" — ele simplesmente não existe no arquivo que roda.
+            // Atribuir a um global é código comum e sobrevive à minificação.
+            if (OPS_DEBUG) {
+                if (!Array.isArray(window.__sombra)) window.__sombra = [];
+                if (window.__sombra.length < 20) {
+                    window.__sombra.push({
+                        save: window.__sombra.length + 1,
+                        n: ops.length, ...porTipo,
+                        completo,
+                        motivos: [...motivos].join(', ') || '—',
+                    });
+                }
+            }
+            if (IS_DEV) {
+                console.log(
+                    `🔬 [SOMBRA] ${ops.length} operação(ões)`, porTipo,
+                    `· completo=${completo}`, completo ? '' : `· ${[...motivos].join(', ')}`,
+                );
+            }
         }
 
         return { ops, completo };
