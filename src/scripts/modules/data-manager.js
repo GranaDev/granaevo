@@ -11,6 +11,17 @@ const MAX_QUEUE_DEPTH    = 3;
 const RPC_TIMEOUT_MS     = 15_000;
 const DEBOUNCE_DELAY_MS  = 800;
 const IS_DEV             = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+// Diagnóstico da fase de sombra EM PRODUÇÃO: /dashboard?opsdebug=1.
+// Mesmo padrão do `?pwadebug=1` do assistente. Existe porque a pergunta que o
+// 37.2a precisa responder — "as operações descrevem o save inteiro, com dados
+// REAIS e legados?" — não tem resposta em localhost: lá os dados são novos e já
+// nasceram com id. Só imprime CONTAGEM por tipo; nada de valor ou descrição.
+// Lido uma vez, no carregamento: navegar dentro do app não desliga.
+const OPS_DEBUG = (() => {
+    try { return new URLSearchParams(window.location.search).get('opsdebug') === '1'; }
+    catch { return false; }
+})();
 const SUPABASE_BEACON_URL = `${window.location.origin}/api/user-data`;
 
 // ========== VALIDADORES ==========
@@ -213,9 +224,17 @@ class DataManager {
                 });
             } catch { /* telemetria nunca derruba o save */ }
         }
-        if (IS_DEV) {
-            console.log(`🔬 [DATA-MANAGER] sombra: ${ops.length} operação(ões), completo=${completo}`,
-                completo ? '' : [...motivos].join(','));
+        if (IS_DEV || OPS_DEBUG) {
+            // Contagem POR TIPO, não a lista: `{edit: 900}` num save em que o
+            // usuário só lançou uma transação denuncia na hora que o allowlist
+            // está reescrevendo registro antigo — e é justamente o que precisa
+            // ser respondido antes de o servidor confiar nas operações.
+            const porTipo = {};
+            for (const o of ops) porTipo[o.op] = (porTipo[o.op] || 0) + 1;
+            console.log(
+                `🔬 [SOMBRA] ${ops.length} operação(ões)`, porTipo,
+                `· completo=${completo}`, completo ? '' : `· ${[...motivos].join(', ')}`,
+            );
         }
 
         return { ops, completo };
