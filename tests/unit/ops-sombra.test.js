@@ -155,6 +155,42 @@ describe('37.1c — todas as coleções, não só transações', () => {
   })
 })
 
+describe('carimbos: campo que muda a cada save não pode virar conflito', () => {
+  // MEDIDO EM PRODUÇÃO (?opsdebug=1, 2026-08-07): todo save trazia exatamente um
+  // `set` a mais, mesmo sem o usuário ter mexido em nada. Era o `lastUpdate`,
+  // que o dashboard reescreve com `new Date().toISOString()` em toda montagem
+  // do perfil — e que NINGUÉM lê.
+  test('lastUpdate fica fora das operações', () => {
+    assert.match(DM, /const CARIMBOS = \['lastUpdate'\]/)
+    assert.match(DM, /const FORA_DAS_OPS = \[\.\.\.COLECOES, \.\.\.CARIMBOS\]/)
+    assert.match(DM, /diffCampos\(base, p, FORA_DAS_OPS\)/)
+    assert.match(DM, /if \(!FORA_DAS_OPS\.includes\(k\)\) out\[k\] = p\[k\]/)
+  })
+
+  test('sem isso, TODA gravação simultânea colidiria no 37.3', () => {
+    // A demonstração do porquê: dois perfis idênticos, salvos em instantes
+    // diferentes, divergem só no carimbo.
+    const a = { id: 'p1', name: 'Lucas', lastUpdate: '2026-08-07T09:00:00.000Z' }
+    const b = { id: 'p1', name: 'Lucas', lastUpdate: '2026-08-07T09:00:01.000Z' }
+    assert.equal(diffCampos(a, b, COLECOES).ops.length, 1, 'com o carimbo: um set por save')
+    assert.equal(diffCampos(a, b, [...COLECOES, 'lastUpdate']).ops.length, 0, 'sem ele: nenhuma')
+  })
+
+  test('e o carimbo não engole mudança de verdade', () => {
+    const a = { id: 'p1', name: 'Lucas', lastUpdate: '2026-08-07T09:00:00.000Z' }
+    const b = { id: 'p1', name: 'Outro', lastUpdate: '2026-08-07T09:00:01.000Z' }
+    assert.deepEqual(diffCampos(a, b, [...COLECOES, 'lastUpdate']).ops,
+      [{ op: 'set', k: 'name', v: 'Outro' }])
+  })
+
+  test('o contrato com o 37.2a está escrito onde vai ser lido', () => {
+    // Quando o servidor aplicar só operações, ELE precisa carimbar o
+    // lastUpdate — senão o campo congela. Inofensivo hoje (ninguém lê), mas
+    // seria uma mentira gravada.
+    assert.match(DM, /Contrato com o 37\.2a[\s\S]{0,200}carimba o `lastUpdate`/)
+  })
+})
+
 describe('37.1c — o que as operações de coleção NÃO descrevem', () => {
   test('mudar só o nome do perfil não gera operação de COLEÇÃO nenhuma', () => {
     // Se o servidor aplicasse só as operações de coleção, o perfil renomeado
@@ -216,7 +252,7 @@ describe('37.1c — o que as operações de coleção NÃO descrevem', () => {
     // virou derivação de verdade: `set`/`unset` por chave, com o mesmo autoteste
     // das coleções. O que não pode voltar é o perfil renomeado sair sem operação.
     const fn = DM.match(/#derivarOperacoes\([\s\S]*?\n {4}\}/)[0]
-    assert.match(fn, /diffCampos\(base, p, COLECOES\)/)
+    assert.match(fn, /diffCampos\(base, p, FORA_DAS_OPS\)/)
     assert.match(fn, /aplicarCampos\(this\.#restoDoPerfil\(base\), dc\)/)
     assert.match(fn, /motivos\.add\('perfil:reconstrucao_divergente'\)/)
     assert.match(fn, /comEndereco\(dc\.ops, id, null\)/)

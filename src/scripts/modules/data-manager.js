@@ -18,6 +18,25 @@ const IS_DEV             = ['localhost', '127.0.0.1'].includes(window.location.h
 // REAIS e legados?" — não tem resposta em localhost: lá os dados são novos e já
 // nasceram com id. Só imprime CONTAGEM por tipo; nada de valor ou descrição.
 // Lido uma vez, no carregamento: navegar dentro do app não desliga.
+// ── Carimbos: campos que mudam a cada save por construção ───────────────────
+// `lastUpdate` recebe `new Date().toISOString()` toda vez que o dashboard monta
+// o perfil, e NINGUÉM o lê — os únicos `.lastUpdate` lidos no código são de
+// `meta` (reserva compartilhada), não de perfil.
+//
+// Medido em produção com `?opsdebug=1`: todo save trazia exatamente um `set` a
+// mais, mesmo quando o usuário não tinha mexido em nada. Era este.
+//
+// Por que precisa sair das operações: no 37.3 o conflito é detectado por campo.
+// Um campo que muda sempre faria TODA gravação simultânea colidir — por causa de
+// um dado que não carrega intenção nenhuma do usuário. Duas pessoas na mesma
+// conta brigariam por um timestamp.
+//
+// ⚠️ Contrato com o 37.2a: quando o servidor passar a aplicar só operações, ELE
+// carimba o `lastUpdate`. Sem isso o campo congela — inofensivo hoje (ninguém
+// lê), mas seria uma mentira gravada.
+const CARIMBOS = ['lastUpdate'];
+const FORA_DAS_OPS = [...COLECOES, ...CARIMBOS];
+
 const OPS_DEBUG = (() => {
     try { return new URLSearchParams(window.location.search).get('opsdebug') === '1'; }
     catch { return false; }
@@ -153,16 +172,13 @@ class DataManager {
     #opsAvisado = false;
 
     /**
-     * Tudo no perfil que NÃO é uma das coleções: nome, foto, config, orçamentos,
-     * conquistas, saldo. Nenhuma operação descreve isso ainda (é o 37.1d), então
-     * um perfil cujo "resto" mudou não pode ser declarado completo — se o
-     * servidor aplicasse só as operações, um perfil renomeado voltaria ao nome
-     * antigo. Medir isto agora diz quantas vezes acontece de verdade.
+     * Tudo no perfil que NÃO é coleção nem carimbo: nome, foto, config,
+     * orçamentos, conquistas, saldo. É o que vira operação `set`/`unset`.
      */
     #restoDoPerfil(p) {
         const out = {};
         if (!p || typeof p !== 'object') return out;
-        for (const k of Object.keys(p)) if (!COLECOES.includes(k)) out[k] = p[k];
+        for (const k of Object.keys(p)) if (!FORA_DAS_OPS.includes(k)) out[k] = p[k];
         return out;
     }
 
@@ -201,7 +217,7 @@ class DataManager {
             // geraria zero operações — e aplicar zero operações devolveria o nome
             // antigo. Um `set` por chave, para duas pessoas mexendo em campos
             // diferentes não se atropelarem.
-            const dc = diffCampos(base, p, COLECOES);
+            const dc = diffCampos(base, p, FORA_DAS_OPS);
             if (dc.ok !== true) { completo = false; motivos.add(`perfil:${dc.motivo}`); continue; }
 
             const refeitoCampos = aplicarCampos(this.#restoDoPerfil(base), dc);

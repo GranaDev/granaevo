@@ -1368,10 +1368,34 @@ realmente quer offline (consultar, não lançar).
 e o cliente já prova, a cada save, que aplicá-las reconstrói o perfil inteiro.
 O servidor ainda as ignora — é a fase de sombra, de propósito.
 
-📋 **A sombra precisa responder, antes do 37.2a:** o dashboard reconstrói cada
-registro pelo allowlist antes de salvar. Se algum dado legado tiver campo fora da
-lista, o PRIMEIRO save da sessão sai como "editei tudo". O log de dev
-(`🔬 sombra: N operação(ões), completo=…`) mostra o número na hora.
+### ✅ A sombra já respondeu (medição em produção, 2026-08-07)
+
+Conta real, com dados legados, via `/dashboard?opsdebug=1` → `console.table(__sombra)`:
+
+| save | n | set | add | completo |
+|---|---|---|---|---|
+| 1 | 6 | 6 | — | true |
+| 2 | 1 | 1 | — | true |
+| 3 | 2 | 1 | 1 | true |
+| 4 | 1 | 1 | — | true |
+
+- **`completo = true` nos quatro.** Luz verde para o 37.2a: com dado real e
+  legado, as operações descrevem o save inteiro.
+- **Zero `edit`.** Era o risco principal — se o allowlist do dashboard estivesse
+  reescrevendo registro antigo, o 1º save viria com centenas de `edit`. Não veio
+  nenhum. Descartado com dado, não com opinião.
+- 🔎 **Achado: todo save trazia um `set` a mais**, mesmo sem o usuário mexer em
+  nada. É o `lastUpdate` (dashboard.js:1569), reescrito com `new Date()` em toda
+  montagem do perfil — e que **ninguém lê** (os únicos `.lastUpdate` lidos são de
+  `meta`, na reserva compartilhada). No 37.3 o conflito é por campo: um campo que
+  muda sempre faria TODA gravação simultânea colidir, por causa de um dado sem
+  intenção nenhuma do usuário. Virou `CARIMBOS`, fora das operações.
+  ⚠️ **Contrato com o 37.2a:** o servidor passa a carimbar o `lastUpdate`.
+
+⚠️ **Como diagnosticar em produção** (custou duas instruções erradas): o build
+roda terser com `drop_console: true` — **todo `console.*` é apagado do bundle**.
+Log não aparece em produção, ponto. O canal é atribuição a um global
+(`window.__sombra`), e a verificação é `grep` no `dist/`, não no fonte.
 
 **O defeito, nas palavras de quem viu:** *"se eu mexo no chat assistente com a aba
 do GranaEvo aberta, um sobrescreve o outro"*. Reproduzido: uma retirada lançada
