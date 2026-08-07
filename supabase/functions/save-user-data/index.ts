@@ -319,6 +319,9 @@ Deno.serve(async (req: Request) => {
     // Qualquer chave faltando cai no caminho de sempre. Um cliente com bundle
     // velho em cache de Service Worker continua salvando exatamente como antes.
     let viaOperacoes = false
+    // Desfecho da decisão, devolvido ao cliente. Sem isto, "por que meu save não
+    // usou operações?" só se responde por logs do servidor — que o dono não vê.
+    let opsMotivo = 'sem_pedido'
     const querOps = (body as any)?.ops_aplicar === true &&
                     (body as any)?.ops_completo === true &&
                     Array.isArray((body as any)?.profile_ops)
@@ -326,6 +329,7 @@ Deno.serve(async (req: Request) => {
     if (querOps && existing?.data_json) {
       const guardados = await extractStoredProfiles(existing.data_json, effectiveUserId)
       if (guardados === null) {
+        opsMotivo = 'blob_ilegivel'
         console.warn('[save-user-data] ops puladas: blob atual ilegível. user:', effectiveUserId.slice(0, 8))
       } else {
         // Operações não sabem CRIAR nem APAGAR perfil. Se o conjunto de perfis
@@ -338,6 +342,7 @@ Deno.serve(async (req: Request) => {
                               [...idsGuardados].every((id) => idsChegando.has(id))
 
         if (!mesmoConjunto) {
+          opsMotivo = 'perfis_mudaram'
           console.log('[save-user-data] ops puladas: conjunto de perfis mudou. user:', effectiveUserId.slice(0, 8))
         } else {
           const v = validarOperacoes((body as any).profile_ops)
@@ -345,14 +350,17 @@ Deno.serve(async (req: Request) => {
             // Recusa a remessa, não o save: cai no caminho de sempre. Rejeitar o
             // save inteiro por operação malformada perderia o trabalho do
             // usuário por um defeito que é nosso.
+            opsMotivo = 'invalidas:' + v.erro
             console.warn('[save-user-data] ops inválidas:', v.erro, '| user:', effectiveUserId.slice(0, 8))
           } else {
             const r = aplicarOperacoes(guardados as unknown[], v.valor)
             if (!r.ok) {
+              opsMotivo = 'recusadas:' + r.erro
               console.warn('[save-user-data] ops não aplicadas:', r.erro, '| user:', effectiveUserId.slice(0, 8))
             } else {
               profilesFinais = r.valor.profiles
               viaOperacoes = true
+              opsMotivo = `ok:${r.valor.aplicadas}/${r.valor.ignoradas}`
               if (v.valor.length > 0) {
                 console.log('[save-user-data] ops:', r.valor.aplicadas, 'aplicadas,',
                             r.valor.ignoradas, 'ignoradas | user:', effectiveUserId.slice(0, 8))
@@ -466,7 +474,9 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    return json({ success: true }, 200, corsHeaders)
+    // `ops` no corpo é DIAGNÓSTICO, não contrato: diz por que este save usou (ou
+    // não usou) operações. Sem valor nenhum do usuário — só o motivo e contagens.
+    return json({ success: true, ops: { via: viaOperacoes, motivo: opsMotivo } }, 200, corsHeaders)
 
   } catch (error: any) {
     console.error('[save-user-data] Erro:', error?.message)

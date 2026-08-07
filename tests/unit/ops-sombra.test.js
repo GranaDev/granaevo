@@ -366,6 +366,57 @@ describe('como o data-manager liga isso — ordem e condições', () => {
   })
 })
 
+describe('⭐ save que não tem nada a dizer não é enviado', () => {
+  // O dashboard salva a cada 30 SEGUNDOS, incondicionalmente
+  // (dashboard.js, iniciarAutoSave). Uma aba parada mandava a visão dela do
+  // mundo — de 30 segundos atrás — por cima do que a outra aba acabou de gravar.
+  //
+  // Era a máquina do Lost Update: não bastava lançar nas duas abas ao mesmo
+  // tempo; bastava DEIXAR uma aberta. E reaparecia a cada meio minuto, sempre.
+  test('o gatilho existe mesmo: auto-save periódico incondicional', () => {
+    const DASH = readFileSync(join(RAIZ, 'src/scripts/pages/dashboard.js'), 'utf8')
+    const i = DASH.indexOf('autoSaveInterval = setInterval(')
+    assert.ok(i > 0, 'o auto-save periódico sumiu — este teste perdeu o sentido')
+    const corpo = DASH.slice(i, i + 1200)
+    assert.match(corpo, /30_000/)
+    assert.match(corpo, /salvarDados\(\)/)
+  })
+
+  test('zero operações num save completo = não envia', () => {
+    const fn = DM.slice(DM.indexOf('#derivarOperacoes(safeProfiles, tocados)'))
+    assert.match(fn, /if \(sombra\.completo && sombra\.ops\.length === 0\)/)
+  })
+
+  // O trecho do "pular", delimitado por TEXTO e não por indentação: asserção
+  // presa a espaços já reprovou aqui só porque um comentário mudou de linha.
+  const PULAR = (() => {
+    const i = DM.indexOf('if (sombra.completo && sombra.ops.length === 0)')
+    return i > 0 ? DM.slice(i, DM.indexOf('const dataToSave', i)) : ''
+  })()
+
+  test('a guarda exige `completo` — sem ele, pular seria perder dado', () => {
+    // Zero operações num save INCOMPLETO não quer dizer "não mexi em nada":
+    // quer dizer "não consegui descrever o que mexi". Pular aí perderia a
+    // edição do usuário em silêncio.
+    assert.ok(PULAR, 'o bloco do "pular" sumiu')
+    assert.match(PULAR, /sombra\.completo &&/)
+    assert.match(PULAR, /return true;/)
+  })
+
+  test('pular avisa a UI que terminou — senão fica girando "salvando"', () => {
+    assert.match(PULAR, /ge:save-done/)
+    assert.match(PULAR, /#lastSaveTime = new Date\(\)/)
+  })
+
+  test('o servidor devolve o desfecho, e o diagnóstico registra', () => {
+    const EDGE = readFileSync(join(RAIZ, 'supabase/functions/save-user-data/index.ts'), 'utf8')
+    assert.match(EDGE, /ops: \{ via: viaOperacoes, motivo: opsMotivo \}/)
+    assert.match(DM, /ultima\.servidor =/)
+    // Diagnóstico, não contrato: nada do dinheiro do usuário volta no corpo.
+    assert.ok(!/profiles: profilesFinais[\s\S]{0,80}success: true/.test(EDGE))
+  })
+})
+
 describe('o save do unload também declara o que tocou', () => {
   // Só o corpo de saveImmediate — asserção sobre o arquivo inteiro passaria por
   // causa do saveUserData, que é outro caminho.

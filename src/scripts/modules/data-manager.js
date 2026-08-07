@@ -579,8 +579,35 @@ class DataManager {
             // precisa declarar nada, e nenhuma pode esquecer de declarar.
             const tocados = this.#perfisTocados(safeProfiles);
 
-            // Sombra: as operações viajam, o servidor ainda ignora (37.1b).
             const sombra = this.#derivarOperacoes(safeProfiles, tocados);
+
+            // ── SAVE QUE NÃO TEM NADA A DIZER NÃO É ENVIADO ─────────────────
+            // O dashboard salva a cada 30 segundos, incondicionalmente. Uma aba
+            // parada, que não mudou nada, mandava a visão dela do mundo — de 30
+            // segundos atrás — por cima do que a outra aba acabou de gravar.
+            //
+            // Era a máquina do Lost Update: não bastava lançar nas duas abas ao
+            // mesmo tempo; bastava DEIXAR uma aberta. E ela reaparecia a cada
+            // meio minuto, para sempre.
+            //
+            // Só é seguro pular porque `completo` significa que as operações
+            // descrevem TUDO que mudou. Zero operações num save completo é uma
+            // afirmação forte: "não mexi em nada". Se algo escapou da derivação,
+            // `completo` é falso e o save segue normalmente.
+            if (sombra.completo && sombra.ops.length === 0) {
+                if (IS_DEV || OPS_DEBUG) {
+                    if (OPS_DEBUG) {
+                        if (!Array.isArray(window.__sombra)) window.__sombra = [];
+                        if (window.__sombra.length < 20) {
+                            window.__sombra.push({ save: window.__sombra.length + 1, n: 0, enviado: false });
+                        }
+                    }
+                    if (IS_DEV) console.log('🔇 [DATA-MANAGER] save pulado: nada mudou');
+                }
+                this.#lastSaveTime = new Date();
+                document.dispatchEvent(new CustomEvent('ge:save-done'));
+                return true;
+            }
 
             const dataToSave = {
                 version:  '1.0',
@@ -676,6 +703,18 @@ class DataManager {
                 console.error('❌ [DATA-MANAGER] Erro ao salvar no banco:', saveResp.status, errText);
                 document.dispatchEvent(new CustomEvent('ge:save-error'));
                 return false;
+            }
+
+            // O que o SERVIDOR decidiu fazer com as operações. Sem isto, "por que
+            // meu save não usou operações?" só se responde por log do servidor —
+            // que o dono não vê. Só motivo e contagens; nada do dinheiro dele.
+            if (OPS_DEBUG) {
+                const eco = await saveResp.clone().json().catch(() => null);
+                if (!Array.isArray(window.__sombra)) window.__sombra = [];
+                const ultima = window.__sombra[window.__sombra.length - 1];
+                if (ultima && ultima.enviado !== false) {
+                    ultima.servidor = eco?.ops?.via === true ? `✅ ${eco.ops.motivo}` : `❌ ${eco?.ops?.motivo ?? '?'}`;
+                }
             }
 
             this.#lastSaveTime = new Date();
