@@ -5468,6 +5468,12 @@ const _AUTO_SAVE_MAX_FAILS = 3;
 // dentro de tempo-real.js, pelo id desta aba.
 let _tempoRealPendente = false;
 
+// Definido JA no carregamento do modulo, antes de qualquer tentativa. Sem isto,
+// `__tempoReal is not defined` no console e ambiguo: pode ser bundle velho, aba
+// errada, ou a funcao nunca ter rodado. Com isto, "undefined" so pode significar
+// bundle velho ou aba errada — e qualquer outro valor conta a historia.
+try { window.__tempoReal = { estado: 'nao_iniciado', avisos: 0, ultimo: null }; } catch { /* sem window */ }
+
 async function ligarTempoReal() {
     const conta = dataManager.contaId;
     // `return` silencioso é o suspeito nº 1 quando "nada acontece": deixa
