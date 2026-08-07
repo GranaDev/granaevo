@@ -3,6 +3,7 @@ import { perfMark, perfMeasure, perfCount } from '../modules/perf-marks.js';
 import { chipHorasVida } from '../modules/horas-vida.js?v=1';
 import { construirModelo, sugerirCategoria } from '../modules/categorizacao.js?v=1';
 import { gerarParcelas, anexarParcelas, paraISO } from '../modules/fatura-parcelas.js?v=1';
+import { aplicarMascaraMoeda, lerMoeda, definirMoeda } from '../modules/mascara-moeda.js?v=1';
 
 let _ctx = null;
 
@@ -219,18 +220,17 @@ function lancarTransacao() {
         selTipo.value = tipo;
     }
 
-    const valorEl   = document.getElementById('inputValor');
-    // Suporte à máscara monetária: lê dataset.valorNumerico se disponível, senão parseia string
-    const valorStr  = valorEl.dataset?.valorNumerico
-        || valorEl.value.replace(/\./g, '').replace(',', '.');
+    const valorEl  = document.getElementById('inputValor');
+    // Campo com máscara: "1.234,56". lerMoeda decodifica — parseFloat daria 1.234.
+    const valorNum = lerMoeda(valorEl);
 
     if(categoria === 'reserva' && _ctx.metas.filter(m => m.id !== 'emergency').length === 0) {
         return _ctx.mostrarNotificacao('Você ainda não criou nenhuma meta ou reserva, crie no menu "Reservas"', 'error');
     }
     if(!descricao) return _campoInvalido(document.getElementById('inputDescricao'), 'Digite a descrição.');
-    if(!valorStr || !Number.isFinite(Number(valorStr)) || Number(valorStr) <= 0) return _campoInvalido(valorEl, 'Digite um valor válido.');
+    if(!Number.isFinite(valorNum) || valorNum <= 0) return _campoInvalido(valorEl, 'Digite um valor válido.');
 
-    const valor = parseFloat(parseFloat(valorStr).toFixed(2));
+    const valor = parseFloat(valorNum.toFixed(2));
     const dh    = _ctx.agoraDataHora();
 
     if(categoria === 'saida_credito') {
@@ -1045,9 +1045,10 @@ function editarTransacao(t) {
 
         // Valor
         const inpValor = document.createElement('input');
-        inpValor.type = 'number'; inpValor.id = 'editValor'; inpValor.className = 'form-input';
-        inpValor.step = '0.01'; inpValor.min = '0.01'; inpValor.placeholder = 'Valor';
-        inpValor.value = t.valor || '';
+        inpValor.type = 'text'; inpValor.id = 'editValor'; inpValor.className = 'form-input';
+        inpValor.placeholder = 'Valor';
+        aplicarMascaraMoeda(inpValor);
+        definirMoeda(inpValor, t.valor || '');
         form.appendChild(_lbl('Valor (R$)', 'editValor')); form.appendChild(inpValor);
 
         // Título
@@ -1069,13 +1070,13 @@ function editarTransacao(t) {
 
         btnSalvar.addEventListener('click', () => {
             const novaDesc     = inpDesc.value.trim();
-            const novoValorStr = inpValor.value;
+            const novoValorNum = lerMoeda(inpValor);
             const novaCat      = selCat.value;
             const novoTipo     = selTipo.value;
 
             if (!novaDesc) return _ctx.mostrarNotificacao('Digite a descrição.', 'error');
-            const novoValor = parseFloat(parseFloat(novoValorStr).toFixed(2));
-            if (!novoValorStr || !Number.isFinite(novoValor) || novoValor <= 0) return _ctx.mostrarNotificacao('Digite um valor válido.', 'error');
+            const novoValor = parseFloat(novoValorNum.toFixed(2));
+            if (!Number.isFinite(novoValor) || novoValor <= 0) return _ctx.mostrarNotificacao('Digite um valor válido.', 'error');
 
             const diff = novoValor - Number(t.valor);
             if (diff !== 0 && t.metaId) {
@@ -1576,18 +1577,20 @@ function abrirModalOrcamento(tipoEditar) {
                 ${tiposDisponiveis.map(t => `<option value="${t}">${t}</option>`).join('')}
             </select>
             <label class="edit-tx-label" for="orcLimiteInput">Limite mensal (R$)</label>
-            <input type="number" id="orcLimiteInput" class="form-input" step="0.01" min="1" max="10000000" placeholder="Ex: 800,00" value="${limiteAtual}">
+            <input type="text" id="orcLimiteInput" class="form-input" inputmode="decimal" placeholder="Ex: 800,00">
         </div>
         <button class="btn-primary" id="orcSalvarBtn" type="button">Salvar</button>
         <button class="btn-cancelar" id="orcCancelarBtn" type="button">Cancelar</button>
     `);
 
+    aplicarMascaraMoeda('orcLimiteInput');
+    definirMoeda('orcLimiteInput', limiteAtual);
+
     document.getElementById('orcCancelarBtn').addEventListener('click', () => _ctx.fecharPopup());
 
     document.getElementById('orcSalvarBtn').addEventListener('click', () => {
-        const tipoSel   = editando ? tipoEditar : document.getElementById('orcTipoSelect').value;
-        const limiteStr = document.getElementById('orcLimiteInput').value;
-        const limite    = parseFloat(parseFloat(limiteStr).toFixed(2));
+        const tipoSel = editando ? tipoEditar : document.getElementById('orcTipoSelect').value;
+        const limite  = parseFloat(lerMoeda('orcLimiteInput').toFixed(2));
 
         if (!tipoSel) return _ctx.mostrarNotificacao('Selecione a categoria.', 'error');
         if (!_TIPOS_ORCAMENTO.includes(tipoSel)) return _ctx.mostrarNotificacao('Categoria inválida.', 'error');

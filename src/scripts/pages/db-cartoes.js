@@ -1,6 +1,7 @@
 // db-cartoes.js — Seção de Cartões de Crédito (lazy-loaded)
 import { analisarCiclo, proximaOcorrencia, meiaNoite } from '../modules/ciclo-fatura.js?v=1';
 import { valorAbertoFatura, parcelasDaCompra } from '../modules/fatura-parcelas.js?v=1';
+import { aplicarMascaraMoeda, lerMoeda, definirMoeda } from '../modules/mascara-moeda.js?v=1';
 
 let _ctx = null;
 
@@ -601,12 +602,10 @@ function abrirGerenciarAssinatura(assinaturaId) {
         labelValor.style.cssText = 'display:block; text-align:left; margin-top:10px; color: var(--text-secondary);';
         labelValor.textContent = 'Valor mensal:';
         const inputValor = document.createElement('input');
-        inputValor.type      = 'number';
+        inputValor.type      = 'text';
         inputValor.className = 'form-input';
-        inputValor.step      = '0.01';
-        inputValor.min       = '0.01';
-        inputValor.max       = '99999999';
-        inputValor.value     = a.valor;
+        aplicarMascaraMoeda(inputValor);
+        definirMoeda(inputValor, a.valor);
         popup.appendChild(labelValor);
         popup.appendChild(inputValor);
 
@@ -625,7 +624,7 @@ function abrirGerenciarAssinatura(assinaturaId) {
         btnSalvar.style.marginTop = '16px';
         btnSalvar.textContent = 'Alterar valor da assinatura';
         btnSalvar.addEventListener('click', () => {
-            const novoValor = parseFloat(parseFloat(inputValor.value).toFixed(2));
+            const novoValor = parseFloat(lerMoeda(inputValor).toFixed(2));
             const novoDia   = Number(selectDia.value);
             if (!isFinite(novoValor) || novoValor <= 0 || novoValor > 99999999) { _ctx.mostrarNotificacao('Informe um valor válido e positivo.', 'error'); return; }
             if (!Number.isInteger(novoDia) || novoDia < 1 || novoDia > 28)      { _ctx.mostrarNotificacao('Dia de cobrança inválido.', 'error'); return; }
@@ -962,7 +961,7 @@ function abrirCartaoForm(editId = null) {
 
         if (!nomeBanco || !limiteStr || !fechamentoDia || !vencimentoDia) { _ctx.mostrarNotificacao('Preencha todos os campos!', 'error'); return; }
 
-        const limite = parseFloat(parseFloat(limiteStr).toFixed(2));
+        const limite = parseFloat(lerMoeda(inputLimite).toFixed(2));
         if (isNaN(limite) || limite <= 0) { _ctx.mostrarNotificacao('Informe um limite válido e positivo.', 'error'); return; }
         if (limite > 9999999)              { _ctx.mostrarNotificacao('Limite máximo permitido: R$ 9.999.999,00.', 'error'); return; }
 
@@ -1040,13 +1039,11 @@ function abrirCartaoForm(editId = null) {
             labelLimite.textContent = 'Limite Total:';
 
             const inputLimite       = document.createElement('input');
-            inputLimite.type        = 'number';
+            inputLimite.type        = 'text';
             inputLimite.id          = 'novoLimite';
             inputLimite.className   = 'form-input';
             inputLimite.placeholder = 'Limite (R$)';
-            inputLimite.step        = '0.01';
-            inputLimite.min         = '1';
-            inputLimite.max         = '9999999';
+            aplicarMascaraMoeda(inputLimite);
 
             // Label + Select fechamento
             const labelFechamento       = document.createElement('label');
@@ -1136,13 +1133,11 @@ function abrirCartaoForm(editId = null) {
             labelLimite.textContent = 'Limite Total:';
 
             const inputLimite       = document.createElement('input');
-            inputLimite.type        = 'number';
+            inputLimite.type        = 'text';
             inputLimite.id          = 'novoLimite';
             inputLimite.className   = 'form-input';
-            inputLimite.step        = '0.01';
-            inputLimite.min         = '1';
-            inputLimite.max         = '9999999';
-            inputLimite.value       = parseFloat(c.limite); // ✅ .value — não atributo HTML
+            aplicarMascaraMoeda(inputLimite);
+            definirMoeda(inputLimite, parseFloat(c.limite)); // ✅ .value — não atributo HTML
 
             // Label + Select fechamento (pré-selecionado)
             const labelFechamento       = document.createElement('label');
@@ -1794,8 +1789,8 @@ function pagarCompraIndividual(faturaId, compraId) {
             <button class="btn-warning"  id="naoValorCompra">Não, alterar valor</button>
             <button class="btn-cancelar" id="cancelarPagamentoCompra">Cancelar</button>
             <div id="ajusteValorCompraDiv" style="display:none; margin-top:14px;">
-                <input type="number" id="novoValorCompra" class="form-input"
-                       step="0.01" min="0">
+                <input type="text" id="novoValorCompra" class="form-input"
+                       inputmode="decimal">
                 <button class="btn-primary" id="confirmNovoValorCompra" style="margin-top:8px;">
                     Confirmar pagamento
                 </button>
@@ -1819,8 +1814,9 @@ function pagarCompraIndividual(faturaId, compraId) {
         // ✅ Texto do botão via textContent — sem interpolação
         document.getElementById('simValorCompra').textContent = `Sim, pagar ${formatBRL(compra.valorParcela)}`;
 
-        // ✅ Valor numérico atribuído via .value — tipo number, não interpretado como HTML
-        document.getElementById('novoValorCompra').value = _ctx.sanitizeHTML(String(compra.valorParcela));
+        // ✅ Valor numérico atribuído via .value — máscara BRL, nunca via atributo HTML
+        aplicarMascaraMoeda('novoValorCompra');
+        definirMoeda('novoValorCompra', compra.valorParcela);
 
         document.getElementById('simValorCompra').addEventListener('click', () => {
             processarPagamentoCompra(faturaId, compraId, compra.valorParcela);
@@ -1838,7 +1834,7 @@ function pagarCompraIndividual(faturaId, compraId) {
         });
 
         document.getElementById('confirmNovoValorCompra').addEventListener('click', () => {
-            const novoValor = parseFloat(document.getElementById('novoValorCompra').value);
+            const novoValor = lerMoeda('novoValorCompra');
             if (!novoValor || novoValor <= 0) {
                 _ctx.mostrarNotificacao('Digite um valor válido!', 'error');
                 return;
@@ -1970,7 +1966,7 @@ function editarCompraFatura(faturaId, compraId) {
             <input type="text" id="editDescCompra" class="form-input" maxlength="200">
 
             <label style="display:block; text-align:left; margin-top:10px; color: var(--text-secondary);">Valor da Parcela:</label>
-            <input type="number" id="editValorCompra" class="form-input" step="0.01" min="0.01" max="9999999">
+            <input type="text" id="editValorCompra" class="form-input" inputmode="decimal">
 
             <button class="btn-primary"  id="salvarEdicaoCompra">Salvar</button>
             <button class="btn-cancelar" id="cancelarEdicaoCompra">Cancelar</button>
@@ -1988,7 +1984,8 @@ function editarCompraFatura(faturaId, compraId) {
         if (inputValor) {
             // ✅ parseFloat garante que valorParcela é número antes de atribuir ao input
             const vp = parseFloat(compra.valorParcela);
-            inputValor.value = isFinite(vp) && vp > 0 ? vp : '';
+            aplicarMascaraMoeda(inputValor);
+            definirMoeda(inputValor, isFinite(vp) && vp > 0 ? vp : '');
         }
 
         document.getElementById('cancelarEdicaoCompra').addEventListener('click', () => {
@@ -1999,7 +1996,7 @@ function editarCompraFatura(faturaId, compraId) {
         document.getElementById('salvarEdicaoCompra').addEventListener('click', () => {
             const novoTipo  = document.getElementById('editTipoCompra').value.trim();
             const novaDesc  = document.getElementById('editDescCompra').value.trim();
-            const novoValor = parseFloat(document.getElementById('editValorCompra').value);
+            const novoValor = lerMoeda('editValorCompra');
 
             if (!novoTipo) {
                 _ctx.mostrarNotificacao('O tipo da compra não pode estar vazio.', 'error');

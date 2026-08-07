@@ -9,6 +9,7 @@ import { perfMark, perfMeasure } from '../modules/perf-marks.js';
 import { migrarCompra, anexarParcelas, ehParcelaAntiga, valorAbertoFatura } from '../modules/fatura-parcelas.js?v=1';
 import { evaluate as evaluateConquistas, enqueueToasts as enqueueConquistaToasts, sanitizeUnlocked as sanitizeConquistas } from '../modules/achievements.js?v=2';
 import { sanitizarConfigPerfil as _sanitizarConfigPerfilPuro } from '../modules/config-perfil.js';
+import { aplicarMascaraMoeda, lerMoeda, definirMoeda } from '../modules/mascara-moeda.js?v=1';
 
 // Inicializa rastreamento de erros o quanto antes (no-op sem VITE_SENTRY_DSN / fora de produção)
 initErrorTracking();
@@ -4148,12 +4149,14 @@ function abrirContaFixaForm(editId = null) {
         criarPopup(`
             <h3>Nova Conta Fixa</h3>
             <input type="text" id="descContaFixa" class="form-input" placeholder="Descrição"><br>
-            <input type="number" id="valorContaFixa" class="form-input" placeholder="Valor (R$)" step="0.01" min="0"><br>
+            <input type="text" id="valorContaFixa" class="form-input" placeholder="Valor (R$)" inputmode="decimal"><br>
             <label style="display:block; text-align:left; margin-top:10px; margin-bottom:6px; color: var(--text-secondary); font-weight:600;">📅 Data de Vencimento:</label>
             <input type="date" id="vencContaFixa" class="form-input"><br>
             <button class="btn-primary" id="okContaFixa">Salvar</button>
             <button class="btn-cancelar" id="cancelarContaFixa">Cancelar</button>
         `);
+
+        aplicarMascaraMoeda('valorContaFixa');
 
         document.getElementById('cancelarContaFixa').onclick = () => fecharPopup();
 
@@ -4165,7 +4168,7 @@ function abrirContaFixaForm(editId = null) {
             if(!desc || !valorStr || !venc) return mostrarNotificacao('Preencha todos os campos.', 'error');
             if(desc.length > 100) return mostrarNotificacao('Descrição muito longa (máx. 100 caracteres).', 'error');
 
-            const valor = parseFloat(parseFloat(valorStr).toFixed(2));
+            const valor = parseFloat(lerMoeda('valorContaFixa').toFixed(2));
             if(isNaN(valor) || valor <= 0) return mostrarNotificacao('Informe um valor válido e positivo.', 'error');
             if(!/^\d{4}-\d{2}-\d{2}$/.test(venc)) return mostrarNotificacao('Data de vencimento inválida.', 'error');
 
@@ -4193,7 +4196,7 @@ function abrirContaFixaForm(editId = null) {
         criarPopup(`
             <h3>Editar Conta Fixa</h3>
             <input type="text" id="descContaFixa" class="form-input" maxlength="100"><br>
-            <input type="number" id="valorContaFixa" class="form-input" step="0.01" min="0"><br>
+            <input type="text" id="valorContaFixa" class="form-input" inputmode="decimal"><br>
             <input type="date" id="vencContaFixa" class="form-input"><br>
             ${_jaPago ? '<button class="btn-warning" id="anteciparContaBtn">⚡ Antecipar pagamento</button>' : ''}
             <button class="btn-primary" id="salvarEditContaFixa">Salvar</button>
@@ -4203,7 +4206,8 @@ function abrirContaFixaForm(editId = null) {
 
         // ✅ Preenchimento seguro via .value — nunca via innerHTML/atributo
         document.getElementById('descContaFixa').value  = conta.descricao;
-        document.getElementById('valorContaFixa').value = conta.valor;
+        aplicarMascaraMoeda('valorContaFixa');
+        definirMoeda('valorContaFixa', conta.valor);
         document.getElementById('vencContaFixa').value  = conta.vencimento;
 
         document.getElementById('cancelarContaFixa').onclick = () => fecharPopup();
@@ -4223,7 +4227,7 @@ function abrirContaFixaForm(editId = null) {
             if(!desc || !valorStr || !venc) return mostrarNotificacao('Preencha todos os campos.', 'error');
             if(desc.length > 100) return mostrarNotificacao('Descrição muito longa (máx. 100 caracteres).', 'error');
 
-            const valor = parseFloat(parseFloat(valorStr).toFixed(2));
+            const valor = parseFloat(lerMoeda('valorContaFixa').toFixed(2));
             if(isNaN(valor) || valor <= 0) return mostrarNotificacao('Informe um valor válido e positivo.', 'error');
             if(!/^\d{4}-\d{2}-\d{2}$/.test(venc)) return mostrarNotificacao('Data de vencimento inválida.', 'error');
 
@@ -4264,7 +4268,7 @@ function abrirPopupPagarContaFixa(id) {
         <button class="btn-warning" id="naoValorCorreto">Não</button>
         <button class="btn-cancelar" id="cancelarPagamento">Cancelar</button>
         <div id="ajusteValorDiv" style="display:none; margin-top:14px;">
-            <input type="number" id="novoValorContaFixa" class="form-input" step="0.01" min="0"><br>
+            <input type="text" id="novoValorContaFixa" class="form-input" inputmode="decimal"><br>
             <button class="btn-primary" id="confirmNovoValor" style="margin-top:8px;">Confirmar novo valor</button>
         </div>
     `);
@@ -4275,7 +4279,8 @@ function abrirPopupPagarContaFixa(id) {
     document.getElementById('popupVencimento').textContent = `Vencimento: ${formatarDataBR(conta.vencimento)}`;
 
     // ✅ Campo numérico preenchido via .value
-    document.getElementById('novoValorContaFixa').value = conta.valor;
+    aplicarMascaraMoeda('novoValorContaFixa');
+    definirMoeda('novoValorContaFixa', conta.valor);
 
     document.getElementById('cancelarPagamento').onclick = () => fecharPopup();
 
@@ -4293,7 +4298,7 @@ function abrirPopupPagarContaFixa(id) {
             const valStr = document.getElementById('novoValorContaFixa').value;
 
             // ✅ Validação reforçada: número, positivo e com máximo razoável
-            const novoValor = parseFloat(valStr);
+            const novoValor = lerMoeda('novoValorContaFixa');
             if(!valStr || isNaN(novoValor) || novoValor <= 0 || novoValor > 9999999) {
                 return mostrarNotificacao('Digite um valor válido!', 'error');
             }
@@ -4325,7 +4330,7 @@ function abrirPopupAnteciparContaFixa(id) {
         <button class="btn-warning" id="naoValorAnt">Não</button>
         <button class="btn-cancelar" id="cancelarAnt">Cancelar</button>
         <div id="ajusteValorAnt" style="display:none; margin-top:14px;">
-            <input type="number" id="novoValorAnt" class="form-input" step="0.01" min="0"><br>
+            <input type="text" id="novoValorAnt" class="form-input" inputmode="decimal"><br>
             <button class="btn-primary" id="confirmNovoValorAnt" style="margin-top:8px;">Confirmar novo valor</button>
         </div>
     `);
@@ -4333,7 +4338,8 @@ function abrirPopupAnteciparContaFixa(id) {
     document.getElementById('popupDescricaoAnt').textContent = conta.descricao;
     document.getElementById('popupProxVencAnt').textContent  = `Antecipando para: ${formatarDataBR(proximoVenc)}`;
     document.getElementById('popupValorAnt').textContent     = `Valor: ${formatBRL(conta.valor)}`;
-    document.getElementById('novoValorAnt').value            = conta.valor;
+    aplicarMascaraMoeda('novoValorAnt');
+    definirMoeda('novoValorAnt', conta.valor);
 
     document.getElementById('cancelarAnt').onclick = () => fecharPopup();
 
@@ -4349,7 +4355,7 @@ function abrirPopupAnteciparContaFixa(id) {
 
         document.getElementById('confirmNovoValorAnt').onclick = () => {
             const valStr    = document.getElementById('novoValorAnt').value;
-            const novoValor = parseFloat(valStr);
+            const novoValor = lerMoeda('novoValorAnt');
             if (!valStr || isNaN(novoValor) || novoValor <= 0 || novoValor > 9999999) {
                 return mostrarNotificacao('Digite um valor válido!', 'error');
             }
@@ -6139,40 +6145,13 @@ function _initSyncIndicator() {
 }
 
 // ========== MÁSCARA MONETÁRIA ==========
+// O motor da máscara vive em modules/mascara-moeda.js e é o MESMO em todos os
+// campos de dinheiro do app (conta fixa, cartão, orçamento, reservas...).
+// Quem lê o valor tem de usar lerMoeda() — parseFloat("1.234,56") dá 1.234.
 function _initMascaraMonetaria() {
-    // Aplica máscara BRL (R$ X.XXX,XX) em todos os inputs monetários do formulário principal
-    const ids = ['inputValor'];
-    for (const id of ids) {
-        const el = document.getElementById(id);
-        if (!el) continue;
-        // Converte type=number para type=text com inputmode decimal
-        el.type      = 'text';
-        el.inputMode = 'decimal';
-        el.setAttribute('autocomplete', 'off');
-
-        // Formata enquanto digita
-        el.addEventListener('input', _formatarMoedaInput);
-        el.addEventListener('blur',  _formatarMoedaInput);
-        // Ao focar, seleciona o conteúdo para facilitar edição
-        el.addEventListener('focus', () => {
-            requestAnimationFrame(() => el.select());
-        });
-    }
+    aplicarMascaraMoeda('inputValor');
 }
 
-function _formatarMoedaInput(e) {
-    const el = e.target;
-    const raw = el.value.replace(/[^\d]/g, '');
-    if (!raw) { el.value = ''; return; }
-    const num = parseInt(raw, 10) / 100;
-    el.value  = num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    // Guarda o valor numérico como data-attribute para lancarTransacao() recuperar sem parsear vírgula
-    el.dataset.valorNumerico = String(num);
-}
-
-// Patch global para que lancarTransacao() leia corretamente com máscara ativada
-// (lancarTransacao usa `document.getElementById('inputValor').value`)
-// A máscara escreve "1.234,56" mas salva o número em data-valorNumerico.
 // ========== INICIALIZAÇÃO ==========
 function _registrarFallbacksFotoPerfil() {
     // Fallback para qualquer <img> de foto de perfil que falhar ao carregar.

@@ -10,6 +10,7 @@ import {
     marcarReservaAtualizada, reconciliarCopiaAtiva,
     depositoLiquidoDe, ehUltimoMembro, sairDaReserva,
 } from '../modules/reserva-familia.js?v=8';
+import { aplicarMascaraMoeda, lerMoeda, definirMoeda } from '../modules/mascara-moeda.js?v=1';
 
 // ── Reserva compartilhada v2: propagação entre perfis ───────────────────────
 // O blob é UMA linha (array de perfis), cada perfil com suas próprias `metas`.
@@ -437,14 +438,14 @@ function abrirFormReservaExistente() {
 
         const inpSaldo = document.createElement('input');
         inpSaldo.className = 'form-input'; inpSaldo.id = 'reExistSaldo';
-        inpSaldo.type = 'number'; inpSaldo.step = '0.01'; inpSaldo.min = '0'; inpSaldo.max = '9999999';
         inpSaldo.placeholder = 'Saldo atual (R$)';
         inpSaldo.style.marginBottom = '10px';
+        aplicarMascaraMoeda(inpSaldo);
 
         const inpObj = document.createElement('input');
         inpObj.className = 'form-input'; inpObj.id = 'reExistObj';
-        inpObj.type = 'number'; inpObj.step = '0.01'; inpObj.min = '0'; inpObj.max = '999999999';
         inpObj.placeholder = 'Objetivo / meta (R$) — opcional';
+        aplicarMascaraMoeda(inpObj);
 
         secSaldo.appendChild(inpSaldo);
         secSaldo.appendChild(inpObj);
@@ -553,9 +554,8 @@ function abrirFormReservaExistente() {
             if (!TIPOS_VALIDOS.includes(tipoVal)) return _ctx.mostrarNotificacao('Tipo de reserva inválido.', 'error');
 
             // ── Validação: saldo ──────────────────────────────────────────────
-            const saldoStr = inpSaldo.value;
-            const saldo    = parseFloat(saldoStr);
-            if (saldoStr === '' || !Number.isFinite(saldo) || saldo < 0 || saldo > 9_999_999) {
+            const saldo = lerMoeda(inpSaldo);
+            if (!Number.isFinite(saldo) || saldo < 0 || saldo > 9_999_999) {
                 return _ctx.mostrarNotificacao('Informe um saldo válido (entre R$ 0,00 e R$ 9.999.999,00).', 'error');
             }
             const saldoSeguro = parseFloat(saldo.toFixed(2));
@@ -564,7 +564,7 @@ function abrirFormReservaExistente() {
             let objetivo = Math.max(saldoSeguro, 1);
             const objStr = inpObj.value.trim();
             if (objStr !== '') {
-                const objVal = parseFloat(objStr);
+                const objVal = lerMoeda(inpObj);
                 if (!Number.isFinite(objVal) || objVal < 0 || objVal > 999_999_999) {
                     return _ctx.mostrarNotificacao('Objetivo inválido (entre R$ 0,00 e R$ 999.999.999,00).', 'error');
                 }
@@ -683,9 +683,9 @@ function abrirMetaForm(editId = null) {
 
         const inpObj = document.createElement('input');
         inpObj.className = 'form-input'; inpObj.id = 'metaObj';
-        inpObj.type = 'number'; inpObj.step = '0.01'; inpObj.min = '0';
         inpObj.placeholder = 'Objetivo (R$)';
-        if (meta) inpObj.value = meta.objetivo;
+        aplicarMascaraMoeda(inpObj);
+        if (meta) definirMoeda(inpObj, meta.objetivo);
 
         secBasico.appendChild(inpDesc);
         secBasico.appendChild(inpObj);
@@ -937,9 +937,9 @@ function abrirMetaForm(editId = null) {
         divAporteVal.style.cssText = `display:${(meta && meta.aporteRecorrente) ? 'flex' : 'none'}; align-items:center; gap:10px;`;
         const inpAporteV = document.createElement('input');
         inpAporteV.className = 'form-input'; inpAporteV.id = 'metaAporteValor';
-        inpAporteV.type = 'number'; inpAporteV.step = '0.01'; inpAporteV.min = '0';
         inpAporteV.placeholder = 'Valor mensal (R$)'; inpAporteV.style.flex = '1';
-        if (meta && meta.valorAporte) inpAporteV.value = meta.valorAporte;
+        aplicarMascaraMoeda(inpAporteV);
+        if (meta && meta.valorAporte) definirMoeda(inpAporteV, meta.valorAporte);
         const spanAporteMes = document.createElement('span');
         spanAporteMes.style.cssText = 'font-size:0.8rem; color:var(--text-muted); white-space:nowrap;';
         spanAporteMes.textContent = '/mês';
@@ -964,10 +964,10 @@ function abrirMetaForm(editId = null) {
         // fvComposto / mesesParaMeta / aporteNecessario usam escopo do módulo
 
         btnSimular.addEventListener('click', () => {
-            const obj     = parseFloat(document.getElementById('metaObj').value) || 0;
+            const obj     = lerMoeda('metaObj') || 0;
             const savedPV = isEdit && meta ? Number(meta.saved || 0) : 0;
             const tipoR   = document.querySelector('input[name="tipoRend"]:checked')?.value || 'sem_rendimento';
-            const aporte  = parseFloat(document.getElementById('metaAporteValor')?.value) || 0;
+            const aporte  = lerMoeda('metaAporteValor') || 0;
             const prazoM  = document.getElementById('metaPrazoMes')?.value || '';
             const prazoA  = document.getElementById('metaPrazoAno')?.value || '';
 
@@ -1080,13 +1080,13 @@ function abrirMetaForm(editId = null) {
 
         btnOk.addEventListener('click', () => {
             const desc   = document.getElementById('metaDesc').value.trim();
-            const objStr = document.getElementById('metaObj').value;
+            const objNum = lerMoeda('metaObj');
 
-            if (!desc)                                                              return _ctx.mostrarNotificacao('Digite o nome da reserva.', 'error');
-            if (desc.length > 200)                                                  return _ctx.mostrarNotificacao('Nome muito longo (máx. 200 caracteres).', 'error');
-            if (!objStr || !Number.isFinite(Number(objStr)) || Number(objStr) <= 0) return _ctx.mostrarNotificacao('Digite um objetivo válido.', 'error');
+            if (!desc)                                          return _ctx.mostrarNotificacao('Digite o nome da reserva.', 'error');
+            if (desc.length > 200)                              return _ctx.mostrarNotificacao('Nome muito longo (máx. 200 caracteres).', 'error');
+            if (!Number.isFinite(objNum) || objNum <= 0)        return _ctx.mostrarNotificacao('Digite um objetivo válido.', 'error');
 
-            const objetivo = parseFloat(parseFloat(objStr).toFixed(2));
+            const objetivo = parseFloat(objNum.toFixed(2));
             if (!Number.isFinite(objetivo) || objetivo <= 0) return _ctx.mostrarNotificacao('Digite um objetivo válido.', 'error');
 
             // Prazo
@@ -1120,8 +1120,7 @@ function abrirMetaForm(editId = null) {
             const aporteRecorrente = document.getElementById('metaAporteRecorrente').checked;
             let valorAporte = null;
             if (aporteRecorrente) {
-                const apStr = document.getElementById('metaAporteValor').value;
-                valorAporte = parseFloat(apStr);
+                valorAporte = lerMoeda('metaAporteValor');
                 if (!Number.isFinite(valorAporte) || valorAporte <= 0) return _ctx.mostrarNotificacao('Digite um valor de aporte válido.', 'error');
             }
 
@@ -1805,10 +1804,10 @@ function _sairDaReservaCompartilhada(meta) {
         outroLbl.textContent = 'Quanto você vai receber';
         outroLbl.htmlFor = 'valorSaidaReserva';
         const inp = document.createElement('input');
-        inp.className = 'form-input'; inp.type = 'number'; inp.step = '0.01'; inp.min = '0';
-        inp.max = String(total);
+        inp.className = 'form-input';
         inp.id = 'valorSaidaReserva';
-        inp.value = Number(sugerido).toFixed(2);
+        aplicarMascaraMoeda(inp);
+        definirMoeda(inp, sugerido);
         const dica = document.createElement('div');
         dica.style.cssText = 'font-size:0.78rem; color:var(--text-muted); margin-top:6px;';
         dica.textContent = `A reserva tem ${formatBRL(total)}. Você não pode retirar mais do que isso.`;
@@ -1840,7 +1839,7 @@ function _sairDaReservaCompartilhada(meta) {
         btnOk.className = 'btn-primary'; btnOk.type = 'button'; btnOk.style.flex = '2';
         btnOk.textContent = ultimo ? 'Encerrar e receber' : 'Sair da reserva';
         btnOk.addEventListener('click', () => {
-            const valor = ultimo ? total : Math.round((parseFloat(inp.value) || 0) * 100) / 100;
+            const valor = ultimo ? total : Math.round((lerMoeda(inp) || 0) * 100) / 100;
             if (!Number.isFinite(valor) || valor < 0) {
                 return _ctx.mostrarNotificacao('Digite um valor válido.', 'error');
             }
@@ -2808,8 +2807,8 @@ function abrirRetiradaForm() {
         <label style="display:block; text-align:left; margin-top:12px; margin-bottom:6px; color: var(--text-secondary); font-weight:600;">
             💰 Valor a Retirar:
         </label>
-        <input type="number" id="valorRetirada" class="form-input"
-               placeholder="Valor a retirar (R$)" step="0.01" min="0.01"><br>
+        <input type="text" id="valorRetirada" class="form-input"
+               placeholder="Valor a retirar (R$)" inputmode="decimal"><br>
 
         <label style="display:block; text-align:left; margin-top:16px; margin-bottom:6px; color: var(--text-secondary); font-weight:600;">
             📝 Motivo da Retirada: <span style="color: #ff4b4b;">*</span>
@@ -2847,8 +2846,9 @@ function abrirRetiradaForm() {
     document.getElementById('popupMetaNome').textContent       = `Meta: ${meta.descricao}`;
     document.getElementById('popupSaldoDisponivel').textContent = `Saldo disponível: ${formatBRL(saldoDisponivel)}`;
 
-    // ✅ max definido via propriedade — não interpolado no HTML
-    document.getElementById('valorRetirada').max = saldoDisponivel;
+    // ✅ Máscara BRL. O teto (saldoDisponivel) continua validado no clique —
+    //    o atributo `max` não vale em campo de texto e nunca foi a defesa real.
+    aplicarMascaraMoeda('valorRetirada');
 
     // ✅ Cancelar via addEventListener — sem onclick inline
     document.getElementById('cancelarRetirada').addEventListener('click', () => _ctx.fecharPopup());
@@ -2867,11 +2867,11 @@ function abrirRetiradaForm() {
     });
 
     document.getElementById('confirmarRetirada').addEventListener('click', () => {
-        const valorStr        = document.getElementById('valorRetirada').value;
+        const valorNum        = lerMoeda('valorRetirada');
         const motivoSelect    = document.getElementById('motivoRetirada').value;
         const outroMotivoTexto = document.getElementById('outroMotivoTexto').value.trim();
 
-        if(!valorStr || !Number.isFinite(Number(valorStr)) || Number(valorStr) <= 0) {
+        if(!Number.isFinite(valorNum) || valorNum <= 0) {
         return _ctx.mostrarNotificacao('Digite um valor válido.', 'error');
         }
         if(!motivoSelect) {
@@ -2881,7 +2881,7 @@ function abrirRetiradaForm() {
             return _ctx.mostrarNotificacao('Por favor, descreva o motivo da retirada.', 'warning');
         }
 
-        const valorRetirar = parseFloat(parseFloat(valorStr).toFixed(2));
+        const valorRetirar = parseFloat(valorNum.toFixed(2));
         if(!Number.isFinite(valorRetirar) || valorRetirar <= 0) {
             return _ctx.mostrarNotificacao('Valor inválido após processamento.', 'error');
         }
@@ -3032,10 +3032,9 @@ function abrirGuardarForm() {
         lblValor.textContent = '💰 Valor a guardar:';
         const inpValor = document.createElement('input');
         inpValor.className = 'form-input'; inpValor.id = 'guardarValor';
-        inpValor.type = 'number'; inpValor.step = '0.01'; inpValor.min = '0.01'; inpValor.max = '9999999';
         inpValor.placeholder = 'Valor a guardar (R$)';
-        inpValor.autocomplete = 'off';
         inpValor.style.marginBottom = '12px';
+        aplicarMascaraMoeda(inpValor);
 
         const lblDesc = document.createElement('label');
         lblDesc.style.cssText = 'display:block; text-align:left; margin-bottom:6px; color:var(--text-secondary); font-weight:600; font-size:0.85rem;';
@@ -3079,9 +3078,8 @@ function abrirGuardarForm() {
 
         btnOk.addEventListener('click', () => {
             // ── Validação: valor ──────────────────────────────────────────────
-            const valorStr = inpValor.value;
-            const valorNum = parseFloat(valorStr);
-            if (valorStr === '' || !Number.isFinite(valorNum) || valorNum <= 0) {
+            const valorNum = lerMoeda(inpValor);
+            if (!Number.isFinite(valorNum) || valorNum <= 0) {
                 return _ctx.mostrarNotificacao('Digite um valor válido para guardar.', 'error');
             }
             if (valorNum > 9_999_999) {
@@ -3220,17 +3218,16 @@ function abrirAjusteForm() {
         lblNovo.textContent = '🎯 Novo valor:';
         const inpNovo = document.createElement('input');
         inpNovo.className = 'form-input'; inpNovo.id = 'ajusteValor';
-        inpNovo.type = 'number'; inpNovo.step = '0.01'; inpNovo.min = '0'; inpNovo.max = '9999999';
         inpNovo.placeholder = 'Valor real da reserva (R$)';
-        inpNovo.autocomplete = 'off';
-        inpNovo.value = String(valorAtual);
+        aplicarMascaraMoeda(inpNovo);
+        definirMoeda(inpNovo, valorAtual);
 
         // Pré-visualização da diferença (atualiza ao digitar)
         const previewDiff = document.createElement('div');
         previewDiff.style.cssText = 'margin-top:10px; font-size:0.83rem; color:var(--text-muted); min-height:1.2em;';
 
         const _renderDiff = () => {
-            const nv = parseFloat(inpNovo.value);
+            const nv = lerMoeda(inpNovo);
             if (!Number.isFinite(nv) || nv < 0) { previewDiff.textContent = ''; return; }
             const delta = parseFloat((nv - valorAtual).toFixed(2));
             while (previewDiff.firstChild) previewDiff.removeChild(previewDiff.firstChild);
@@ -3277,9 +3274,8 @@ function abrirAjusteForm() {
         btnOk.appendChild(document.createTextNode('Ajustar Valor'));
 
         btnOk.addEventListener('click', () => {
-            const novoStr = inpNovo.value;
-            const novoNum = parseFloat(novoStr);
-            if (novoStr === '' || !Number.isFinite(novoNum) || novoNum < 0) {
+            const novoNum = lerMoeda(inpNovo);
+            if (!Number.isFinite(novoNum) || novoNum < 0) {
                 return _ctx.mostrarNotificacao('Digite um valor válido (R$ 0,00 ou mais).', 'error');
             }
             if (novoNum > 9_999_999) {

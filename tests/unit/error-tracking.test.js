@@ -96,6 +96,21 @@ describe('o que o módulo promete não enviar', () => {
       'tracing religado — o módulo volta a mandar navegação e requests')
   })
 
+  test('a rejeição do registerSW é descartada, e SÓ ela', () => {
+    // `registerSW.js` é gerado pelo VitePWA sem `.catch()`: quando o registro do
+    // service worker falha (robô de busca, aba anônima), sai um "Rejected" sem
+    // mensagem útil. O 1º caso real veio do Google-Read-Aloud — nenhum usuário
+    // afetado, e sem service worker o app funciona igual.
+    //
+    // O filtro casa pelo NOME DO ARQUIVO na stack, e não pela mensagem: filtrar
+    // por "Rejected" engoliria qualquer promessa rejeitada do app, que é
+    // justamente o tipo de erro que a gente quer ver.
+    assert.match(CODIGO, /includes\('registerSW\.js'\)/)
+    assert.match(CODIGO, /stacktrace\?\.frames/)
+    assert.ok(!/ignoreErrors[\s\S]{0,300}Rejected/.test(CODIGO),
+      'filtrar pela mensagem esconderia rejeições reais do app')
+  })
+
   test('PII desligada explicitamente', () => {
     assert.match(CODIGO, /sendDefaultPii:\s*false/)
   })

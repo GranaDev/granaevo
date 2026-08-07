@@ -179,6 +179,23 @@ export async function initErrorTracking() {
             });
         }
 
+        // ── Ruído do registro de service worker ──────────────────────────────
+        // O `registerSW.js` é GERADO pelo VitePWA e faz
+        // `navigator.serviceWorker.register(...)` sem `.catch()`. Quando o
+        // registro falha — robô de busca, aba anônima, armazenamento bloqueado —
+        // sai uma rejeição não tratada com a mensagem inútil "Rejected".
+        //
+        // O 1º caso real (2026-08-04) veio do `Google-Read-Aloud`, um robô do
+        // Google: nenhum usuário afetado. E a falha é inofensiva — sem service
+        // worker o app funciona igual, só perde o modo offline.
+        //
+        // TROCA CONSCIENTE: perdemos visibilidade sobre falhas de registro em
+        // troca de um painel que não cria ruído. Se um dia importar medir isso,
+        // o certo é `injectRegister: null` no vite.config e registrar com catch
+        // — não desfazer este filtro, que só esconde o sintoma.
+        const frames = event.exception?.values?.[0]?.stacktrace?.frames ?? [];
+        if (frames.some((f) => String(f?.filename ?? '').includes('registerSW.js'))) return null;
+
         // ── A peneira que faltava: o TEXTO do erro ───────────────────────────
         // Tudo acima limpa envelope (cookies, headers, URLs). Nada limpava o
         // conteúdo — e é ali que o dinheiro aparece. Uma exceção deste app pode

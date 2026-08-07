@@ -7,6 +7,7 @@
 // Entradas: aba Reservas (botão no header) e detalhe de orçamento ("Simular
 // corte"). 100% client-side; inputs numéricos com caps; render via DOM API.
 // ----------------------------------------------------------------------------
+import { aplicarMascaraMoeda, definirMoeda } from './mascara-moeda.js?v=1';
 
 // Mesma chave de cache do db-metas — evita 2ª chamada ao BCB na mesma sessão.
 const _CDI_CACHE_KEY = '_ge_cdi_v2';
@@ -76,13 +77,11 @@ export function abrirSimuladorESe(ctx, prefill) {
         labelValor.setAttribute('for', 'eseValor');
         labelValor.textContent = 'Valor guardado por mês (R$)';
         const inputValor = document.createElement('input');
-        inputValor.type = 'text';
         inputValor.id = 'eseValor';
         inputValor.className = 'hv-input';
-        inputValor.inputMode = 'decimal';
-        inputValor.autocomplete = 'off';
-        inputValor.maxLength = 12;
         inputValor.placeholder = '200,00';
+        // Campo de dinheiro → máscara BRL. `_num` já entende "1.234,56".
+        aplicarMascaraMoeda(inputValor);
 
         const labelMeses = document.createElement('label');
         labelMeses.className = 'hv-label';
@@ -186,7 +185,7 @@ export function abrirSimuladorESe(ctx, prefill) {
         // Prefill do detalhe de orçamento (30% do gasto como sugestão de corte)
         if (Number.isFinite(Number(prefill?.valorMensal)) && Number(prefill.valorMensal) > 0) {
             const sugestao = Math.max(10, Math.round(Number(prefill.valorMensal) * 0.3));
-            inputValor.value = String(sugestao).replace('.', ',');
+            definirMoeda(inputValor, sugestao);
         }
 
         _recalc();

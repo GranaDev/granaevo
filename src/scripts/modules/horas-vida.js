@@ -9,6 +9,7 @@
 // valida ANTES de gravar e o save valida DE NOVO (defesa em profundidade).
 // Nenhum dado dinâmico entra via innerHTML: todo render usa textContent.
 // ----------------------------------------------------------------------------
+import { aplicarMascaraMoeda, definirMoeda } from './mascara-moeda.js?v=1';
 
 // ── Limites de sanidade (espelhados no sanitizador do dashboard.js) ──────────
 const LIMITES = Object.freeze({
@@ -117,13 +118,12 @@ export function abrirPopupHorasVida(ctx, aoSalvar) {
         campoValorLabel.setAttribute('for', 'hvValorBase');
 
         const inputValor = document.createElement('input');
-        inputValor.type = 'text';
         inputValor.id = 'hvValorBase';
         inputValor.className = 'hv-input';
-        inputValor.inputMode = 'decimal';
-        inputValor.autocomplete = 'off';
-        inputValor.maxLength = 12;
         inputValor.placeholder = '0,00';
+        // Campo de dinheiro (salário/valor da hora) → máscara BRL. `_num` abaixo
+        // já entende "1.234,56", então a leitura continua igual.
+        aplicarMascaraMoeda(inputValor);
 
         // Campo extra (horas/dia ou horas/semana) — visível conforme o modo
         const campoExtraLabel = document.createElement('label');
@@ -274,7 +274,7 @@ export function abrirPopupHorasVida(ctx, aoSalvar) {
         if (atual) {
             const hv = ctx.configPerfil?.horasVida || {};
             if (Number.isFinite(Number(hv.valorBase)) && Number(hv.valorBase) > 0) {
-                inputValor.value = String(hv.valorBase).replace('.', ',');
+                definirMoeda(inputValor, hv.valorBase);
             }
             if (modoAtivo === 'dia' && Number.isFinite(Number(hv.horasDia)))       inputExtra.value = String(hv.horasDia);
             if (modoAtivo === 'mes' && Number.isFinite(Number(hv.horasSemana)))    inputExtra.value = String(hv.horasSemana);

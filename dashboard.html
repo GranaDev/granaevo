@@ -491,14 +491,15 @@
                     </div>
                     <div class="form-field-icon">
                         <i class="fas fa-coins" aria-hidden="true"></i>
+                        <!-- Máscara monetária (modules/mascara-moeda.js): text + inputmode
+                             para aceitar "1.234,56". Leia SEMPRE com lerMoeda(). -->
                         <input
-                            type="number"
+                            type="text"
                             id="inputValor"
                             class="form-input"
                             placeholder="Valor (R$)"
-                            step="0.01"
-                            min="0"
-                            max="99999999"
+                            inputmode="decimal"
+                            autocomplete="off"
                             aria-label="Valor da transação">
                     </div>
                     <div id="creditoFields" class="js-hidden">
