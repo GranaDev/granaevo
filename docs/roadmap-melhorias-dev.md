@@ -228,21 +228,24 @@ decide. Ver `CONF_LOCAL_OK`/`completude` no `engine.js` e `describe.js`.
 nada em *"gastei 50"*. O ganho está justamente nos casos como o de cima.
 
 ### 3 · T2 — exportação (achados do teste) 🟡
+**Falta:** achatar as metas (JSON cru na célula) + duas decisões do dono (IDs na planilha, aba Avisos).
 A planilha **exporta e abre** (o defeito antigo morreu). Três achados novos:
 - 🔴 **Metas saem com JSON cru numa célula:** mês → `{"2026-08":949}`; histórico → o array
   inteiro de `historicoRetiradas`. Prazo idem. Precisa achatar em colunas legíveis (ou aba
   própria para o histórico). `_xmlEsc` no `xlsx.js` faz `String(v)`, então objeto vira lixo.
-- 🟡 **IDs na planilha:** o dono perguntou se `id`/`metaId` precisam aparecer. Para leitura
+- 🟡 **IDs na planilha.** *Falta:* decisão do dono — o dono perguntou se `id`/`metaId` precisam aparecer. Para leitura
   humana, não; para portabilidade LGPD, sim. Provável saída: manter no JSON, tirar do .xlsx.
-- 🟡 **Aba "Avisos":** o dono questiona se ganha o lugar dela — *"nada mais é que as
+- 🟡 **Aba "Avisos".** *Falta:* decisão do dono — o dono questiona se ganha o lugar dela — *"nada mais é que as
   notificações que estão pendentes"*. Decisão dele.
 
 ### 4 · T5 — indicador no mobile 🟡
+**Falta:** só o CSS — encostar o indicador na linha do menu no celular e centralizar.
 Funcionalidade **perfeita** ("Atualizando", "Salvo", "Fulano está online"). Só o lugar: no
 celular ele aparece **bem acima** da linha do menu de navegação. Quer encostado na linha e
 mais centralizado. Só CSS.
 
 ### 5 · Cartões não repintam no tempo real 🟡
+**Falta:** incluir o render de cartões no atualizarTudo().
 Verificado lendo a função inteira: `atualizarTudo()` ([dashboard.js:5146](src/scripts/pages/dashboard.js#L5146))
 repinta movimentações, resumo, contas fixas, metas, visual da meta e header de reservas —
 **cartões não estão ali**. Só incomoda quem está parado na tela de cartões quando o aviso
@@ -251,6 +254,7 @@ chega; a fatura repinta porque é conta fixa.
 de verdade naquela vez. Conclusão tirada de um grep filtrado, não da função inteira.
 
 ### 6 · Revisar o sumiço do crédito 🟡
+**Falta:** entender que campos são os 5 `set` do save ocioso; sem repro, é revisão de código.
 **T8 (2026-08-08):** o dono reproduziu com `?opsdebug=1` e **não bugou**. O `__sombra`:
 ```
 save 1 → { n: 5, set: 5, completo: true, motivos: '—' }
@@ -293,9 +297,9 @@ a confirmação de quem usa.
 | T4 presença | ✅ **OK** — *"funciona perfeitamente"* |
 | T5 indicador | ✅ **OK** — *"não tem no que mexer"* na função; só o lugar no mobile |
 | T6 retirada pela tela | ✅ **OK** — a que mexe em dinheiro passou |
-| T2 exportação | 🟡 exporta e abre; 3 achados novos (ver COMECE AQUI · 3) |
-| T3 descrição | 🟡 funciona no caso simples, quebra no real (ver COMECE AQUI · 2) |
-| T7 continuação no crédito | 🟡 o crédito lançou certo; o 2º valor ficou no ar (ver COMECE AQUI · 1) |
+| T2 exportação | 🟡 exporta e abre. **Falta:** metas com JSON cru + 2 decisões (ver COMECE AQUI · 3) |
+| T3 descrição | 🟡 boa no caso simples. **Falta:** o portão da descrição chamar a IA (ver COMECE AQUI · 2) |
+| T7 continuação no crédito | 🟡 o crédito lançou certo. **Falta:** o 2º valor não fica no ar (ver COMECE AQUI · 1) |
 | T8 sumiço do crédito | ✅ **não reproduziu** — `__sombra` mostrou 0 operações na aba ociosa |
 
 > **Senha da conta de teste** (`oliveiralucas00224+teste2fa@gmail.com`) foi redefinida em
