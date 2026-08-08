@@ -5500,6 +5500,32 @@ function _avisarSincronizado(aviso) {
     if (nome) mostrarNotificacao(`${nome} atualizou os dados`, 'info');
 }
 
+// Busca o estado bom no servidor e repinta. Um só lugar, usado por dois
+// gatilhos: o aviso de tempo real e a recusa por versão (409).
+async function _recarregarDoServidor(aviso) {
+    // Save em voo pousa primeiro: recarregar no meio de um POST traz o estado de
+    // ANTES dele, e a tela mostraria o dado recém-gravado como se não existisse.
+    if (_saveEmVoo) { try { await _saveEmVoo; } catch { /* segue */ } }
+    if (!perfilAtivo) return;
+    await carregarDadosPerfil(perfilAtivo.id);
+    // carregarDadosPerfil NÃO repinta: enche os arrays e termina em
+    // atualizarReferenciasGlobais(). Sem a linha abaixo, o dado só aparecia no
+    // F5 seguinte — foi o bug de 2026-08-07.
+    atualizarTudo();
+    _avisarSincronizado(aviso);
+}
+
+// 409 do servidor: este cliente tentou gravar o estado inteiro sobre uma leitura
+// velha, e foi recusado. Não dá para mesclar (é justamente o caso em que as
+// operações não puderam ser derivadas), então buscamos o estado bom.
+//
+// A troca é consciente e vale a pena: perder o último segundo de edição DESTE
+// cliente é melhor que apagar em silêncio o que a outra pessoa já tinha salvo.
+document.addEventListener('ge:versao-conflito', () => {
+    mostrarNotificacao('Alguém atualizou estes dados. Recarregando…', 'warning');
+    _recarregarDoServidor(null).catch(() => {});
+});
+
 // Quem da conta está com o app aberto agora.
 //
 // A presença chega como IDS DE PERFIL — o nome nunca trafega pelo canal, porque
@@ -5540,19 +5566,7 @@ async function ligarTempoReal() {
             ocupado:     () => !!(document.getElementById('modalOverlay')?.classList.contains('active') ||
                                   document.getElementById('bottomSheetOverlay')?.classList.contains('active')),
             aoPresenca: _renderPresenca,
-            recarregar:  async (aviso) => {
-                // Save em voo pousa primeiro: recarregar no meio de um POST traz
-                // o estado de ANTES dele, e a tela mostraria o dado recém-gravado
-                // como se não existisse.
-                if (_saveEmVoo) { try { await _saveEmVoo; } catch { /* segue */ } }
-                if (!perfilAtivo) return;
-                await carregarDadosPerfil(perfilAtivo.id);
-                // carregarDadosPerfil NÃO repinta: enche os arrays e termina em
-                // atualizarReferenciasGlobais(). Sem a linha abaixo, o dado só
-                // aparecia no F5 seguinte — foi o bug de 2026-08-07.
-                atualizarTudo();
-                _avisarSincronizado(aviso);
-            },
+            recarregar:  _recarregarDoServidor,
         });
         _tempoRealReaplicar = r?.reaplicarPendente ?? null;
     } catch (e) {

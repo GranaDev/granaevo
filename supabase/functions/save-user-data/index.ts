@@ -315,7 +315,7 @@ Deno.serve(async (req: Request) => {
     // anti-wipe (6.5) precisam comparar o payload com o estado atual.
     const { data: existing, error: selectErr } = await supabaseAdmin
       .from('user_data')
-      .select('user_id, data_json')
+      .select('user_id, data_json, last_modified')
       .eq('user_id', effectiveUserId)
       .maybeSingle()
 
@@ -453,6 +453,35 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ── 6.5 TRAVA DE VERSÃO (Passo 37.3) — só no caminho de ESTADO INTEIRO ──
+    //
+    // Quem manda o estado inteiro está afirmando algo sobre registros que não
+    // tocou. Se essa afirmação nasceu de uma leitura velha, gravá-la apaga o que
+    // outra pessoa salvou no meio do caminho — foi o que o log de auditoria
+    // mostrou em 2026-08-07 (blob voltando de 9615 para 8259 bytes, o estado
+    // exato de 34 segundos antes).
+    //
+    // ⚠️ NÃO se aplica ao caminho por operações, DE PROPÓSITO. Operações são
+    // aditivas e não dependem de versão: "adicionei a transação X" continua
+    // verdadeiro mesmo que a linha tenha mudado. Travar ali geraria 409 em toda
+    // gravação simultânea LEGÍTIMA — o oposto do que este passo existe para
+    // resolver.
+    //
+    // COMPATÍVEL PARA TRÁS: sem `base_versao` no corpo, não há checagem. Cliente
+    // com bundle velho continua salvando como antes.
+    const baseVersao = typeof (body as any)?.base_versao === 'string' ? (body as any).base_versao : null
+    if (!viaOperacoes && baseVersao && existing?.last_modified &&
+        String(existing.last_modified) !== baseVersao) {
+      console.warn('[save-user-data] 409: save de estado inteiro sobre leitura velha. user:',
+                   effectiveUserId.slice(0, 8))
+      return json({
+        success: false,
+        error: 'VERSAO_DESATUALIZADA',
+        code: 'VERSAO_DESATUALIZADA',
+        versao: existing.last_modified,
+      }, 409, corsHeaders)
+    }
+
     // ── 6.45 Payload final (já mesclado) ────────────────────────────────────
     // Usa effectiveUserId/Email — para convidados, isso é o ID/email do dono
     const dataToSave = {
@@ -549,7 +578,7 @@ Deno.serve(async (req: Request) => {
 
     // `ops` no corpo é DIAGNÓSTICO, não contrato: diz por que este save usou (ou
     // não usou) operações. Sem valor nenhum do usuário — só o motivo e contagens.
-    return json({ success: true, ops: { via: viaOperacoes, motivo: opsMotivo } }, 200, corsHeaders)
+    return json({ success: true, versao: now, ops: { via: viaOperacoes, motivo: opsMotivo } }, 200, corsHeaders)
 
   } catch (error: any) {
     console.error('[save-user-data] Erro:', error?.message)

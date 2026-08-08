@@ -198,9 +198,11 @@ describe('⭐ receber o aviso não é o fim — a tela precisa repintar', () => 
   // O `recarregar` que a página entrega ao módulo. Só ele ficou aqui: o filtro
   // por perfil, o adiamento e o diagnóstico foram para tempo-real.js quando o
   // teto de bundle do dashboard estourou (40,0/40 reprovou o build da Vercel).
+  // A recarga virou função NOMEADA (`_recarregarDoServidor`) quando o 409 do
+  // 37.3 passou a precisar do mesmo caminho: dois gatilhos, um caminho só.
   const APLICAR = (() => {
-    const i = DASH.indexOf('recarregar:  async (aviso) =>')
-    return i > 0 ? DASH.slice(i, DASH.indexOf('\n        });', i)) : ''
+    const i = DASH.indexOf('async function _recarregarDoServidor(aviso)')
+    return i > 0 ? DASH.slice(i, DASH.indexOf('\n}', i)) : ''
   })()
 
   test('depois de recarregar, chama atualizarTudo()', () => {
@@ -344,7 +346,8 @@ describe('Camada 3 — a tela mudou sozinha, e o usuário fica sabendo', () => {
     assert.match(CODIGO, /const aplicar = \(aviso\) =>/)
     assert.match(CODIGO, /Promise\.resolve\(recarregar\(aviso\)\)/)
     assert.match(CODIGO, /aplicar\(aviso\);/)
-    assert.match(DASH3, /recarregar:\s+async \(aviso\) =>/)
+    assert.match(DASH3, /async function _recarregarDoServidor\(aviso\)/)
+    assert.match(DASH3, /recarregar:\s+_recarregarDoServidor/)
     assert.match(DASH3, /_avisarSincronizado\(aviso\);/)
   })
 

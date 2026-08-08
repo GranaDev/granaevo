@@ -1370,8 +1370,8 @@ realmente quer offline (consultar, não lançar).
 
 ## PASSO 37 — Sincronização por OPERAÇÃO + tempo real 🟡 EM ANDAMENTO ⭐
 
-**Falta:** 37.3 (versão/conflito) e 37.4 (fila local) — hoje são **defesa em
-profundidade**, não o conserto. O defeito que abriu o passo — perda de dado por
+**Falta:** só o 37.4 (fila local) — e ele é conveniência offline, não
+integridade. O defeito que abriu o passo — perda de dado por
 gravação simultânea — está RESOLVIDO e confirmado em produção, e o tempo real
 está completo (Camadas 1, 2 e 3).
 
@@ -1628,11 +1628,31 @@ porque `completo` significa "as operações descrevem TUDO que mudou": zero
 operações é a afirmação "não mexi em nada", não um palpite. Efeito colateral bom:
 aba aberta sem uso parou de falar com o servidor.
 
-**37.3 · VERSÃO E CONFLITO**
-- **37.3a** 🔴 Contador de versão por perfil, incrementado a cada escrita aceita.
-- **37.3b** 🔴 Edição e exclusão mandam a versão que leram; divergiu → **409**.
-- **37.3c** 🔴 Cliente recarrega e reaplica a operação sozinho; só pede ajuda ao
-  usuário se a reaplicação também falhar.
+**37.3 · VERSÃO E CONFLITO ✅ (2026-08-07)**
+- **37.3a** ✅ A versão é o `last_modified` da linha — **sem migração**. Ele já
+  existe e já é reescrito a cada gravação; um contador novo seria a mesma coisa
+  com mais peças.
+- **37.3b** ✅ O cliente manda `base_versao` (o que leu); divergiu → **409
+  `VERSAO_DESATUALIZADA`**, e a recusa devolve a versão boa. O save responde com
+  a versão nova, senão o save seguinte nasceria velho e levaria 409 para sempre.
+- **37.3c** ✅ A tela busca o estado bom pelo **mesmo caminho do tempo real**
+  (`_recarregarDoServidor`). Dois gatilhos, um caminho: dois caminhos divergiriam
+  com o tempo, e o que divergisse viraria o bug.
+
+⚠️ **A DECISÃO QUE DEFINE O PASSO: a trava vale SÓ no caminho de estado inteiro.**
+Operações são aditivas e não dependem de versão — "adicionei a transação X"
+continua verdadeiro mesmo que a linha tenha mudado. Travar ali geraria 409 em
+toda gravação simultânea LEGÍTIMA, que é o oposto do que o Passo 37 resolve.
+Um teste por mutação confirma: remover o `!viaOperacoes` reprova.
+
+**Por que ainda valia, com o Lost Update já resolvido:** o caminho por operações
+tem CINCO motivos para cair no de estado inteiro (`sem_pedido`, `perfis_mudaram`,
+`invalidas:*`, blob ilegível, `ops_completo:false`), e o de estado inteiro
+sobrescreve. Fechar cada porta uma a uma não termina nunca.
+
+**A troca, assumida:** perder o último segundo de edição DESTE cliente é melhor
+que apagar em silêncio o que a outra pessoa já tinha salvo. Sem a trava, era o
+segundo caso que acontecia — e o `financial_audit_log` provou.
   💡 **Por que ainda vale, com o Lost Update já resolvido:** o caminho por
   operações tem CINCO motivos para cair no de estado inteiro (`sem_pedido`,
   `perfis_mudaram`, `invalidas:*`, blob ilegível, `ops_completo:false`) — e o

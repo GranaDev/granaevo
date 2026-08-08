@@ -185,7 +185,7 @@ Deno.serve(async (req: Request) => {
     // ── 5. Buscar dados do banco ─────────────────────────────────────────────
     const { data, error } = await supabaseAdmin
       .from('user_data')
-      .select('data_json')
+      .select('data_json, last_modified')
       .eq('user_id', effectiveUserId)
       .single()
 
@@ -225,7 +225,16 @@ Deno.serve(async (req: Request) => {
     // (é o que a política `user_data_select` permite, e é o que esta resposta
     // acabou de entregar). O que autoriza ouvir o canal é a MESMA política, no
     // servidor — saber o nome do tópico não dá acesso a ele.
-    return json({ success: true, data_json: dataJson, conta: effectiveUserId }, 200, corsHeaders)
+    // `versao` (Passo 37.3): o carimbo da linha quando ela foi lida. O cliente o
+    // devolve no save, e o servidor recusa gravacao de ESTADO INTEIRO baseada
+    // numa leitura velha. No caminho por operacoes nao ha checagem — operacoes
+    // sao aditivas e nao dependem de versao.
+    return json({
+      success: true,
+      data_json: dataJson,
+      conta: effectiveUserId,
+      versao: (data as any)?.last_modified ?? null,
+    }, 200, corsHeaders)
 
   } catch (error: any) {
     console.error('[get-user-data] Erro:', error?.message)

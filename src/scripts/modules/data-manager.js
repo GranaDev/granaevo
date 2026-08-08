@@ -147,6 +147,10 @@ class DataManager {
     // Id da conta (dono da linha), aprendido no load. Ver `get contaId`.
     #conta = null;
 
+    // Carimbo da linha quando ela foi lida (Passo 37.3). Vai junto do save; o
+    // servidor recusa gravação de ESTADO INTEIRO baseada numa leitura velha.
+    #versao = null;
+
     #retrato = new Map();
 
     #tirarRetrato(profiles) {
@@ -364,6 +368,7 @@ class DataManager {
         this.#lastLoadOk           = false;
         this.#retrato              = new Map();
         this.#conta                = null;
+        this.#versao               = null;
         this.#idsWithData          = new Set();
         if (IS_DEV) console.log('🔒 [DATA-MANAGER] Estado limpo — usuário deslogado');
     }
@@ -433,6 +438,7 @@ class DataManager {
             // canal de tempo real ouvir (`conta:<id>`). Quem autoriza ouvir é a
             // política no servidor; saber o nome do tópico não dá acesso a ele.
             if (typeof result.conta === 'string' && result.conta) this.#conta = result.conta;
+            this.#versao = typeof result.versao === 'string' ? result.versao : null;
 
             if (!Array.isArray(userData.profiles)) userData.profiles = [];
             if (!userData.version)                  userData.version  = '1.0';
@@ -656,6 +662,10 @@ class DataManager {
                 // origem ignore o próprio eco — sem ele, todo save faria a
                 // própria tela recarregar, e o refetch dispararia outro save.
                 client_id: CLIENT_ID,
+                // A versão que este cliente leu. O servidor só a confere no
+                // caminho de ESTADO INTEIRO — operações são aditivas e não
+                // dependem dela.
+                base_versao: this.#versao,
                 metadata: {
                     lastSync:      new Date().toISOString(),
                     totalProfiles: safeProfiles.length
@@ -730,6 +740,24 @@ class DataManager {
                 cleanup();
             }
 
+            // ── 409: gravei sobre uma leitura velha (Passo 37.3) ────────────
+            // Só acontece no caminho de estado inteiro, ou seja, quando as
+            // operações não puderam ser derivadas. Aí não há como mesclar: o
+            // servidor recusa, e a tela busca o estado bom.
+            //
+            // A troca é consciente: perder o último segundo de edição DESTE
+            // cliente é melhor que apagar em silêncio o que a outra pessoa já
+            // tinha salvo. Sem a trava, o segundo caso é o que acontecia.
+            if (saveResp.status === 409) {
+                const corpo = await saveResp.clone().json().catch(() => null);
+                if (corpo?.code === 'VERSAO_DESATUALIZADA') {
+                    if (typeof corpo.versao === 'string') this.#versao = corpo.versao;
+                    console.warn('⚠️ [DATA-MANAGER] save recusado: outra pessoa gravou antes. Recarregando.');
+                    document.dispatchEvent(new CustomEvent('ge:versao-conflito'));
+                    return false;
+                }
+            }
+
             if (!saveResp.ok) {
                 const errText = await saveResp.text().catch(() => '');
                 console.error('❌ [DATA-MANAGER] Erro ao salvar no banco:', saveResp.status, errText);
@@ -740,6 +768,11 @@ class DataManager {
             // O que o SERVIDOR decidiu fazer com as operações. Sem isto, "por que
             // meu save não usou operações?" só se responde por log do servidor —
             // que o dono não vê. Só motivo e contagens; nada do dinheiro dele.
+            {
+                const eco = await saveResp.clone().json().catch(() => null);
+                // Versão nova, para o próximo save não nascer velho.
+                if (typeof eco?.versao === 'string') this.#versao = eco.versao;
+            }
             if (OPS_DEBUG) {
                 const eco = await saveResp.clone().json().catch(() => null);
                 if (!Array.isArray(window.__sombra)) window.__sombra = [];
