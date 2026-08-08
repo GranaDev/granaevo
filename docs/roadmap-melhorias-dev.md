@@ -186,10 +186,14 @@ o app perder dado sem avisar.
 
 # 🧪 FILA DE TESTES MANUAIS — o que só o dono pode verificar
 
-## ⏳ Aberto (2026-08-07) — o que fechar na próxima sessão
+## ⏳ Aberto (atualizado 2026-08-08) — o que fechar na próxima sessão
 
 Tudo abaixo já está EM PRODUÇÃO e passou nos testes automatizados. O que falta é
 a confirmação de quem usa.
+
+> **2026-08-08:** com os Passos 36 e 7 fechados, **não sobrou item de código
+> não-bloqueado**. O que resta são as verificações desta tabela, três passos que
+> esperam evento externo (8, 14, 27) e o Passo 10, congelado por decisão do dono.
 
 | # | o quê | como |
 |---|---|---|
@@ -198,6 +202,8 @@ a confirmação de quem usa.
 | T3 | **Descrição do chat** (38.1) | Dizer *"recebi um pix de 70 reais da Ke"* → a descrição deve sair **"Pix da Ke"**, não "Outros recebimentos" |
 | T4 | **Presença** (37.5 · Camada 3) | Precisa de DUAS pessoas: abrir o app no seu e no do convidado → cada um vê "Fulano está online" no canto |
 | T5 | **Indicador "↻ Atualizado"** | Lançar no chat e olhar o dashboard: além da transação aparecer, deve piscar por 3s no canto. ⚠️ Ele NUNCA teve CSS até hoje — se não aparecer, é bug novo |
+| T6 | ⭐ **Retirada pela tela** (C-10) — **MEXE EM DINHEIRO** | Transações → nova → categoria **Retirada de Reserva**. Conferir: só lista reserva **com saldo** e mostra quanto · valor acima do saldo é recusado · confirma dizendo o que sobra · a transação aparece **e** a reserva é debitada (as duas metades) |
+| T7 | **Continuação no crédito** (C-1, 08/08) | Chat: *"comprei 900 no cartão parcelado em 3x"* → escolher cartão → depois *"e mais 300"*. Deve abrir o picker de cartão já com R$ 300, **à vista** (não 3×100). E *"de novo"* após uma compra no cartão não pode dizer "erro do sistema" |
 
 Se algo falhar: `__tempoReal` e `__sombra` no console do dashboard
 (`/dashboard?opsdebug=1` para o segundo) dizem onde parou.
