@@ -5,6 +5,9 @@ import { construirModelo, sugerirCategoria } from '../modules/categorizacao.js?v
 import { gerarParcelas, anexarParcelas, paraISO } from '../modules/fatura-parcelas.js?v=1';
 import { aplicarMascaraMoeda, lerMoeda, definirMoeda } from '../modules/mascara-moeda.js?v=1';
 import { novoId } from '../modules/registro-id.js?v=1';
+// A fronteira da reserva mora em modulo proprio para poder ser EXECUTADA por
+// teste — ver o cabecalho de categorias-edicao.js.
+import { categoriasEditaveis } from '../modules/categorias-edicao.js?v=1';
 
 let _ctx = null;
 
@@ -978,13 +981,26 @@ function editarTransacao(t) {
     const _TIPOS_SAIDA   = ['Mercado','Farmácia','Eletrônico','Roupas','Assinaturas','Beleza','Presente',
         'Conta fixa','Cartão','Academia','Lazer','Transporte','Shopee','Mercado Livre','Ifood','Amazon','Casa','Jogos','Outros'];
     const _TIPOS_ENTRADA = ['Salário','Renda Extra','Outros Recebimentos'];
-    const _CATS_EDIT = [
-        { value: 'entrada',          label: 'Entrada' },
-        { value: 'saida',            label: 'Saída' },
-        { value: 'saida_credito',    label: 'Saída no Crédito' },
-        { value: 'reserva',          label: 'Reserva' },
-        { value: 'retirada_reserva', label: 'Retirada de Reserva' },
-    ];
+    // ⚠️ A EDIÇÃO NÃO ATRAVESSA A FRONTEIRA DA RESERVA.
+    //
+    // O formulário oferecia as cinco categorias e trocava `t.categoria` sem
+    // mexer no saldo da meta — o ajuste abaixo só roda `if (diff !== 0 &&
+    // t.metaId)`, e uma saída não tem `metaId`. O estrago, medido na fórmula do
+    // saldo (dashboard.js:3257-3260):
+    //
+    //   saída R$100 → retirada de reserva
+    //     saldo: era −100, vira +100  → oscila R$200
+    //     reserva: NÃO é debitada
+    //   ou seja: R$200 aparecem do nada, e a reserva "pagou" sem saber.
+    //
+    //   reserva R$100 → saída
+    //     a meta continua com os R$100 que ninguém mais lastreia.
+    //
+    // Converter de verdade exigiria perguntar QUAL reserva e validar saldo —
+    // que é o fluxo do C-10, e ele nasce na CRIAÇÃO, não aqui. Enquanto isso, a
+    // edição só oferece categorias do mesmo lado da fronteira: mexer em valor,
+    // descrição e tipo continua livre.
+    const _CATS_EDIT = categoriasEditaveis(t.categoria);
 
     _ctx.criarPopupDOM((box) => {
         const form = document.createElement('div');

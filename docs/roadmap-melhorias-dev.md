@@ -2591,13 +2591,29 @@ logado · gate no CI impedindo regressão.
   antes, no fechamento de fatura. Cada insight tem o próprio `catch`: erro no complemento não pode
   engolir o aviso de conta vencendo, que é o essencial. **Nenhum R$ no corpo** — a notificação é
   lida por quem passa pelo celular na mesa; vai só o nome da assinatura e percentual.
-- **C-10** 🔴 **Retirar da reserva pela tela de Transações** — pedido do dono (2026-08-04).
-  Hoje só dá para retirar entrando em Reservas (ou pelo chat). O tipo já existe no seletor de
-  categoria da edição; falta o fluxo de CRIAÇÃO com as travas que o dono listou: perguntar de qual
-  reserva, bloquear se o saldo não cobre, e rate limit.
-  ⚠️ **Risco descoberto junto:** o formulário de edição já permite trocar a categoria para
-  `retirada_reserva`, e isso grava a transação **sem mexer no saldo da reserva** — a transação diz
-  que saiu dinheiro da reserva e a reserva não sabe. Vale conferir antes de expor o fluxo novo.
+- **C-10** 🟡 **Retirar da reserva pela tela de Transações** — pedido do dono (2026-08-04).
+  **Falta:** o fluxo de CRIAÇÃO, com as travas que o dono listou (perguntar de
+  qual reserva, bloquear se o saldo não cobre, rate limit).
+  · ✅ **O RISCO ANEXO FOI CORRIGIDO PRIMEIRO (2026-08-07), e era pior do que
+    estava escrito aqui.** A edição não só "gravava sem mexer no saldo": ela
+    **inventava dinheiro**, e estava em produção ao alcance de qualquer usuário
+    pelo botão de editar.
+    A conta, sobre a fórmula real do saldo (`dashboard.js:3257-3260`):
+
+        saída R$100  →  retirada de reserva
+          saldo: era −100, vira +100   →  oscila R$200
+          reserva: NÃO é debitada
+
+    R$200 do nada, e a reserva "pagou" sem saber. No sentido inverso
+    (`reserva → saída`), a meta ficava com dinheiro que ninguém mais lastreia.
+    A causa: o ajuste da meta no salvar só roda `if (diff !== 0 && t.metaId)`, e
+    uma saída não tem `metaId` — então trocar a categoria passava batido.
+    **Conserto:** a edição só oferece categorias do MESMO lado da fronteira.
+    Valor, descrição e tipo seguem livres — travar o resto seria punir o usuário
+    por um defeito nosso. A regra virou módulo próprio
+    (`modules/categorias-edicao.js`) para poder ser EXECUTADA por teste: regra
+    que decide destino de dinheiro não se verifica por regex sobre o fonte.
+
 - **C-9** ✅ **ACHADOS DA ANÁLISE PROFUNDA — corrigidos em 2026-08-07.**
   ⚠️ **Ao medir, METADE DA LISTA JÁ ESTAVA CONSERTADA.** Este item dizia
   "medidos, não corrigidos" para coisas que funcionavam há dias. É exatamente o
