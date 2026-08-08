@@ -99,6 +99,18 @@ class AssistantEngine {
         return { profiles: this.listProfiles(), activeId: this.#activeId };
     }
 
+    /**
+     * Recarrega os dados por causa de um aviso de tempo real.
+     *
+     * Não mexe na conversa na tela, de propósito: o chat é um diálogo, e trocar
+     * o que está escrito embaixo de quem lê é pior do que esperar. O que precisa
+     * ficar em dia é o ESTADO — senão o próximo comando lança em cima de dado
+     * velho, e aí sim o usuário perde alguma coisa.
+     */
+    async refresh() {
+        await this.#reload();
+    }
+
     async #reload() {
         try {
             const data = await dataManager.loadUserData();

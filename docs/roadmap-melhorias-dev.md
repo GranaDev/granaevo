@@ -1681,12 +1681,24 @@ diverge vira o furo.
 5. **O `await import()` virava decoração** se o chunk caísse no `vendor-supabase`
    (boot). Chunk próprio: `vendor-realtime`, 15 KB, sob demanda.
 
-**Falta (Camadas 2 e 3):**
-- 🔴 **O chat não escuta.** Só o dashboard. Lançar no dashboard e ver no chat na
-  hora exige um método público de recarga no engine (não existe: eu assumi um
-  `refresh()` que não havia).
-- 🔴 Regras mais finas de quando aplicar calado × avisar ("nova transação de Ke").
-- 🔴 Acabamento: indicador de sincronizado, presença ("Ke está online").
+**Camada 2 ✅ (2026-08-07)**
+- ✅ **O chat escuta.** `assistant.refresh()` criado (eu tinha assumido um que
+  não existia). Ele NÃO mexe na conversa da tela — o chat é um diálogo, e trocar
+  o que está escrito embaixo de quem lê é pior que esperar. O que fica em dia é o
+  ESTADO, senão o próximo comando lança em cima de dado velho.
+- ✅ **A aba que volta não confia no canal.** Navegador suspende websocket em aba
+  de fundo e nem sempre avisa que caiu. Ao ganhar visibilidade: religa se o canal
+  não está de pé **e recarrega de qualquer forma** — o refetch é barato e é a
+  única garantia de que a tela não está mostrando ontem. O listener é registrado
+  UMA vez; sem a trava, cada religamento somaria um e o refetch viraria enxurrada.
+- ✅ `activeProfileId` é GETTER, não método. Chamá-lo daria TypeError no primeiro
+  aviso, e o catch do canal engoliria — chat mudo, sem explicação.
+
+**Falta (Camada 3 — acabamento, não integridade):**
+- 🔴 Avisar quem mudou quando faz sentido ("nova transação de Ke"), em vez de só
+  aplicar calado. O nome pode ser resolvido LOCALMENTE pelo id do perfil, sem
+  mandar nada novo no canal.
+- 🔴 Indicador de sincronizado e presença ("Ke está online").
 
 ### Ordem sugerida
 `37.0 → 37.1 → 37.2 → 37.3 → 37.4`. A identidade bloqueia tudo; o diff sem o

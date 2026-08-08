@@ -182,6 +182,8 @@ export function ligado() {
 // A página fica com o que só ela sabe: onde estão os dados e como repintar.
 
 let _pendente = false;
+let _ouvindoVisibilidade = false;
+let _ultimoAoMudar = null;
 
 /**
  * @param {object}   o
@@ -202,19 +204,39 @@ export async function ligarNaTela({ url, apikey, conta, token, perfilAtual, ocup
             .catch((e) => _diag('ultimo', `falhou: ${String(e?.message ?? e).slice(0, 60)}`));
     };
 
-    await ligar({
-        url, apikey, conta, token,
-        aoMudar: (aviso) => {
-            // Numa conta de família, o lançamento do outro no perfil DELE não
-            // deve sacudir a minha tela.
-            const meu = perfilAtual?.() ?? '';
-            if (aviso.perfis.length && meu && !aviso.perfis.includes(meu)) {
-                _diag('ultimo', `ignorado: outro perfil (${aviso.perfis.length})`);
-                return;
+    const aoMudar = (aviso) => {
+        // Numa conta de família, o lançamento do outro no perfil DELE não deve
+        // sacudir a minha tela.
+        const meu = perfilAtual?.() ?? '';
+        if (aviso.perfis.length && meu && !aviso.perfis.includes(meu)) {
+            _diag('ultimo', `ignorado: outro perfil (${aviso.perfis.length})`);
+            return;
+        }
+        aplicar();
+    };
+    _ultimoAoMudar = aoMudar;
+
+    await ligar({ url, apikey, conta, token, aoMudar });
+
+    // ── Rede de segurança ao voltar para a aba ──────────────────────────────
+    // Navegador suspende websocket em aba de fundo, e nem sempre avisa que
+    // caiu. Quem volta para uma aba parada há uma hora não pode confiar que a
+    // campainha continuou tocando.
+    //
+    // Duas coisas ao ganhar visibilidade: religa se o canal não estiver de pé, e
+    // recarrega de qualquer forma. O refetch é barato e é a única garantia de
+    // que a tela não está mostrando ontem.
+    if (typeof document !== 'undefined' && !_ouvindoVisibilidade) {
+        _ouvindoVisibilidade = true;
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'visible' || _parado) return;
+            if (!ligado()) {
+                _diag('estado', 'religando');
+                ligar({ url, apikey, conta, token, aoMudar: _ultimoAoMudar }).catch(() => {});
             }
             aplicar();
-        },
-    });
+        });
+    }
 
     return { reaplicarPendente: () => { if (_pendente) aplicar(); } };
 }

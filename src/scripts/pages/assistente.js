@@ -5,7 +5,7 @@
 // módulos assistant/*; aqui é só orquestração de UI e sessão.
 // ---------------------------------------------------------------------------
 
-import { supabaseReady, getValidAccessToken, logout, supabase } from '../services/supabase-client.js?v=2';
+import { supabaseReady, getValidAccessToken, logout, supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '../services/supabase-client.js?v=2';
 import { dataManager } from '../modules/data-manager.js';
 import { assistant } from '../modules/assistant/engine.js';
 import { formatBRL } from '../modules/assistant/money.js';
@@ -204,6 +204,36 @@ function setupSearch() {
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────────
+// ── TEMPO REAL (Passo 37 · Camada 2) ────────────────────────────────────────
+// A outra metade do par. Antes só o dashboard escutava: quem lançava lá e olhava
+// o chat continuava vendo o estado velho — e, pior, o próximo comando do chat
+// partiria dele.
+//
+// Aqui NÃO se mexe na conversa da tela. O chat é um diálogo, e trocar o que está
+// escrito embaixo de quem lê é pior do que esperar. O que se atualiza é o ESTADO
+// que o engine usa para o PRÓXIMO comando.
+try { window.__tempoReal = { estado: 'nao_iniciado', avisos: 0, ultimo: null }; } catch { /* sem window */ }
+
+async function ligarTempoRealChat() {
+    const conta = dataManager.contaId;
+    if (!conta) { try { window.__tempoReal = { estado: 'sem_conta_no_load' }; } catch {} return; }
+    try {
+        const { ligarNaTela } = await import('../modules/tempo-real.js?v=1');
+        await ligarNaTela({
+            url: SUPABASE_URL, apikey: SUPABASE_ANON_KEY, conta,
+            token:       () => getValidAccessToken(),
+            // `activeProfileId` é GETTER, não método — chamá-lo daria erro.
+            perfilAtual: () => String(assistant.activeProfileId ?? ''),
+            // O chat não tem formulário que se perca: o campo de texto é do
+            // usuário e o refresh não encosta nele.
+            ocupado:     () => false,
+            recarregar:  () => assistant.refresh(),
+        });
+    } catch (e) {
+        try { window.__tempoReal = { estado: 'erro_ao_ligar', erro: String(e?.message ?? e).slice(0, 120) }; } catch {}
+    }
+}
+
 (async function boot() {
     await supabaseReady;
     const token = await getValidAccessToken();
@@ -239,6 +269,7 @@ function setupSearch() {
         await pickProfile(state.profiles);
     }
     renderHeaderProfile();
+    ligarTempoRealChat();
 
     // 4) Histórico + saudação personalizada + insights de abertura + wiring
     currentUserId = userId;

@@ -245,6 +245,65 @@ describe('⭐ receber o aviso não é o fim — a tela precisa repintar', () => 
   })
 })
 
+describe('Camada 2 — o chat também escuta, e a aba que volta não confia no canal', () => {
+  const CHAT = soCodigo(readFileSync(join(RAIZ, 'src/scripts/pages/assistente.js'), 'utf8'))
+  const ENGINE = soCodigo(readFileSync(join(RAIZ, 'src/scripts/modules/assistant/engine.js'), 'utf8'))
+
+  test('o chat liga a campainha', () => {
+    // Antes só o dashboard escutava: quem lançava lá e olhava o chat continuava
+    // vendo o estado velho — e o PRÓXIMO comando do chat partiria dele.
+    // A CHAMADA, não o nome: `ligarTempoRealChat` aparece também na definição,
+    // e assertar o nome deixava passar a mutação que removia a chamada do boot.
+    assert.match(CHAT, /^\s+ligarTempoRealChat\(\);$/m)
+    assert.match(CHAT, /await import\('\.\.\/modules\/tempo-real\.js\?v=1'\)/)
+    assert.match(CHAT, /SUPABASE_URL, apikey: SUPABASE_ANON_KEY/)
+    assert.match(CHAT, /import \{[^}]*SUPABASE_URL[^}]*\} from '\.\.\/services\/supabase-client\.js/)
+  })
+
+  test('o engine expõe refresh() — antes eu assumi um que não existia', () => {
+    assert.match(ENGINE, /async refresh\(\) \{[\s\S]{0,80}this\.#reload\(\)/)
+    assert.match(CHAT, /recarregar:\s+\(\) => assistant\.refresh\(\)/)
+  })
+
+  test('`activeProfileId` é lido como GETTER, não chamado', () => {
+    // Chamá-lo (`activeProfileId()`) daria TypeError no primeiro aviso — e o
+    // catch do canal engoliria, deixando o chat mudo sem explicação.
+    assert.match(CHAT, /String\(assistant\.activeProfileId \?\? ''\)/)
+    assert.ok(!/activeProfileId\?\.\(\)|activeProfileId\(\)/.test(CHAT))
+    assert.match(ENGINE, /get activeProfileId\(\)/)
+  })
+
+  test('o chat não adia: não há formulário que se perca ali', () => {
+    assert.match(CHAT, /ocupado:\s+\(\) => false/)
+  })
+
+  test('⭐ ao voltar para a aba: religa se caiu, e recarrega de qualquer forma', () => {
+    // Navegador suspende websocket em aba de fundo e nem sempre avisa. Quem
+    // volta a uma aba parada há uma hora não pode confiar que a campainha
+    // continuou tocando.
+    assert.match(CODIGO, /visibilityState !== 'visible' \|\| _parado\) return/)
+    assert.match(CODIGO, /if \(!ligado\(\)\) \{/)
+    assert.match(CODIGO, /_diag\('estado', 'religando'\)/)
+    // O refetch acontece DEPOIS do religamento e fora dele: mesmo com o canal
+    // de pé, a aba pode ter perdido avisos enquanto estava suspensa.
+    // Delimitado até o `return` da função: `indexOf('});')` casava com o
+    // `.catch(() => {})` do religamento e cortava o bloco antes do refetch.
+    const i = CODIGO.indexOf("visibilityState !== 'visible'")
+    const bloco = CODIGO.slice(i, CODIGO.indexOf('return { reaplicarPendente', i))
+    const iReligar = bloco.indexOf("_diag('estado', 'religando')")
+    const iAplicar = bloco.lastIndexOf('aplicar();')
+    assert.ok(iReligar > 0 && iAplicar > iReligar,
+      'recarregar precisa acontecer também quando o canal está de pé')
+  })
+
+  test('o listener de visibilidade é registrado UMA vez', () => {
+    // `ligarNaTela` roda de novo a cada religamento; sem a trava, cada queda
+    // somaria um listener e o refetch viraria enxurrada.
+    assert.match(CODIGO, /if \(typeof document !== 'undefined' && !_ouvindoVisibilidade\)/)
+    assert.match(CODIGO, /_ouvindoVisibilidade = true/)
+  })
+})
+
 describe('a queda é tratada, e a recusa não vira teimosia', () => {
   test('reconecta com recuo, e cada tentativa pega um JWT novo', () => {
     // A reconexão do pacote foi desativada de propósito: ela não sabe que o JWT
