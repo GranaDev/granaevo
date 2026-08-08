@@ -63,7 +63,80 @@ Dentro de um item: `⬜ subtarefa não feita` · `☑️ / ✅ subtarefa feita`.
 
 ---
 
-# 📍 ONDE ESTAMOS — fechamento de 2026-08-04
+# 📍 ONDE ESTAMOS — fechamento de 2026-08-07
+
+> Sessão inteira em cima de **UM defeito**: o app perdia dado quando havia mais
+> de uma aba. O dono reproduziu, cobrou três vezes que não estava resolvido, e
+> nas três eu estava consertando a coisa errada. Terminou resolvido, confirmado
+> em produção por ele, e com tempo real por cima.
+
+## O que foi entregue
+
+**PASSO 37 — sincronização por operação + tempo real** (17 dos 18 pedaços)
+- **37.0** identidade: todo registro tem `id` estável. Duas origens opostas —
+  aleatório para o que nasce, derivado para o que é legado — e só funcionam
+  juntas.
+- **37.1** o cliente manda **o que mudou**, e prova a cada save que aquilo
+  reconstrói o perfil inteiro.
+- **37.2** a Edge aplica operações. Idempotente **por construção** (o plano
+  original tinha um livro-caixa de ids; não precisou). Recusa remessa malformada,
+  barra poluição de protótipo.
+- **37.3** trava de versão — e ela vale **só no caminho de estado inteiro**:
+  operações são aditivas e travá-las geraria 409 em toda gravação legítima.
+- **37.5** tempo real completo (Camadas 1–3, com presença).
+
+**PASSO 38 — os achados dos testes do dono** ✅ fechado.
+
+## As três vezes em que eu errei o alvo
+
+1. **Achei que o Lost Update era "duas pessoas editando".** Era mais fácil de
+   puxar: o dashboard salva **a cada 30 segundos, incondicionalmente**. Bastava
+   DEIXAR uma aba aberta.
+2. **Declarei o tempo real pronto e ele estava mudo.** `setAuth` é `async` e eu
+   não aguardei — o canal entrava antes do token e era recusado sem erro nenhum.
+3. **Consertei isso e a tela continuou parada.** `carregarDadosPerfil` não
+   repinta; foi escrito para o boot, onde quem chama renderiza depois.
+
+O que destravou nas três: **parar de deduzir e ir buscar evidência.** O
+`financial_audit_log` provou a perda em números (`9615 → 8259`, o estado exato de
+34 segundos antes). O `?opsdebug=1` mostrou o que o cliente mandava. O
+`__tempoReal` mostrou onde a campainha parava. Ler o código-fonte do pacote achou
+o `async`.
+
+## Regras que saíram daqui, e que valem para o próximo
+
+- ⚠️ **`drop_console: true` apaga todo `console.*` do bundle.** Diagnóstico em
+  produção não passa por log — passa por atribuição a um global.
+- ⚠️ **Asserção sobre comportamento tem de olhar SÓ CÓDIGO.** Os comentários
+  deste projeto citam o próprio código que explicam, e isso produziu **quatro**
+  falsos positivos numa sessão — inclusive numa verificação de segurança
+  (`private: true`) que passava com a linha REMOVIDA.
+- ⚠️ **Identificador que aparece na definição E no uso** não serve de asserção:
+  assertar `atualizarTudo()` ou `ligarTempoRealChat()` deixou a mutação passar.
+- ⚠️ **`grep` para conferir import mente** quando o próprio código novo contém o
+  nome — foi assim que quase subi `supabase` sem import.
+- ⚠️ **Verificar no `dist/`, não no fonte.** Duas armadilhas de bundle só
+  apareceram construindo: o alias do Rollup casa por PREFIXO, e um `await
+  import()` vira decoração se o chunk cair no boot.
+
+## O que ficou de conhecido
+
+- **`dashboard.js` em 40,4/42 KB.** O teto subiu 40 → 42 (segunda vez) depois de
+  eu adiar tudo que dava. **PASSO 10 virou bloqueante**: a próxima feature que
+  precisar de bytes ali divide o arquivo antes.
+- **37.4 (fila local)** é o único pedaço restante do 37, e é conveniência
+  offline, não integridade. Provavelmente exige o Passo 10 antes.
+- **Presença entrou por decisão do dono.** Eu tinha recusado; o que destravou foi
+  perceber que `presence` e `broadcast` são `extension` diferentes — dá para dar
+  escrita numa sem dar na outra. O cliente continua **sem poder forjar** "a conta
+  mudou".
+
+**1300 testes** (eram 1008 no início da sessão). Todo conserto verificado por
+MUTAÇÃO: quebrar o código de propósito e confirmar que o teste reprova.
+
+<details>
+<summary>📍 Fechamento anterior — 2026-08-04 (histórico)</summary>
+
 
 > Sessão longa, com o dono testando em produção e reportando. O que mudou:
 
@@ -108,7 +181,35 @@ o app perder dado sem avisar.
 
 ---
 
+
+</details>
+
 # 🧪 FILA DE TESTES MANUAIS — o que só o dono pode verificar
+
+## ⏳ Aberto (2026-08-07) — o que fechar na próxima sessão
+
+Tudo abaixo já está EM PRODUÇÃO e passou nos testes automatizados. O que falta é
+a confirmação de quem usa.
+
+| # | o quê | como |
+|---|---|---|
+| T1 | **Chat mostra os 4 perfis** (38.3) | Assistente → Configurações → "Perfil ativo". Devem aparecer `Userteste · Giusepp · Meow · Userteste` |
+| T2 | **Exportação completa** (38.2) | Configurações → exportar → planilha. Conferir: aba **Transações** existe · **Perfis** traz os nomes · **Atividade** virou a linha "Gravações" no Resumo |
+| T3 | **Descrição do chat** (38.1) | Dizer *"recebi um pix de 70 reais da Ke"* → a descrição deve sair **"Pix da Ke"**, não "Outros recebimentos" |
+| T4 | **Presença** (37.5 · Camada 3) | Precisa de DUAS pessoas: abrir o app no seu e no do convidado → cada um vê "Fulano está online" no canto |
+| T5 | **Indicador "↻ Atualizado"** | Lançar no chat e olhar o dashboard: além da transação aparecer, deve piscar por 3s no canto. ⚠️ Ele NUNCA teve CSS até hoje — se não aparecer, é bug novo |
+
+Se algo falhar: `__tempoReal` e `__sombra` no console do dashboard
+(`/dashboard?opsdebug=1` para o segundo) dizem onde parou.
+
+## ✅ Confirmado em produção pelo dono (2026-08-07)
+
+- **Lançamento no chat aparece no dashboard em tempo real**, sem recarregar.
+- **A perda de dado acabou** — `__sombra` mostrou `completo: true, add: 1` no
+  mesmo save que antes se perdia, e o padrão de regravação do passado sumiu do
+  `financial_audit_log`.
+- **Compatibilidade (37.2d)**: com a Edge nova já no ar e o cliente ainda antigo,
+  lançar/recarregar/excluir seguiram normais.
 
 > **Por que esta seção existe.** Vários passos ficam PENDENTES esperando UMA verificação que nenhum teste
 > automatizado alcança: precisa de navegador logado, de aparelho, de e-mail real. Espalhados pelos
