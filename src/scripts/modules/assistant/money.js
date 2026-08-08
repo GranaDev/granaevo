@@ -174,6 +174,23 @@ export function parseDataRelativa(text) {
         return fmt(d);
     }
 
+    // Dia da semana SEM "passada": "gastei 30 na segunda", "paguei no sábado".
+    //
+    // Quem lança um gasto está falando do PASSADO — é a ocorrência mais recente
+    // daquele dia. Sem isto, a data caía em hoje calada, e um gasto de segunda
+    // aparecia no extrato de sábado.
+    //
+    // Lembrete não passa por aqui (ele usa `parseDataFutura`), então "me lembra
+    // na segunda" continua apontando para a segunda que vem.
+    const mDiaSolto = tn.match(/\b(?:n[ao]|em|d[aeo])\s+(domingo|segunda|terca|quarta|quinta|sexta|sabado)(?:-?\s*feira)?\b/);
+    if (mDiaSolto) {
+        const alvo = _DIAS_SEMANA[mDiaSolto[1]];
+        const d = new Date(hoje);
+        // diff 0 = é hoje. "gastei no sábado", dito num sábado, é hoje mesmo.
+        d.setDate(d.getDate() - ((hoje.getDay() - alvo + 7) % 7));
+        return fmt(d);
+    }
+
     // Data absoluta com barra/traço: "dia 5/6", "05/06", "3/5/2026" → dd/mm/aaaa.
     // Exige dia E mês (tem separador) para não capturar números soltos.
     const mAbs = t.match(/\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/);

@@ -2553,8 +2553,10 @@ logado · gate no CI impedindo regressão.
 
 ## PASSO 36 — CHAT ASSISTENTE 8.5 → 10 🟡
 > Arquitetura já é 10. **Nenhum item abaixo manda R$ para o modelo** — e nenhum precisou.
-> **Falta:** o **C-9** — achados da análise profunda de 2026-08-04, medidos e não corrigidos.
-> O mais grave: *"quero gastar no máximo 500 em mercado"* **grava um gasto falso de R$500**.
+> **Falta:** só a continuação no CRÉDITO não herdar contexto (C-1/C-9) e o
+> **C-10** (retirar da reserva pela tela de Transações, pedido do dono).
+> O C-9 foi fechado em 2026-08-07 — e metade da lista já estava corrigida quando
+> fui medir. O "gasto falso de R$500" não acontece mais.
 > Os itens C-1..C-8 estão ✅ (sete deles resolvidos sem tocar no schema da IA).
 
 - **C-1** 🟡 PENDENTE (2026-08-03) — ⭐ **Memória de conversa**. *"Gastei 50 no mercado"* → *"e mais
@@ -2596,25 +2598,35 @@ logado · gate no CI impedindo regressão.
   ⚠️ **Risco descoberto junto:** o formulário de edição já permite trocar a categoria para
   `retirada_reserva`, e isso grava a transação **sem mexer no saldo da reserva** — a transação diz
   que saiu dinheiro da reserva e a reserva não sabe. Vale conferir antes de expor o fluxo novo.
-- **C-9** 🔴 **ACHADOS DA ANÁLISE PROFUNDA (2026-08-04) — medidos, não corrigidos.**
-  A varredura por corpus achou estes; nenhum foi consertado ainda:
-  (⚠️ Nota: a 1ª versão desta lista usava os marcadores de PENDENTE e de risco-médio como se
-  fossem GRAVIDADE. O validador reprovou, e com razão — os marcadores são STATUS. Item não
-  iniciado é NÃO INICIADO por mais leve que seja; gravidade se escreve por extenso.)
-  · 🔴 **GRAVE — orçamento grava gasto falso.** *"quero gastar no máximo 500 em mercado"* e
-    *"orcamento mercado 500"* criam uma **despesa de R$500 que não existe** (2 de 4 formas testadas).
-    `RE_DEF_ORCAMENTO` exige "orçamento/limite/teto" colado a uma preposição; sem ela, escapa.
-    **É o único item aberto que inventa dinheiro.**
-  · 🔴 **MÉDIO — "parcelado" não vira crédito.** `parcelad` com `` no fim não casa "parcelado"/"parcelada"/
-    "parcelados" — a compra parcelada vira saída à vista e **some da fatura do cartão**.
-    ⚠️ **É a 4ª vez que essa fronteira de palavra morde este arquivo** (`gasto`/`gastos`,
-    `deposit`/`depósito`, agora `parcelad`). Virou propriedade do arquivo, não azar: português
-    flexiona e `` não perdoa. **O conserto certo é um teste de flexões** sobre cada radical das
-    listas de verbos — senão a 5ª vem.
-  · 🔴 BAIXO — continuação no **crédito** não herda contexto (`#lastLancamentoCmd` só grava saída/entrada/reserva).
-  · 🔴 BAIXO — *"minhas conquistas"* cai em "não entendi" — a consulta existe no app, falta a frase.
-  · 🔴 BAIXO — *"não me deixa esquecer do X"* não vira lembrete.
-  · 🔴 BAIXO — dia da semana (*"gastei 30 na segunda"*) não vira data.
+- **C-9** ✅ **ACHADOS DA ANÁLISE PROFUNDA — corrigidos em 2026-08-07.**
+  ⚠️ **Ao medir, METADE DA LISTA JÁ ESTAVA CONSERTADA.** Este item dizia
+  "medidos, não corrigidos" para coisas que funcionavam há dias. É exatamente o
+  que a Regra de Ouro existe para impedir — e medir antes de mexer economizou o
+  trabalho.
+  · ✅ **JÁ ESTAVA FEITO — orçamento não grava gasto falso.** As 4 formas
+    testadas caem em `definir_orcamento`. Trancado por teste para não regredir:
+    era o único item aberto que inventava dinheiro.
+  · ✅ **JÁ ESTAVA FEITO — "parcelado" vira crédito.**
+  · ✅ **Dia da semana solto** (*"gastei 30 na segunda"*) vira data. Sem isto ela
+    caía em HOJE, calada — um gasto de segunda aparecia no extrato de sábado.
+    Testado nos 7 dias × 3 preposições, e nunca aponta para o futuro.
+  · ✅ **"não me deixa esquecer do X"** vira lembrete.
+  · ✅ **Conquistas.** Pior do que o roadmap dizia: *"quais minhas conquistas"*
+    não dava "não entendi" — casava o `quais` do RE_CONSULTA e **respondia sobre
+    GASTO**. O usuário perguntava uma coisa e recebia outra, com números.
+  · 🔎 **Achado NOVO, ninguém relatou:** *"meus gastos de hoje"* virava
+    **LANÇAMENTO**. Perguntar quanto gastou tentava registrar um gasto. É o tipo
+    de frase que a pessoa tenta uma vez, recebe algo estranho e não repete.
+  · 🔴 **Falta:** continuação no crédito não herda contexto
+    (`#lastLancamentoCmd` só grava saída/entrada/reserva).
+
+  ⭐ **A 5ª mordida do `` foi impedida com um TESTE, não com um conserto.**
+  O roadmap pedia: *"o conserto certo é um teste de flexões sobre cada radical —
+  senão a 5ª vem"*. Criado `assistente-flexoes.test.js`: ele varre os radicais
+  que flexionam (`gast`, `deposit`, `parcelad`, `esquec`, …) e **reprova se algum
+  aparecer colado a ``** no parser. Testa a FRASE, não a regex — se alguém
+  reescrever o parser inteiro, continua valendo.
+
   **O que foi MEDIDO e está sólido:** valores 9/9 · consultas 24/25 · conta fixa 8/8 ·
   desfazer/repetir 7/7 · direção do dinheiro 36/36 · robustez 13/13 sem explodir · injeção barrada ·
   as 7 gavetas de pendência têm escotilha de saída · undo é transação compensatória de verdade.

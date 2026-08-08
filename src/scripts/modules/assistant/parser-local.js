@@ -253,13 +253,21 @@ function detectConversa(t) {
 }
 const RE_RELATORIO = /\b(relatorio|resumo(?! do dia)|balanco|extrato|fechamento (do mes|da semana|do trimestre|do ano|mensal|semanal)|como fechei|prestacao de contas|raio-?x|diagnostico( financeiro)?|panorama|visao geral|como (estou|esta|ta|andam|estao) (as |os |de )?(minhas |meus )?(financas|contas|grana|gastos)|minha situacao financeira)\b/;
 const RE_CONSULTA  = /\b(quanto|quantos|qual|quais|total de|gastei com|tenho|quanto sobrou|quanto (ja )?(gastei|recebi)|meu saldo|minhas reservas|me mostra|mostra|como (esta|estao|esta|estao))\b/;
+// Conquistas (C-9). Sem isto, "quais minhas conquistas" casava só o `quais` do
+// RE_CONSULTA e caía no alvo PADRÃO — respondia sobre GASTO, que é pior que não
+// entender: o usuário perguntou uma coisa e recebeu outra, com números.
+const RE_CONQUISTAS = /\b(conquistas?|troféus?|trofeus?|medalhas?|niveis|nivel|meu nivel)\b/;
 const RE_PROJECAO  = /\b(quanto tempo|em quanto tempo|se eu (investir|guardar|aportar|poupar)|vou levar|leva pra|daqui quanto|falta quanto pra)\b/;
 
 // Ranking de gastos / "gráficos" → breakdown por categoria (texto)
 // Sem \b no fim: "gastei" tem letra após "gast" (fronteira ficaria no meio da palavra).
 const RE_GRAFICOS  = /\b(graficos?|onde (eu )?(mais )?gast|no que (eu )?(mais )?gast|em que (eu )?(mais )?gast|maior(es)? gasto|categoria que mais|onde (foi|vai|ta|esta) (o )?meu dinheiro|resumo por categoria|distribuicao (de|dos) gasto)/;
 // Listar últimos lançamentos
-const RE_LISTAR    = /\b(ultimas? (transac|lancament|movimenta|compra|entrada)|minhas? (transac|movimenta|ultimas)|meus? (lancament|ultimos)|o que (eu )?(lancei|gastei|registrei|paguei) hoje|extrato de hoje|lista(r)? (as )?(transac|lancament|gasto))/;
+// ⚠️ `meus gastos` PRECISA estar aqui. Sem ele, "meus gastos de hoje" caía em
+// LANÇAMENTO — perguntar quanto gastou tentava registrar um gasto. Achado pelo
+// corpus de flexões em 2026-08-07, não relatado por ninguém: é o tipo de frase
+// que o usuário tenta uma vez, recebe algo estranho e não repete.
+const RE_LISTAR    = /\b(ultimas? (transac|lancament|movimenta|compra|entrada)|minhas? (transac|movimenta|ultimas|despesas?)|meus? (lancament|ultimos|gastos?)|o que (eu )?(lancei|gastei|registrei|paguei) hoje|extrato de hoje|lista(r)? (as )?(transac|lancament|gasto))/;
 // Comparação / média / fatura / quanto falta
 const RE_COMPARAR  = /\b(comparad|comparacao|gastei (muito )?mais que|gastei (muito )?menos que|mais (ou menos )?que (o )?mes passado|em rela(c|ç)ao ao mes|(vs|versus) (o )?mes|comparar com)/;
 const RE_MEDIA     = /\b(media de gasto|gasto medio|em media (eu )?gast|quanto (eu )?gasto por mes|por mes em media|minha media)/;
@@ -321,8 +329,14 @@ const RE_DEF_ORCAMENTO = /\b(orcamento|limite|teto)\b|\b(no maximo|no max|ate no
 // nunca seria registrado — o espelho exato do bug que estamos consertando.
 const RE_JA_ACONTECEU = /\b(gastei|paguei|comprei|torrei|recebi|ganhei|guardei|tirei|retirei|saquei|custou|debitei)\b/;
 
-// Lembrete: "me lembra de pagar o aluguel dia 5", "me avisa amanhã de renovar o seguro".
-const RE_LEMBRETE = /\b(me )?(lembra|lembre|avisa|avise|notifica|notifique)\b|\blembrete\b/;
+// Lembrete: "me lembra de pagar o aluguel dia 5", "me avisa amanhã de renovar o
+// seguro", "não me deixa esquecer do dentista", "não esquece de pagar o IPTU".
+//
+// ⚠️ SEM `\b` no fim de `esque[cç]`: o radical flexiona ("esquece", "esqueça",
+// "esqueci") e a fronteira cairia no meio da palavra — a mesma armadilha que já
+// mordeu `gasto`/`gastos`, `deposit`/`depósito` e `parcelad`/`parcelado` neste
+// arquivo. Ver o teste de flexões em assistente-flexoes.test.js.
+const RE_LEMBRETE = /\b(me )?(lembra|lembre|avisa|avise|notifica|notifique)\b|\blembrete\b|\bnao (me )?(deixa|deixe|deixem) (eu |a gente )?esquecer|\bnao (me )?esque[cç]/;
 
 // Novos intents de insight/consulta (B22/C27/C29/C31) e privacidade (E42)
 const RE_ORCAMENTO   = /\b(quanto (eu )?(posso|da pra|consigo) gastar|posso gastar quanto|meu orcamento|quanto (ainda )?(sobra|resta|posso) (pra )?gast|quanto (eu )?tenho pra gastar)/;
@@ -709,6 +723,9 @@ export function parseLocal(rawText) {
     }
 
     // 2b) Comparação / média / fatura / quanto falta
+    // Antes do RE_CONSULTA genérico: ele casaria o "quais" e mandaria para o
+    // alvo padrão (gasto).
+    if (RE_CONQUISTAS.test(text)) return { ...base, intencao: 'consultar', consulta_alvo: 'conquistas', confianca: 0.86 };
     if (RE_COMPARAR.test(text)) return { ...base, intencao: 'consultar', consulta_alvo: 'comparar', confianca: 0.82 };
     if (RE_MEDIA.test(text))    return { ...base, intencao: 'consultar', consulta_alvo: 'media', confianca: 0.82 };
     if (RE_FALTA.test(text))    return { ...base, intencao: 'consultar', consulta_alvo: 'falta_meta', meta_hint: _extractMetaHint(text), confianca: 0.82 };
