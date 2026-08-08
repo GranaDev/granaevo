@@ -24,6 +24,7 @@
     "lh": "lhci autorun --config=lighthouserc.cjs",
     "check:allowlist": "node scripts/check-allowlist.mjs",
     "check:dead": "node scripts/check-dead-code.mjs",
+    "check:css": "node scripts/css-mortas.mjs",
     "sitemap:build": "node scripts/build-sitemap.mjs",
     "critical:build": "node scripts/build-critical-css.mjs"
   },

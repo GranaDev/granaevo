@@ -445,8 +445,38 @@ TOTP no Supabase é nativo e gratuito em todos os planos (só SMS custa; TOTP n�
 
 # FASE 2 — Performance
 
-## PASSO 7 — Podar CSS morto + virtualizar listas longas 🟡 PENDENTE
-**Falta:** decidir o destino das 34 classes `rf-*`/`saude-*` quando as telas planejadas forem construídas ou abandonadas. Virtualização ✅ (2026-07-18, estendida à fatura em 2026-07-31); poda ✅ (2026-07-31, 70 classes + método em `scripts/css-mortas.mjs`). Ver O-2 e O-6 do Passo 32.
+## PASSO 7 — Podar CSS morto + virtualizar listas longas ✅ FECHADO (2026-08-08)
+**Fechado:** as 34 classes `rf-*`/`saude-*` eram **abandonadas**, não planejadas — removidas.
+Virtualização ✅ (2026-07-18, estendida à fatura em 2026-07-31); poda ✅ (2026-07-31, 70 classes
++ método em `scripts/css-mortas.mjs`; +34 em 2026-08-08). Ver O-2 e O-6 do Passo 32.
+
+> **2026-08-08 — a decisão que faltava tinha resposta em `git log`, não em opinião.**
+> O item pedia para "decidir quando as telas planejadas forem construídas ou abandonadas".
+> Não eram telas planejadas: eram **restos de duas features vivas que foram reescritas**.
+> · `rf-*` (27) — `16d8860` (2026-07-18) reconstruiu a reserva de família "como caixinha no
+>   blob" e apagou a linha `card.className = 'rf-card'`. A marcação nova não usa esses nomes.
+> · `saude-*` (7) — `bd7a518` (2026-07-15) tirou o score da home e apagou
+>   `topo.className = 'saude-pop-topo'`. O `score-financeiro.js` **continua vivo**, mas é
+>   módulo de cálculo puro (zero referência a DOM) — quem morreu foi só a UI dele.
+>
+> ⚠️ **A poda de 2026-08-01 poupou o `rf-*` por uma premissa falsa.** O comentário em
+> `css-mortas.mjs` diz que apagá-lo "teria removido o CSS de uma feature viva" — mas o
+> consumidor já estava deletado havia **duas semanas**. A regra de 2 caracteres no prefixo
+> continua certa (protege classe dinâmica); errada foi a conclusão sobre este caso.
+>
+> ⭐ **A causa de as 34 terem passado batido: o script varria 1 dos 7 CSS do dashboard.**
+> O default era `_db-all.css`; `rf-*`/`saude-*` moram em `_db-features.css`, que ele nunca
+> abria. Rodar a ferramenta respondia "Total morto: 0" com toda a confiança — **respondendo
+> outra pergunta**. Agora o default é varrer tudo (2384 classes, das quais **0 mortas**),
+> caminho explícito ainda restringe, e há `--strict` (sai 1) na mesma convenção do
+> `check-dead-code.mjs`. `npm run check:css`.
+>
+> **Fora do CI de propósito:** escrever o CSS antes do JS que o usa é fluxo normal, e um
+> portão que reprova isso ensina a ignorar o portão. Se você quiser travar, é
+> `npm run check:css -- --strict` no `ci.yml`.
+>
+> **Ganho:** −181 linhas de fonte; `dashboard.css` 40.6 → **40.2 KB** gzip. Pequeno porque o
+> CSS já era assíncrono e estava em 61% do orçamento — o valor aqui é o método, não o byte.
 > **2026-07-18:** a poda continua parqueada pelos motivos abaixo (que revisei e seguem válidos). Fiz a OUTRA metade: Relatórios montava HTML para TODAS as transações do período sem limite → agora 150 + "Ver todas — mais N". Cuidado essencial: PDF/apresentação CLONAM o DOM, então expandem antes (senão o PDF omitiria transações em silêncio); CSV/Excel leem dados crus e nunca dependeram disso. Transações já paginava.
 > **Análise 2026-07-14 (com Coverage real + script novo `scripts/css-coverage-report.mjs`):** medido no
 > build — `dashboard.css` = 200 KB fonte / **39 KB gzip, e é ASSÍNCRONO** (media=print + css-boot.js →

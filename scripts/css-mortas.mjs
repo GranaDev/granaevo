@@ -24,9 +24,18 @@
 //   script diz "o código não consegue nomear esta classe"; o Coverage diz "o
 //   navegador nunca a aplicou". Os dois juntos é que dão confiança para deletar.
 //
+// ⚠️ O DEFAULT ERA UM ARQUIVO SÓ, E ISSO ESCONDEU 34 CLASSES MORTAS POR UMA SEMANA
+//   Até 2026-08-08 o alvo padrão era `_db-all.css` — 1 dos 7 CSS do dashboard.
+//   Rodar o script dizia "Total morto: 0" com toda a confiança, enquanto os
+//   componentes órfãos de duas features (`rf-*` da reserva de família,
+//   `saude-*` do semáforo) estavam intactos em `_db-features.css`, que ele
+//   nunca abria. O relatório não estava errado — estava respondendo outra
+//   pergunta. Agora o default é TUDO; para olhar um arquivo só, passe o caminho.
+//
 // USO
-//   node scripts/css-mortas.mjs [arquivo.css]        (default: _db-all.css)
-//   node scripts/css-mortas.mjs --todos             (todos os CSS de src/styles)
+//   node scripts/css-mortas.mjs                     (default: todos os CSS)
+//   node scripts/css-mortas.mjs [arquivo.css]       (um arquivo só)
+//   node scripts/css-mortas.mjs --strict            (sai 1 se houver morta)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
@@ -57,9 +66,16 @@ const fontes = [
 const CODIGO = fontes.map((f) => readFileSync(f, 'utf8')).join('\n');
 
 // ── 2. Classes definidas no CSS alvo ─────────────────────────────────────────
-const alvo = process.argv.includes('--todos')
-  ? arquivosDe('src/styles', ['.css'])
-  : [join(RAIZ, process.argv[2] ?? 'src/styles/dashboard/_db-all.css')];
+// Um caminho explícito restringe; sem ele, varre tudo. `--todos` continua
+// aceito para não quebrar quem já o tinha no dedo, mas virou o padrão.
+// `resolve` e não `join`: com caminho ABSOLUTO, o join concatena e produz lixo
+// ("C:\repo\C:\tmp\x.css"), o readFileSync estoura e o script sai 1 — que é o
+// mesmo código de saída do `--strict`. Um crash disfarçado de reprovação passou
+// por prova de que a trava funcionava.
+const arquivoPedido = process.argv.slice(2).find((a) => !a.startsWith('--'));
+const alvo = arquivoPedido
+  ? [resolve(RAIZ, arquivoPedido)]
+  : arquivosDe('src/styles', ['.css']);
 
 const classes = new Map();   // nome → arquivos que a definem
 for (const arq of alvo) {
@@ -128,3 +144,8 @@ console.log(`\nTotal morto: ${mortas.length}`);
 console.log('\n⚠️  Antes de deletar: confirme com o Coverage do DevTools');
 console.log('   (scripts/css-coverage-report.mjs). Este script prova que o CÓDIGO não');
 console.log('   nomeia a classe; o Coverage prova que o NAVEGADOR nunca a aplicou.');
+
+// Mesma convenção do check-dead-code.mjs: relata e sai 0; só o --strict reprova.
+// Fora do CI de propósito — escrever o CSS antes do JS que o usa é fluxo normal,
+// e um portão que reprova isso ensina a ignorar o portão.
+if (process.argv.includes('--strict') && mortas.length) process.exit(1);
