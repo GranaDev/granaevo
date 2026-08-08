@@ -130,7 +130,24 @@ async function _buscarMetadados() {
         // não informação que ajude o titular a levar a vida financeira embora.
         q(() => supabase.from('user_devices').select('ua_label, first_seen, last_seen')),
         q(() => supabase.from('radar_notifications').select('tipo, title, body, created_at, status').order('created_at', { ascending: false }).limit(200)),
-        q(() => supabase.from('financial_audit_log').select('operation, created_at').order('created_at', { ascending: false }).limit(500)),
+        // ── Registro de atividade: RESUMO, não as 500 linhas ────────────────
+        // Ele trazia 500 pares "UPDATE / data" para o titular. A LGPD dá direito
+        // ao DADO da pessoa, não ao diário interno do sistema — e o dono
+        // perguntou, com razão: "esse UPDATE e DATA é necessário?".
+        //
+        // A transparência que interessa cabe em duas informações: quantas
+        // gravações existem e quando foi a última. `head: true` traz a contagem
+        // sem baixar linha nenhuma.
+        (async () => {
+            try {
+                const [{ count }, { data }] = await Promise.all([
+                    supabase.from('financial_audit_log').select('id', { count: 'exact', head: true }),
+                    supabase.from('financial_audit_log').select('created_at')
+                        .order('created_at', { ascending: false }).limit(1),
+                ]);
+                return { total: count ?? null, ultima: data?.[0]?.created_at ?? null };
+            } catch { return null; }
+        })(),
     ]);
     return { perfis, termos, assinatura, aparelhos, avisos, atividade };
 }
@@ -191,14 +208,26 @@ function _montar({ blob, meta, email, userId, isGuest }) {
         },
         // O coração da exportação: perfis com transações, metas, cartões,
         // contas fixas, assinaturas, orçamentos, conquistas e configurações.
-        dados_financeiros: blob?.profiles ?? blob ?? null,
+        // ⚠️ `blob` é a RESPOSTA da API — `{ success, data_json, conta, versao }` —,
+        // e os perfis moram em `data_json.profiles`. Ler `blob.profiles` dava
+        // `undefined`, o `??` caía no envelope inteiro, e `dados_financeiros`
+        // virava um objeto em vez de uma lista.
+        //
+        // O estrago não aparecia como erro: a planilha checa `Array.isArray` e,
+        // com um objeto, montava ZERO abas de dados — sem transações, sem metas —
+        // e o campo "Perfis" saía "—". O JSON levava o envelope da API no lugar
+        // dos dados. Relatado pelo dono em 2026-08-04; reproduzido em teste.
+        //
+        // O caminho antigo fica como reserva: se um dia a API devolver o blob
+        // direto, continua funcionando.
+        dados_financeiros: blob?.data_json?.profiles ?? blob?.profiles ?? null,
         metadados_da_conta: {
             perfis: meta.perfis,
             aceite_de_termos: meta.termos,
             assinatura: meta.assinatura,
             aparelhos_reconhecidos: meta.aparelhos,
             avisos_recebidos: meta.avisos,
-            registro_de_atividade: meta.atividade,
+            registro_de_atividade: meta.atividade,   // { total, ultima } — ver _buscarMetadados
         },
         _direitos: {
             texto:

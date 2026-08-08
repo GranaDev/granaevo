@@ -120,6 +120,14 @@ export function montarPlanilha(pacote) {
     const perfis = Array.isArray(pacote?.dados_financeiros) ? pacote.dados_financeiros : [];
     const meta   = pacote?.metadados_da_conta ?? {};
 
+    // O registro de atividade vem RESUMIDO ({total, ultima}) e não como 500
+    // linhas de "UPDATE / data" — ver a nota em export-dados.js. Vira uma linha
+    // no Resumo: é transparência legível, não diário do sistema.
+    const at = meta.registro_de_atividade;
+    const atividade = (at && typeof at === 'object' && !Array.isArray(at) && at.total != null)
+        ? `${at.total} gravação(ões)` + (at.ultima ? ` · última em ${new Date(at.ultima).toLocaleDateString('pt-BR')}` : '')
+        : null;
+
     // Orçamentos são objeto { categoria: valor }, não lista — viram linhas.
     const orcamentos = [];
     for (const p of perfis) {
@@ -141,7 +149,6 @@ export function montarPlanilha(pacote) {
         ['Aparelhos',        meta.aparelhos_reconhecidos ?? []],
         ['Aceite de termos', meta.aceite_de_termos ?? []],
         ['Avisos',           meta.avisos_recebidos ?? []],
-        ['Atividade',        meta.registro_de_atividade ?? []],
     ];
 
     const abas = [];
@@ -165,7 +172,8 @@ export function montarPlanilha(pacote) {
         [{ v: 'CONTA', s: S.secao }],
         [{ v: 'E-mail', s: S.rotulo }, { v: String(pacote?.conta?.email ?? '—'), s: S.texto }],
         [{ v: 'Tipo',   s: S.rotulo }, { v: pacote?.conta?.tipo === 'convidado' ? 'Convidado' : 'Titular', s: S.texto }],
-        [{ v: 'Perfis', s: S.rotulo }, { v: perfis.map(p => p?.nome).filter(Boolean).join(' · ') || '—', s: S.texto }],
+        [{ v: 'Perfis', s: S.rotulo }, { v: perfis.map(p => p?.nome || p?.name).filter(Boolean).join(' · ') || '—', s: S.texto }],
+        ...(atividade ? [[{ v: 'Gravações', s: S.rotulo }, { v: atividade, s: S.texto }]] : []),
         [],
         [{ v: 'O QUE TEM NESTE ARQUIVO', s: S.secao }],
         [{ v: 'ABA', s: S.header }, { v: 'REGISTROS', s: S.headerNum }],

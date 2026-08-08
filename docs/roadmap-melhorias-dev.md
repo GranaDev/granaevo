@@ -1781,16 +1781,25 @@ nada se perde. É o teste que hoje falha.
     IA segue decidindo, como antes.
     Telemetria `ia_descricao_ignorada` conta as tentativas de reescrita: se for
     alto, quem muda é o prompt, não o código.
-- **38.2** 🔴 **A exportação está furada** — e é o entregável central do direito
-  de portabilidade (art. 18, V).
-  · **38.2a** 🔴 **Não existe aba "Transações"** — o dado principal do usuário.
-  · **38.2b** 🔴 "Perfis" mostra **"-"** em vez da contagem e dos nomes.
-  · **38.2c** 🔴 A aba "Atividade" traz ~500 linhas de `UPDATE`/`DATA` ilegíveis.
-    **Esse log de auditoria NÃO deve ir para o titular:** a LGPD pede o DADO dele,
-    não o diário interno do sistema. Remover ou reduzir a algo legível.
-  · **38.2d** 🔴 Conferir o JSON com os mesmos olhos (o dono tem os dois arquivos).
-  ⚠️ **Consertar com os ARQUIVOS na mão**, não pelo código: ele já enganou três
-  vezes nesta sessão.
+- **38.2** ✅ **A exportação estava saindo VAZIA** (2026-08-07) — e três dos
+  quatro defeitos tinham **uma causa só**, que não estava na planilha.
+  · **Raiz:** `_buscarBlob()` devolve a RESPOSTA da API
+    (`{success, data_json, …}`), e o montador lia `blob.profiles` — que não
+    existe nesse nível. O `??` caía no envelope inteiro, `dados_financeiros`
+    virava um objeto em vez de lista, e a planilha (que checa `Array.isArray`)
+    montava **zero abas de dados**.
+  · **38.2a/b** ✅ resolvidos juntos: com o caminho certo, as abas Transações e
+    Metas aparecem e "Perfis" traz os nomes. Perfil antigo com `name` em vez de
+    `nome` também passou a ser reconhecido.
+  · **38.2c** ✅ O "diário do sistema" virou UMA LINHA legível
+    (`23280 gravação(ões) · última em 07/08/2026`). 500 pares "UPDATE / data" não
+    são o dado do titular; a LGPD dá direito ao dado DELE. E a contagem vem com
+    `head: true` — mostrar um número não pode custar baixar 23 mil linhas.
+  · **38.2d** ✅ O JSON usa o MESMO pacote da planilha, então o mesmo conserto
+    vale para ele: antes levava o envelope da API no lugar dos dados.
+  · ⚠️ **Não aparecia como erro em lugar nenhum:** o arquivo era gerado, baixava
+    e abria — só estava vazio. É o pior jeito de falhar num direito da LGPD.
+    Reproduzido em teste, sem precisar dos arquivos do dono.
 - **38.3** 🔴 **Perfil some no chat.** Conta com 4 perfis (dois de nome igual) e o
   assistente mostra 1. **Descartado** que seja o merge por perfil: testado com ids
   repetidos, ele preserva os três. **Falta o dado do dono:** o seletor DENTRO do
