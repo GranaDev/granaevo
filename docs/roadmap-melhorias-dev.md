@@ -186,6 +186,86 @@ o app perder dado sem avisar.
 
 # 🧪 FILA DE TESTES MANUAIS — o que só o dono pode verificar
 
+## ▶️ COMECE AQUI (2026-08-09) — a fila, em ordem
+
+> O dono testou os 8 itens em produção em 2026-08-08. **Quatro passaram limpos**
+> (T1, T4, T5, T6), o T8 inocentou o caminho de operações, e o resto virou esta fila.
+> Ordem pensada: bug concreto e barato primeiro, o item grande depois.
+
+| # | O quê | Por que nesta ordem |
+|---|---|---|
+| **1** | **T7 — o valor que fica no ar no chat** | Bug fechado, com reprodução conhecida. Independe do item 2, então não vai ser refeito |
+| **2** | ⭐ **T3 — a IA interpretar de verdade** | O maior, e o que mais incomoda o dono. Muda o PORTÃO, não a lista de palavras |
+| **3** | **T2 — exportação: metas com JSON cru** | Sai errado para o usuário final, e é LGPD (portabilidade legível) |
+| **4** | **T5 — indicador no mobile** | Minutos |
+| **5** | **Cartões não repintam no tempo real** | Cosmético e verificado; só aparece se você estiver parado na tela deles |
+| **6** | **Revisar o sumiço do crédito** | Aconteceu uma vez e não reproduziu. Sem repro, é revisão de código, não caça |
+
+### 1 · T7 — o valor que fica no ar 🔴
+Dito: *"Gastei 900 no cartão em 3x e em seguida 300 reais"*. Os 900 lançaram certo
+(`Nubank · 3x de R$ 300,00`). Os 300 viraram pergunta: *"Peguei R$ 300,00 — só me diz o
+que foi que eu lanço"*. O dono respondeu *"Os 300 foram num carrinho"* e **recebeu a
+mesma pergunta de novo**. O fluxo de valor pendente não aceita a descrição como resposta.
+Ver `#pendingValor` / `parseFollowup` no `engine.js`.
+
+### 2 · T3 — a IA precisa interpretar SEMPRE 🔴 ⭐
+Dito: *"Retirei 52 reais da reserva de emergência e gastei num jogo"*. As duas transações
+saíram **certas** (retirada 52 + saída 52). A descrição da saída saiu
+**"Emergencia e num jogo"** — costura de pedaços de duas frases.
+
+⚠️ **A crítica do dono é de método, e está certa:** *"a gente corrige algumas palavras
+aqui e ficam boas, mas no dia a dia as falas dos usuários são infinitas"*. Cada remendo
+meu resolve UM caso. Já foram cinco rodadas disso.
+
+**O conserto NÃO é mais palavra na lista.** A IA já existe no fluxo; o problema é o
+portão: o parser local só chama a IA quando se declara inseguro, e ele se declara seguro
+demais — achou valor, categoria e "uma descrição", e nem consultou. **A descrição precisa
+de critério próprio de qualidade**: quando o que o local montou não se parece com algo que
+uma pessoa escreveria (pedaços de duas orações, conectivo solto, nome de categoria), a IA
+decide. Ver `CONF_LOCAL_OK`/`completude` no `engine.js` e `describe.js`.
+
+**Não chamar IA em toda mensagem** — sem receita ainda, é custo por conversa e não muda
+nada em *"gastei 50"*. O ganho está justamente nos casos como o de cima.
+
+### 3 · T2 — exportação (achados do teste) 🟡
+A planilha **exporta e abre** (o defeito antigo morreu). Três achados novos:
+- 🔴 **Metas saem com JSON cru numa célula:** mês → `{"2026-08":949}`; histórico → o array
+  inteiro de `historicoRetiradas`. Prazo idem. Precisa achatar em colunas legíveis (ou aba
+  própria para o histórico). `_xmlEsc` no `xlsx.js` faz `String(v)`, então objeto vira lixo.
+- 🟡 **IDs na planilha:** o dono perguntou se `id`/`metaId` precisam aparecer. Para leitura
+  humana, não; para portabilidade LGPD, sim. Provável saída: manter no JSON, tirar do .xlsx.
+- 🟡 **Aba "Avisos":** o dono questiona se ganha o lugar dela — *"nada mais é que as
+  notificações que estão pendentes"*. Decisão dele.
+
+### 4 · T5 — indicador no mobile 🟡
+Funcionalidade **perfeita** ("Atualizando", "Salvo", "Fulano está online"). Só o lugar: no
+celular ele aparece **bem acima** da linha do menu de navegação. Quer encostado na linha e
+mais centralizado. Só CSS.
+
+### 5 · Cartões não repintam no tempo real 🟡
+Verificado lendo a função inteira: `atualizarTudo()` ([dashboard.js:5146](src/scripts/pages/dashboard.js#L5146))
+repinta movimentações, resumo, contas fixas, metas, visual da meta e header de reservas —
+**cartões não estão ali**. Só incomoda quem está parado na tela de cartões quando o aviso
+chega; a fatura repinta porque é conta fixa.
+⚠️ Eu afirmei que isto explicava o sumiço do lançamento. **Não explicava** — o dado sumiu
+de verdade naquela vez. Conclusão tirada de um grep filtrado, não da função inteira.
+
+### 6 · Revisar o sumiço do crédito 🟡
+**T8 (2026-08-08):** o dono reproduziu com `?opsdebug=1` e **não bugou**. O `__sombra`:
+```
+save 1 → { n: 5, set: 5, completo: true, motivos: '—' }
+save 2 → { n: 0, completo: true }
+save 3 → { n: 0, enviado: false }
+```
+Lido: o dashboard ocioso mandou **zero operações** nos saves 2 e 3 e pulou o envio — o
+caminho de operações fez exatamente o que devia, **nada de Lost Update neste run**.
+Fica um fio solto: **5 `set` no save 1 com o dashboard parado**. `set` é campo de 1º nível,
+não coleção — provavelmente o reparo idempotente de fatura no load. Vale entender que
+campos são; se algum carregar valor velho, é por ali que o sumiço volta.
+**Sem reprodução, isto é revisão de código, não caça ao bug.**
+
+---
+
 ## ⏳ Aberto (atualizado 2026-08-08) — o que fechar na próxima sessão
 
 Tudo abaixo já está EM PRODUÇÃO e passou nos testes automatizados. O que falta é
@@ -204,6 +284,24 @@ a confirmação de quem usa.
 | T5 | **Indicador "↻ Atualizado"** | Lançar no chat e olhar o dashboard: além da transação aparecer, deve piscar por 3s no canto. ⚠️ Ele NUNCA teve CSS até hoje — se não aparecer, é bug novo |
 | T6 | ⭐ **Retirada pela tela** (C-10) — **MEXE EM DINHEIRO** | Transações → nova → categoria **Retirada de Reserva**. Conferir: só lista reserva **com saldo** e mostra quanto · valor acima do saldo é recusado · confirma dizendo o que sobra · a transação aparece **e** a reserva é debitada (as duas metades) |
 | T7 | **Continuação no crédito** (C-1, 08/08) | Chat: *"comprei 900 no cartão parcelado em 3x"* → escolher cartão → depois *"e mais 300"*. Deve abrir o picker de cartão já com R$ 300, **à vista** (não 3×100). E *"de novo"* após uma compra no cartão não pode dizer "erro do sistema" |
+
+### ✅ Resultado do teste do dono (2026-08-08)
+
+| # | Veredito |
+|---|---|
+| T1 chat vê os 4 perfis | ✅ **OK** |
+| T4 presença | ✅ **OK** — *"funciona perfeitamente"* |
+| T5 indicador | ✅ **OK** — *"não tem no que mexer"* na função; só o lugar no mobile |
+| T6 retirada pela tela | ✅ **OK** — a que mexe em dinheiro passou |
+| T2 exportação | 🟡 exporta e abre; 3 achados novos (ver COMECE AQUI · 3) |
+| T3 descrição | 🟡 funciona no caso simples, quebra no real (ver COMECE AQUI · 2) |
+| T7 continuação no crédito | 🟡 o crédito lançou certo; o 2º valor ficou no ar (ver COMECE AQUI · 1) |
+| T8 sumiço do crédito | ✅ **não reproduziu** — `__sombra` mostrou 0 operações na aba ociosa |
+
+> **Senha da conta de teste** (`oliveiralucas00224+teste2fa@gmail.com`) foi redefinida em
+> 2026-08-08 via SQL no `auth.users` (Admin API do GoTrue segue barrada pelo WAF). Sem MFA.
+> A senha **não fica registrada aqui** — se perder de novo, o caminho está em
+> `criar_usuario_teste_supabase`. ⚠️ Escrever direto no banco **pula o HIBP**.
 
 Se algo falhar: `__tempoReal` e `__sombra` no console do dashboard
 (`/dashboard?opsdebug=1` para o segundo) dizem onde parou.
