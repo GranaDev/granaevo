@@ -30,7 +30,7 @@ const RE_VALOR = /(?:r\$\s*)?\b\d[\d.,]*\s*(?:k\b|mil\b|reais?\b|real\b|pila[s]?
 // Verbos de lançamento e de correção. Note `gastos?` e `gasto[s]` — a fronteira
 // \b no fim de "gasto" NÃO casa o plural "gastos" (cai no meio da palavra); foi
 // exatamente isso que fez "75,69 gastos ..." não ser reconhecido como saída.
-const RE_VERBO = /\b(gastei|gastos?|gastar|paguei|pagar|comprei|comprar|torrei|desembolsei|queimei|estourei|fritei|meti|mandei|mandar|saiu|debitei|recebi|receber|ganhei|ganhar|caiu|entrou|pingou|faturei|embolsei|guardei|guardar|reservei|poupei|juntei|separei|aportei|economizei|tirei|retirei|retirada|saquei|resgatei|resgate|puxei|assinei|transferi|transferir|enviei|enviar|passei|depositei|foi|foram|era|de novo)\b/gi;
+const RE_VERBO = /\b(gastei|gastos?|gastar|paguei|pagar|usei|usar|comprei|comprar|torrei|desembolsei|queimei|estourei|fritei|meti|mandei|mandar|saiu|debitei|recebi|receber|ganhei|ganhar|caiu|entrou|pingou|faturei|embolsei|guardei|guardar|reservei|poupei|juntei|separei|aportei|economizei|tirei|retirei|retirada|saquei|resgatei|resgate|puxei|assinei|transferi|transferir|enviei|enviar|passei|depositei|foi|foram|era|de novo)\b/gi;
 
 // Marcadores de tempo — nunca são descrição.
 const RE_DATA = /\b(hoje|ontem|anteontem|amanha|amanhã|agora|de manha|de manhã|de tarde|de noite|a tarde|à tarde|a noite|à noite|dia \d{1,2}|semana passada|semana retrasada|mes passado|mês passado|no mes passado|essa semana|esta semana|\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?)\b/gi;
@@ -42,6 +42,21 @@ const RE_PGTO = /\b(com|no|na|em|via|por|pelo|pela)\s+(o\s+|a\s+|meu\s+|minha\s+
 
 // Parcelas: "em 3x", "3x".
 const RE_PARCELA = /\b(em\s+)?\d{1,3}\s*x\b/gi;
+
+// Pronomes que apontam para algo dito ANTES — nunca descrevem nada sozinhos.
+//
+// Medido em 2026-08-07 com o corpus real do dono: "e gastei ele no mercado"
+// gravava a descrição **"Ele no Mercado"**, e "gastei 30 nisso" gravava
+// **"Nisso"**. No extrato do fim do mês isso é pior que rótulo repetido — é
+// ruído que não diz nada nem para quem escreveu.
+//
+// Sai como RUÍDO, não como aparo de borda: em "usei isso pra pagar o boleto" o
+// pronome está no MEIO, e a limpeza de bordas nunca o alcançaria (o resultado
+// era "Usei isso o boleto").
+//
+// Conservador de propósito: só as formas que não carregam informação. "dele"/
+// "dela" ficam de fora — "presente dela" é uma descrição legítima.
+const RE_PRONOME = /\b(ele|ela|eles|elas|isso|isto|aquilo|nisso|nisto|naquilo|nele|nela|neles|nelas|disso|disto|daquilo|o\s+mesmo|a\s+mesma)\b/gi;
 
 // Preposições/artigos que não podem abrir nem fechar uma descrição.
 const STOP_EDGE = new Set([
@@ -86,6 +101,7 @@ function limparRuido(rawText) {
         .replace(RE_PGTO, ' ')
         .replace(RE_VALOR, ' ')
         .replace(RE_VERBO, ' ')
+        .replace(RE_PRONOME, ' ')
         .replace(RE_DATA, ' ')
         .replace(/\s{2,}/g, ' ')
         .trim();

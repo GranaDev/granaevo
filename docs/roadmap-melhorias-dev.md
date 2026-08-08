@@ -1764,19 +1764,23 @@ nada se perde. É o teste que hoje falha.
 
 ## PASSO 38 — Descrição e exportação: os achados dos testes de 2026-08-04 🔴
 
-- **38.1** 🔴 **A descrição não usa o que o usuário escreveu.** Medido pelo dono:
-  *"Recebi um pix de 70 reais da Ke"* → descrição **"Outros recebimentos"** (o
-  rótulo da categoria, não o que ele disse); *"e gastei ele no mercado"* →
-  **"Ele no Mercado"** (pronome solto virou descrição). O certo seria "Da Ke" e
-  "Mercado".
-  · **38.1a** 🔴 Corpus de medição, como foi feito com a direção do dinheiro:
-    frases reais → descrição esperada. Sem isso o conserto é chute.
-  · **38.1b** 🔴 Pronomes e conectivos soltos ("ele", "isso", "lá") saem da
-    descrição — é o que produziu "Ele no Mercado".
-  · **38.1c** 🔴 "de/da/do + nome próprio" vira descrição ("Da Ke"), em vez de
-    cair no rótulo da categoria.
-  · **38.1d** 🔴 Quando NADA sobra, preferir o rótulo do TIPO ("Mercado") ao da
-    CATEGORIA ("Outros recebimentos") — é sempre mais específico.
+- **38.1** ✅ **A descrição volta a ser o que o usuário escreveu** (2026-08-07).
+  · **38.1a** ✅ **Corpus** (`assistente-descricao-corpus.test.js`), com as duas
+    frases reais do dono. Sem a régua, consertar descrição é chute: cada ajuste
+    arruma uma frase e quebra outra sem ninguém notar.
+  · **38.1b** ✅ **Pronomes saem como RUÍDO, não como aparo de borda.** Era o
+    defeito de `"e gastei ele no mercado"` → **"Ele no Mercado"**. Aparo de borda
+    não bastava: em `"usei isso pra pagar o boleto"` o pronome está no MEIO, e o
+    resultado era "Usei isso o boleto". Conservador: `dele`/`dela` ficam —
+    "presente dela" é descrição legítima; "nela" não é.
+  · **38.1c/d** ✅ **A causa era outra, e maior.** `"Recebi um pix de 70 reais da
+    Ke"` → o parser local já extraía **"Pix da Ke"** corretamente. Quem trocava
+    por "Outros recebimentos" era a **IA**. Agora vale a mesma regra da direção
+    do dinheiro — **a IA enriquece, não inverte**: descrição vinda das palavras
+    do usuário vence a da IA. Quando não sobra nada do texto (`"gastei 50"`), a
+    IA segue decidindo, como antes.
+    Telemetria `ia_descricao_ignorada` conta as tentativas de reescrita: se for
+    alto, quem muda é o prompt, não o código.
 - **38.2** 🔴 **A exportação está furada** — e é o entregável central do direito
   de portabilidade (art. 18, V).
   · **38.2a** 🔴 **Não existe aba "Transações"** — o dado principal do usuário.

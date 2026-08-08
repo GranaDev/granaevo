@@ -643,12 +643,28 @@ class AssistantEngine {
                 // reserva. Com confiança baixa, o local é chute também: aí a IA
                 // decide, como antes.
                 const direcaoLocalConfiavel = local.categoria && local.confianca >= CONF_LOCAL_OK;
+
+                // A DESCRIÇÃO QUE VEIO DAS PALAVRAS DO USUÁRIO VENCE A DA IA.
+                //
+                // Mesma regra da direção, pelo mesmo motivo: a IA é palpite, e
+                // aqui ela palpita PIOR que o texto original. Medido pelo dono em
+                // 2026-08-07: "Recebi um pix de 70 reais da Ke" virou descrição
+                // "Outros recebimentos" — o rótulo da categoria no lugar do que
+                // ele escreveu. O parser local já extraía "Pix da Ke".
+                //
+                // `extractDescricao` só devolve algo quando sobra texto real
+                // depois de tirar valor, verbo, data e pronome; quando não sobra,
+                // ele devolve null e a IA segue decidindo, como antes.
+                const doUsuario = extractDescricao(text).descricao;
                 const cmd = toCommand({
                     ...ai.parse,
                     ...(direcaoLocalConfiavel ? { categoria: local.categoria } : {}),
-                    descricao: ai.parse?.descricao || local.descricao,
+                    descricao: doUsuario || ai.parse?.descricao || local.descricao,
                     source: 'ia',
                 });
+                if (doUsuario && ai.parse?.descricao && ai.parse.descricao !== doUsuario) {
+                    bump('ia_descricao_ignorada'); // telemetria: com que frequência ela tentaria reescrever
+                }
                 if (direcaoLocalConfiavel && ai.parse?.categoria && ai.parse.categoria !== local.categoria) {
                     bump('ia_direcao_ignorada'); // telemetria: com que frequência a IA tentaria inverter
                 }
