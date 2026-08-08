@@ -294,6 +294,114 @@ class DataManager {
 
         return { ops, completo };
     }
+    // ── FILA DE REENVIO (Passo 37.4) ────────────────────────────────────────
+    // Só existe para o caso de o save NÃO conseguir sair. Carregada sob demanda:
+    // o caminho feliz nunca a importa, então ela não pesa no boot — que é o que
+    // permitiu fazer o 37.4 sem esbarrar no teto do dashboard.js.
+    #filaMod = null;
+    #reenvioAgendado = false;
+    #tentativa = 0;
+
+    async #fila() {
+        if (!this.#filaMod) this.#filaMod = await import('./fila-save.js?v=1');
+        return this.#filaMod;
+    }
+
+    /**
+     * Guarda o que não conseguiu sair. Só OPERAÇÕES: estado velho reaplicado
+     * apagaria o que aconteceu no meio do caminho; operação velha apenas repete
+     * uma intenção — e repetir é seguro porque o 37.2b as deixou idempotentes.
+     *
+     * Save que não descreve operação nenhuma não entra: não há o que reenviar,
+     * e guardar "nada" só criaria trabalho para a drenagem.
+     */
+    async #enfileirar(sombra, tocados) {
+        if (!sombra || sombra.completo !== true || !sombra.ops?.length) return;
+        const { enfileirar } = await this.#fila();
+        enfileirar(this.#userId, sombra.ops, tocados);
+        this.#agendarReenvio();
+    }
+
+    /**
+     * Tenta esvaziar a fila: agora se a rede voltou, senão com recuo crescente.
+     *
+     * Um agendamento por vez (`#reenvioAgendado`) — sem a trava, cada save que
+     * falha somaria um timer, e uma rede instável viraria enxurrada de POSTs
+     * exatamente quando ela menos aguenta.
+     */
+    #agendarReenvio() {
+        if (this.#reenvioAgendado) return;
+        this.#reenvioAgendado = true;
+
+        const tentar = async () => {
+            this.#reenvioAgendado = false;
+            if (!this.#userId) return;
+            // Offline declarado: não gasta tentativa. O evento 'online' abaixo
+            // acorda a fila no instante em que a rede volta.
+            if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                this.#agendarReenvio();
+                return;
+            }
+            const { drenar, recuoMs, quantos } = await this.#fila();
+            const { restantes } = await drenar(this.#userId, (lote) => this.#enviarLote(lote));
+            if (restantes > 0) {
+                const espera = recuoMs(this.#tentativa++);
+                this.#reenvioAgendado = true;
+                setTimeout(() => { this.#reenvioAgendado = false; tentar(); }, espera);
+            } else {
+                this.#tentativa = 0;
+                if (quantos(this.#userId) === 0) document.dispatchEvent(new CustomEvent('ge:fila-vazia'));
+            }
+        };
+
+        // Primeira tentativa imediata: se a falha foi um soluço de rede, ela já
+        // passa. O recuo só entra a partir da segunda.
+        setTimeout(tentar, 0);
+
+        // A rede voltando é o melhor gatilho que existe — melhor que qualquer
+        // recuo que a gente escolha. Registrado UMA vez.
+        if (!this.#filaOuvindoRede && typeof window !== 'undefined') {
+            this.#filaOuvindoRede = true;
+            window.addEventListener('online', () => { this.#tentativa = 0; this.#agendarReenvio(); });
+        }
+    }
+    #filaOuvindoRede = false;
+
+    /** Reenvia UM lote pelo mesmo endpoint do save. Devolve true se o servidor aceitou. */
+    async #enviarLote(lote) {
+        const token = await this.#getAuthToken();
+        if (!token) return false;
+        const { signal, cleanup } = this.#makeAbortSignal(RPC_TIMEOUT_MS);
+        try {
+            const resp = await fetch('/api/user-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                // Sem `profiles` reais: o reenvio fala SÓ por operações. Mandar o
+                // estado de então seria justamente o Lost Update que este passo
+                // matou — e um estado guardado em disco é o mais velho que existe.
+                body: JSON.stringify({
+                    version: '1.0',
+                    profiles: [],
+                    touched_profile_ids: lote.tocados ?? [],
+                    profile_ops: lote.ops,
+                    ops_completo: true,
+                    ops_aplicar: true,
+                    // ⚠️ SEM ISTO O REENVIO SERIA DESTRUTIVO. Com `profiles: []`,
+                    // se as operações não aplicassem, o caminho antigo leria
+                    // "os perfis declarados sumiram do payload" = exclusão, e
+                    // apagaria a conta. (A guarda anti-wipe pegaria, mas o
+                    // reenvio nunca funcionaria.)
+                    // `ops_somente` diz ao servidor: aplique as operações ou
+                    // RECUSE — nunca caia no caminho de estado inteiro.
+                    ops_somente: true,
+                    client_id: CLIENT_ID,
+                }),
+                signal,
+            });
+            return resp.ok;
+        } catch { return false; } finally { cleanup(); }
+    }
+
     #idsWithData = new Set();
 
     // ── Getters públicos — somente leitura ───────────────────────────────────
@@ -591,6 +699,10 @@ class DataManager {
         this.#isSaving = true;
         document.dispatchEvent(new CustomEvent('ge:save-start'));
 
+        // Declarado FORA do try: o catch precisa enxergar o lote para enfileirar
+        // o que não conseguiu sair. Dentro, ele não existiria ali.
+        let sombraDoLote = null;
+
         try {
             // Rede de segurança da identidade: o que nasceu nesta sessão e escapou
             // de receber id na criação ganha um agora. São mais de dez lugares que
@@ -614,6 +726,7 @@ class DataManager {
             const tocados = this.#perfisTocados(safeProfiles);
 
             const sombra = await this.#derivarOperacoes(safeProfiles, tocados);
+            sombraDoLote = sombra;
 
             // ── SAVE QUE NÃO TEM NADA A DIZER NÃO É ENVIADO ─────────────────
             // O dashboard salva a cada 30 segundos, incondicionalmente. Uma aba
@@ -761,6 +874,10 @@ class DataManager {
             if (!saveResp.ok) {
                 const errText = await saveResp.text().catch(() => '');
                 console.error('❌ [DATA-MANAGER] Erro ao salvar no banco:', saveResp.status, errText);
+                // 5xx é o servidor tropeçando, não o cliente errando: vale
+                // reenviar. 4xx (fora do 409, tratado acima) é payload recusado —
+                // insistir só repetiria a recusa.
+                if (saveResp.status >= 500) await this.#enfileirar(sombra, tocados);
                 document.dispatchEvent(new CustomEvent('ge:save-error'));
                 return false;
             }
@@ -792,6 +909,9 @@ class DataManager {
 
         } catch (err) {
             console.error('❌ [DATA-MANAGER] Erro crítico ao salvar:', err?.message ?? err);
+            // Rede caiu, aparelho no elevador, aba fechando. A mudança já está
+            // descrita em operações: guarda para reenviar em vez de perder.
+            try { await this.#enfileirar(sombraDoLote, null); } catch { /* fila não derruba save */ }
             document.dispatchEvent(new CustomEvent('ge:save-error'));
             return false;
 

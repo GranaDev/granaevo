@@ -1469,10 +1469,11 @@ realmente quer offline (consultar, não lançar).
 > dívida de arquitetura que sobrou, e a única que faz o app **perder dado do
 > usuário sem avisar**.
 
-## PASSO 37 — Sincronização por OPERAÇÃO + tempo real 🟡 EM ANDAMENTO ⭐
+## PASSO 37 — Sincronização por OPERAÇÃO + tempo real ✅ COMPLETO ⭐
 
-**Falta:** só o 37.4 (fila local) — e ele é conveniência offline, não
-integridade. O defeito que abriu o passo — perda de dado por
+**✅ PASSO 37 COMPLETO** — os 18 pedaços. O que era 🔴 em 2026-08-04 (o app
+perdia dado sem avisar) está resolvido, confirmado em produção, com tempo real
+por cima e fila de reenvio para o que não conseguir sair. O defeito que abriu o passo — perda de dado por
 gravação simultânea — está RESOLVIDO e confirmado em produção, e o tempo real
 está completo (Camadas 1, 2 e 3).
 
@@ -1761,11 +1762,31 @@ segundo caso que acontecia — e o `financial_audit_log` provou.
   leitura velha **venha ela por qual caminho for**. É a trava categórica; hoje
   cada porta é fechada uma a uma.
 
-**37.4 · FILA LOCAL ÚNICA**
-- **37.4a** 🔴 Promover o `Outbox` do assistente a módulo compartilhado.
-- **37.4b** 🔴 Toda escrita entra na fila; a fila é a única que fala com a rede.
-- **37.4c** 🔴 Reenvio com recuo exponencial; a idempotência do 37.2b é o que
-  torna o reenvio seguro.
+**37.4 · FILA DE REENVIO ✅ (2026-08-07)**
+- **37.4a/c** ✅ `src/scripts/modules/fila-save.js`. Save que falha guarda as
+  OPERAÇÕES (nunca estado) e reenvia: primeira tentativa imediata, depois recuo
+  2s → 5min, e a rede voltando (`online`) acorda a fila na hora.
+  · **Guarda operação, não estado** — mesma escolha do outbox do assistente.
+    Estado velho reaplicado apaga o que aconteceu no meio do caminho; operação
+    velha apenas repete uma intenção. E repetir é seguro **porque o 37.2b as
+    deixou idempotentes**: sem aquilo, esta fila seria uma máquina de duplicar
+    transação.
+  · **A ORDEM é parte da correção:** um lote que falha PARA a drenagem. Pular
+    para o próximo faria um `add` e um `rm` do mesmo registro serem aplicados ao
+    contrário, deixando o registro vivo.
+  · Lote parado há mais de 24h é descartado: o mundo mudou em volta dele, e a
+    pessoa provavelmente já refez à mão.
+- **37.4b** ⛔ **Não fiz "toda escrita passa pela fila".** Seria reescrever o
+  caminho de save inteiro para um ganho que a fila de FALHA já entrega. O save
+  normal continua direto; a fila só existe para o que não conseguiu sair.
+
+🔒 **A armadilha que quase escapou:** o reenvio manda `profiles: []` (ele fala só
+por operações). Sem uma marca explícita, um reenvio cujas operações não
+aplicassem cairia no caminho de estado inteiro — e "perfil declarado que sumiu do
+payload" significa **exclusão**. O reenvio apagaria a conta. A guarda anti-wipe
+pegaria, mas o desenho estaria contando com a rede de segurança.
+Criado `ops_somente: true`: o servidor aplica as operações ou **RECUSA**, nunca
+cai. E a checagem de conjunto de perfis é dispensada só nesse modo.
 
 **37.5 · TEMPO REAL ✅ NO AR (Camada 1) — recusado antes por premissa FALSA**
 
@@ -2006,7 +2027,7 @@ edge que não esteja recebendo a chave nova.
 | 34 | Diferencial 7.5 → 10 | D-1 … D-7 | ✅ D-1..D-5 feitos; D-6/D-7 ⛔ recusados pelo dono |
 | 35 | Proposta do site 8.0 → 10 | P-1 … P-6 | ✅ P-2/P-3/P-6 feitos; P-1/P-4/P-5 ⛔ recusados pelo dono |
 | 36 | Chat Assistente 8.5 → 10 | C-1 … C-8 | 🟡 **Falta:** só herdar contexto em compra no crédito (C-1). C-1..C-8 ✅ |
-| **37** | ⭐ **Concorrência: sincronizar por OPERAÇÃO + TEMPO REAL** | 37.0 ✅ · 37.1 ✅ · 37.2 ✅ · 37.3 ✅ · 37.5 ✅ (Camadas 1-3, com presença) · **falta só 37.4** | ✅ **RESOLVIDO em 2026-08-07**, confirmado pelo dono em produção. O que falta (fila local) é conveniência offline, não integridade |
+| **37** | ⭐ **Concorrência: sincronizar por OPERAÇÃO + TEMPO REAL** | 37.0 → 37.5 ✅ (18/18) | ✅ **COMPLETO em 2026-08-07**, confirmado pelo dono em produção. Identidade · diff · servidor aplica · versão/409 · tempo real (3 camadas + presença) · fila de reenvio |
 | 38 | Descrição do lançamento + exportação + perfil sumido | 38.1 ✅ · 38.2 ✅ · 38.3 ✅ | ✅ **CONCLUÍDO em 2026-08-07.** Nenhum dos três defeitos estava onde eu procurei primeiro |
 
 ---

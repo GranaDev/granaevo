@@ -380,6 +380,13 @@ Deno.serve(async (req: Request) => {
     //
     // Qualquer chave faltando cai no caminho de sempre. Um cliente com bundle
     // velho em cache de Service Worker continua salvando exatamente como antes.
+    // Reenvio da FILA (37.4): payload que fala SÓ por operações, sem `profiles`
+    // reais. Sem esta marca, um reenvio cujas operações não aplicassem cairia no
+    // caminho de estado inteiro com `profiles: []` — e "perfil declarado que
+    // sumiu do payload" significa EXCLUSÃO. O reenvio apagaria a conta.
+    //
+    // Com ela o contrato é: aplique as operações ou RECUSE. Nunca caia.
+    const opsSomente = (body as any)?.ops_somente === true
     let viaOperacoes = false
     // Desfecho da decisão, devolvido ao cliente. Sem isto, "por que meu save não
     // usou operações?" só se responde por logs do servidor — que o dono não vê.
@@ -398,10 +405,12 @@ Deno.serve(async (req: Request) => {
         // mudou, o caminho de estado inteiro (que sabe) tem de assumir — senão
         // um perfil recém-apagado sobreviveria calado, porque nenhuma operação
         // fala dele.
+        // Reenvio não traz `profiles` para comparar — a checagem de conjunto não
+        // se aplica a ele.
         const idsGuardados = new Set((guardados as any[]).map((p) => String(p?.id)))
         const idsChegando  = new Set((profiles as any[]).map((p: any) => String(p?.id)))
-        const mesmoConjunto = idsGuardados.size === idsChegando.size &&
-                              [...idsGuardados].every((id) => idsChegando.has(id))
+        const mesmoConjunto = opsSomente || (idsGuardados.size === idsChegando.size &&
+                              [...idsGuardados].every((id) => idsChegando.has(id)))
 
         if (!mesmoConjunto) {
           opsMotivo = 'perfis_mudaram'
@@ -431,6 +440,14 @@ Deno.serve(async (req: Request) => {
           }
         }
       }
+    }
+
+    // Contrato do reenvio: aplicou ou recusa. Cair no caminho de estado inteiro
+    // com `profiles: []` seria apagar a conta.
+    if (opsSomente && !viaOperacoes) {
+      console.warn('[save-user-data] reenvio recusado:', opsMotivo, '| user:', effectiveUserId.slice(0, 8))
+      return json({ success: false, error: 'OPS_NAO_APLICADAS', code: 'OPS_NAO_APLICADAS', motivo: opsMotivo },
+                  409, corsHeaders)
     }
 
     if (!viaOperacoes && touched && existing?.data_json) {

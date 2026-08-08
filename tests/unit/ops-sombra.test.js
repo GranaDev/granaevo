@@ -279,9 +279,12 @@ describe('como o data-manager liga isso — ordem e condições', () => {
     // Desligar tem de ser um deploy do front (rápido, reversível pela Vercel),
     // não um redeploy da Edge no meio de um incidente. Se algum dia o valor
     // virar condicional, que seja de propósito — e não por acidente de merge.
+    // São DOIS payloads desde o 37.4 (o save normal e o reenvio da fila), e os
+    // dois declaram a mesma coisa. O que não pode voltar é o valor virar
+    // CONDICIONAL: aí o interruptor deixa de ser um interruptor.
     const linhas = DM.match(/^\s*ops_aplicar:.*$/gm)
-    assert.equal(linhas.length, 1, 'o interruptor tem de ser um lugar só')
-    assert.match(linhas[0], /ops_aplicar:\s*true,\s*$/)
+    assert.ok(linhas.length >= 1 && linhas.length <= 2, `esperava 1 ou 2, veio ${linhas.length}`)
+    for (const l of linhas) assert.match(l, /ops_aplicar:\s*true,\s*$/)
   })
 
   test('quem decide se PODE aplicar continua sendo o servidor', () => {
