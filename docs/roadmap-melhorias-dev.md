@@ -1708,12 +1708,26 @@ diverge vira o furo.
 - ✅ Não avisa quando foi você mesmo em outra aba: o aviso chega igual, mas dizer
   "Fulano atualizou" quando o Fulano é você seria mentira.
 
-**⛔ PRESENÇA ("Ke está online") — recusada, com motivo.**
-Exigiria o cliente ESCREVER no canal (presence state) e, portanto, uma política
-de escrita em `realtime.messages`. Hoje **o cliente só escuta**: ninguém consegue
-forjar "a conta mudou". Essa garantia vale mais que o enfeite. Se um dia entrar,
-que seja com política própria e revisada — há um teste que reprova a volta
-silenciosa de `presence`/`track()`.
+**✅ PRESENÇA ("Ke está online") — o dono decidiu, e ela entrou COM a garantia.**
+Eu havia recusado porque presença exige o cliente ESCREVER no canal. O que
+destravou: **presença e broadcast são valores diferentes da coluna `extension`**
+na mesma tabela, então dá para conceder escrita numa sem conceder na outra.
+
+    INSERT + extension = 'presence'   → PERMITIDO
+    INSERT + extension = 'broadcast'  → continua NEGADO
+
+O cliente passou a poder anunciar a própria presença e continua **sem conseguir
+forjar "a conta mudou"** — a campainha segue tendo o servidor como única boca.
+
+E o canal carrega **só o id do perfil**: o conteúdo da presença é escrito pelo
+cliente, então o nome é resolvido LOCALMENTE por quem recebe. Um membro
+adulterado só consegue afirmar ser outro perfil da própria conta, que ele já
+enxerga; e a tela escreve por `textContent`, nunca como HTML.
+
+🐛 **Achado no caminho: o indicador de sync era interface MORTA.** Ele existe no
+HTML desde sempre, o JS escreve nele ("⏳ Salvando…", "✓ Salvo") e **não havia uma
+linha de CSS** — nem no fonte nem no bundle. Ninguém nunca viu aquilo. Estilizado
+agora, junto com a presença.
 
 ### Ordem sugerida
 `37.0 → 37.1 → 37.2 → 37.3 → 37.4`. A identidade bloqueia tudo; o diff sem o

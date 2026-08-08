@@ -1090,3 +1090,95 @@
     color: var(--color-primary);
     transform: translateY(-2px);
 }
+
+/* ── Sincronização e presença (Passo 37) ─────────────────────────────────────
+ *
+ * ⚠️ O indicador de sync EXISTIA no HTML desde sempre, o JS escrevia nele
+ * ("⏳ Salvando…", "✓ Salvo") e ele NUNCA teve uma linha de CSS — nem no fonte
+ * nem no bundle. Era interface morta: o elemento estava lá, o texto entrava, e
+ * ninguém via. Descoberto ao procurar onde estilizar o "↻ Atualizado" do tempo
+ * real, em 2026-08-07.
+ *
+ * Fica discreto de propósito: é confirmação, não alerta. Some sozinho em 3s.
+ */
+.sync-indicator,
+.sync-indicator-desktop {
+    position: fixed;
+    right: 1rem;
+    bottom: 5.5rem;                 /* acima do bottom-nav */
+    z-index: 60;
+    display: none;
+    padding: 0.375rem 0.75rem;
+    border-radius: 999px;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    line-height: 1;
+    color: var(--color-text-muted);
+    background: var(--color-bg-elevated);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    pointer-events: none;           /* nunca rouba um clique */
+    animation: sync-entra 0.18s ease-out;
+}
+/* Só aparece quando o JS declara um estado — sem isso, some da tela. */
+.sync-indicator[data-state],
+.sync-indicator-desktop[data-state] { display: block; }
+
+.sync-indicator[data-state="saved"],
+.sync-indicator-desktop[data-state="saved"],
+.sync-indicator[data-state="sincronizado"],
+.sync-indicator-desktop[data-state="sincronizado"] { color: var(--color-primary-light); }
+
+.sync-indicator[data-state="error"],
+.sync-indicator-desktop[data-state="error"] { color: var(--color-danger); }
+
+@keyframes sync-entra {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .sync-indicator, .sync-indicator-desktop { animation: none; }
+}
+
+/* Desktop tem sidebar e não tem bottom-nav: sobe o indicador. */
+@media (min-width: 1024px) {
+    .sync-indicator-desktop { bottom: 1.25rem; }
+}
+
+/* ── Quem está online agora ───────────────────────────────────────────────── */
+.presenca-conta {
+    position: fixed;
+    right: 1rem;
+    bottom: 8.25rem;
+    z-index: 59;
+    display: none;
+    align-items: center;
+    gap: 0.375rem;
+    max-width: min(60vw, 260px);
+    padding: 0.3125rem 0.6875rem;
+    border-radius: 999px;
+    font-size: var(--text-xs);
+    color: var(--color-text-lighter);
+    background: var(--color-bg-elevated);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+    pointer-events: none;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.presenca-conta[data-online] { display: flex; }
+
+.presenca-conta::before {
+    content: '';
+    flex: 0 0 auto;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent);
+}
+
+@media (min-width: 1024px) {
+    .presenca-conta { bottom: 3.75rem; }
+}

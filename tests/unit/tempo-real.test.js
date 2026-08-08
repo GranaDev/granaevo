@@ -348,14 +348,78 @@ describe('Camada 3 — a tela mudou sozinha, e o usuário fica sabendo', () => {
     assert.match(DASH3, /_avisarSincronizado\(aviso\);/)
   })
 
-  test('🔒 presença NÃO foi implementada, e é decisão consciente', () => {
-    // "Ke está online" exigiria o cliente ESCREVER no canal (presence state), e
-    // portanto uma política de escrita em `realtime.messages`. Hoje o cliente só
-    // escuta — ninguém consegue forjar "a conta mudou". Essa garantia vale mais
-    // que o enfeite. Se um dia entrar, que seja com política própria e revisada.
-    assert.ok(!/presence|track\(|presenceState/i.test(CODIGO),
-      'presença exige dar voz ao cliente no canal — reveja a política antes')
-    assert.match(MIG, /NENHUMA política de INSERT, de propósito/)
+})
+
+describe('🔒 PRESENÇA — o cliente ganhou voz, mas só para dizer "estou aqui"', () => {
+  const MIG_P = readFileSync(join(RAIZ, 'supabase/migrations/20260807140000_realtime_presenca.sql'), 'utf8')
+
+  test('⭐ a escrita é liberada SÓ para presence — broadcast continua trancado', () => {
+    // É a linha que separa "posso dizer que estou aqui" de "posso dizer que a
+    // conta mudou". Sem ela, esta política daria ao cliente a boca da campainha,
+    // e qualquer membro poderia forjar um aviso de mudança.
+    const insert = MIG_P.match(/CREATE POLICY "conta_presenca_entrar"[\s\S]*?\);/)[0]
+    assert.match(insert, /FOR INSERT/)
+    assert.match(insert, /WITH CHECK \(\s*\n\s*extension = 'presence'/)
+    assert.ok(!/broadcast/.test(insert), 'INSERT nunca pode alcançar broadcast')
+  })
+
+  test('a leitura passou a incluir presence, e só isso mudou nela', () => {
+    const sel = MIG_P.match(/CREATE POLICY "conta_broadcast_ouvir"[\s\S]*?\);/)[0]
+    assert.match(sel, /extension IN \('broadcast', 'presence'\)/)
+    // A regra de QUEM continua a mesma: dono ou membro ativo.
+    assert.match(sel, /am\.is_active\s*=\s*true/)
+  })
+
+  test('⭐ o canal carrega só o ID do perfil — nome nunca trafega', () => {
+    // O conteúdo da presença é escrito pelo CLIENTE. Mandar nome seria confiar
+    // em texto livre de terceiro; um membro adulterado só consegue afirmar ser
+    // outro perfil da PRÓPRIA conta, que ele já enxerga.
+    assert.match(CODIGO, /_canal\.track\(\{ p: meu\.slice\(0, 64\) \}\)/)
+    assert.ok(!/track\(\{[^}]*(nome|name|email)/i.test(CODIGO))
+  })
+
+  test('o que chega é validado por tipo e tamanho', () => {
+    assert.match(CODIGO, /typeof m\?\.p === 'string' && m\.p\) ids\.add\(m\.p\.slice\(0, 64\)\)/)
+  })
+
+  test('estado malformado vira lista vazia, não erro', () => {
+    const bloco = CODIGO.match(/_canal\.on\('presence'[\s\S]*?\n {4}\}/)[0]
+    assert.match(bloco, /catch \{/)
+  })
+
+  test('track acontece DEPOIS de entrar no canal', () => {
+    // Antes do SUBSCRIBED não há canal para escrever.
+    const i = CODIGO.indexOf("_diag('estado', 'ligado')")
+    const j = CODIGO.indexOf('_canal.track(')
+    assert.ok(i > 0 && j > i)
+  })
+
+  test('a tela não interpreta o que veio como HTML', () => {
+    // Vale mesmo com o id vindo de um membro adulterado: `textContent` nunca
+    // executa nada, e o nome sai do que já está em memória.
+    const DASHP = soCodigo(readFileSync(join(RAIZ, 'src/scripts/pages/dashboard.js'), 'utf8'))
+    const fn = DASHP.match(/function _renderPresenca\(ids\) \{[\s\S]*?\n\}/)[0]
+    assert.match(fn, /el\.textContent =/)
+    assert.ok(!/innerHTML|insertAdjacentHTML/.test(fn))
+    assert.match(fn, /_allProfilesData/)
+  })
+
+  test('não conta você mesmo como "online"', () => {
+    const DASHP = soCodigo(readFileSync(join(RAIZ, 'src/scripts/pages/dashboard.js'), 'utf8'))
+    const fn = DASHP.match(/function _renderPresenca\(ids\) \{[\s\S]*?\n\}/)[0]
+    assert.match(fn, /filter\(\(id\) => id !== meu\)/)
+  })
+
+  test('⚠️ o indicador de sync era interface MORTA — agora tem CSS', () => {
+    // Ele existia no HTML desde sempre, o JS escrevia nele ("✓ Salvo") e não
+    // havia UMA linha de CSS, nem no fonte nem no bundle. Ninguém nunca viu.
+    // Descoberto ao procurar onde estilizar o "↻ Atualizado".
+    const CSS = readFileSync(join(RAIZ, 'src/styles/dashboard/_db-features.css'), 'utf8')
+    assert.match(CSS, /\.sync-indicator-desktop \{/)
+    assert.match(CSS, /\.sync-indicator-desktop\[data-state\] \{ display: block; \}/)
+    assert.match(CSS, /\.presenca-conta\[data-online\] \{ display: flex; \}/)
+    // Confirmação, não alerta: nunca rouba clique.
+    assert.match(CSS, /pointer-events: none/)
   })
 })
 

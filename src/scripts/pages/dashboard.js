@@ -5500,6 +5500,31 @@ function _avisarSincronizado(aviso) {
     if (nome) mostrarNotificacao(`${nome} atualizou os dados`, 'info');
 }
 
+// Quem da conta está com o app aberto agora.
+//
+// A presença chega como IDS DE PERFIL — o nome nunca trafega pelo canal, porque
+// o conteúdo da presença é escrito pelo cliente e não dá para confiar nele. Aqui
+// o id vira nome pelo que já está em memória, e o texto entra por `textContent`:
+// um membro adulterado só consegue afirmar ser outro perfil da própria conta, e
+// nada do que ele mandar é interpretado como HTML.
+function _renderPresenca(ids) {
+    const el = document.getElementById('presencaConta');
+    if (!el) return;
+    const meu = String(perfilAtivo?.id ?? '');
+    const nomes = (ids || [])
+        .map(String)
+        .filter((id) => id !== meu)
+        .map((id) => (_allProfilesData || []).find((p) => String(p?.id) === id))
+        .map((p) => (p?.nome || p?.name || '').trim())
+        .filter(Boolean);
+
+    if (!nomes.length) { el.removeAttribute('data-online'); el.textContent = ''; return; }
+    el.textContent = nomes.length === 1
+        ? `${nomes[0]} está online`
+        : `${nomes.length} pessoas online`;
+    el.setAttribute('data-online', '');
+}
+
 async function ligarTempoReal() {
     const conta = dataManager.contaId;
     // Um return silencioso é o suspeito nº 1 quando "nada acontece": deixa
@@ -5514,6 +5539,7 @@ async function ligarTempoReal() {
             perfilAtual: () => String(perfilAtivo?.id ?? ''),
             ocupado:     () => !!(document.getElementById('modalOverlay')?.classList.contains('active') ||
                                   document.getElementById('bottomSheetOverlay')?.classList.contains('active')),
+            aoPresenca: _renderPresenca,
             recarregar:  async (aviso) => {
                 // Save em voo pousa primeiro: recarregar no meio de um POST traz
                 // o estado de ANTES dele, e a tela mostraria o dado recém-gravado

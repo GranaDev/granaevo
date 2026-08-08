@@ -73,7 +73,7 @@ export const CLIENT_ID = (() => {
  * @param {Function} [opts.aoEstado] ('ligado'|'caiu'|'sem_permissao') => void
  * @returns {Promise<boolean>} true se assinou.
  */
-export async function ligar({ url, apikey, conta, token, aoMudar, aoEstado }) {
+export async function ligar({ url, apikey, conta, token, aoMudar, aoEstado, aoPresenca, meuPerfil }) {
     if (!url || !apikey || !conta || typeof token !== 'function') { _diag('estado', 'faltou_config'); return false; }
     _parado = false;
     _diag('conta', String(conta).slice(0, 8) + '…');
@@ -118,6 +118,26 @@ export async function ligar({ url, apikey, conta, token, aoMudar, aoEstado }) {
         } catch { /* o ouvinte quebrar não pode derrubar o canal */ }
     });
 
+    // ── PRESENÇA ───────────────────────────────────────────────────────────
+    // O conteúdo da presença é escrito pelo CLIENTE, então não dá para confiar
+    // nele. Mandamos só o id do perfil; quem recebe resolve o nome localmente.
+    // Um membro adulterado só consegue afirmar ser outro perfil DA PRÓPRIA
+    // CONTA — que ele já enxerga. Nome, e-mail e texto livre não entram no fio.
+    if (typeof aoPresenca === 'function') {
+        _canal.on('presence', { event: 'sync' }, () => {
+            const ids = new Set();
+            try {
+                for (const lista of Object.values(_canal.presenceState() ?? {})) {
+                    for (const m of (lista ?? [])) {
+                        // Aceita SÓ o campo esperado, com tipo e tamanho travados.
+                        if (typeof m?.p === 'string' && m.p) ids.add(m.p.slice(0, 64));
+                    }
+                }
+            } catch { /* estado malformado: melhor lista vazia que erro */ }
+            try { aoPresenca([...ids]); } catch { /* o ouvinte não derruba o canal */ }
+        });
+    }
+
     return new Promise((resolve) => {
         let respondido = false;
         const responder = (v) => { if (!respondido) { respondido = true; resolve(v); } };
@@ -127,6 +147,12 @@ export async function ligar({ url, apikey, conta, token, aoMudar, aoEstado }) {
                 _tentativa = 0;
                 _diag('estado', 'ligado');
                 aoEstado?.('ligado');
+                // Anuncia a própria presença DEPOIS de entrar no canal — antes
+                // disso não há canal para escrever.
+                if (typeof meuPerfil === 'function') {
+                    const meu = String(meuPerfil() ?? '');
+                    if (meu) Promise.resolve(_canal.track({ p: meu.slice(0, 64) })).catch(() => {});
+                }
                 responder(true);
                 return;
             }
@@ -192,7 +218,7 @@ let _ultimoAoMudar = null;
  * @param {Function} o.recarregar   () => Promise<void> — busca e repinta.
  * @returns {Promise<{reaplicarPendente: Function}>}
  */
-export async function ligarNaTela({ url, apikey, conta, token, perfilAtual, ocupado, recarregar }) {
+export async function ligarNaTela({ url, apikey, conta, token, perfilAtual, ocupado, recarregar, aoPresenca }) {
     const aplicar = (aviso) => {
         // Formulário aberto: trocar os arrays embaixo de quem está digitando
         // apaga o que a pessoa escreveu — a mesma perda que este passo veio
@@ -216,7 +242,12 @@ export async function ligarNaTela({ url, apikey, conta, token, perfilAtual, ocup
     };
     _ultimoAoMudar = aoMudar;
 
-    await ligar({ url, apikey, conta, token, aoMudar });
+    await ligar({
+        url, apikey, conta, token, aoMudar,
+        aoPresenca,
+        // Quem eu sou no canal: o perfil que está na tela. Nada além disso.
+        meuPerfil: perfilAtual,
+    });
 
     // ── Rede de segurança ao voltar para a aba ──────────────────────────────
     // Navegador suspende websocket em aba de fundo, e nem sempre avisa que
