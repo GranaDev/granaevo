@@ -7,6 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { dataManager } from '../data-manager.js';
+import { supabase } from '../../services/supabase-client.js?v=2';
 import { parseLocal, splitCompound, parseFollowup, keywordMatch, mencionaLancamentoAntigo,
          ehContinuacao, descricaoVazia, parseRetiradaComUso } from './parser-local.js';
 import { extractDescricao, textoParaModelo } from './describe.js';
@@ -50,6 +51,8 @@ const RE_NAO = /^(nao|n|cancela|deixa|esquece|para|nem|negativo)\b/;
 
 class AssistantEngine {
     #profiles = [];
+    // Perfis da CONTA (tabela `profiles`) — ver #carregarPerfisDaConta.
+    #daConta = [];
     #activeId = null;
     #ready = false;
     #pendingReserva = null; // { valor, tipo, descricao } aguardando escolha de meta
@@ -84,7 +87,7 @@ class AssistantEngine {
     }
 
     async init() {
-        const data = await dataManager.loadUserData();
+        const [data] = await Promise.all([dataManager.loadUserData(), this.#carregarPerfisDaConta()]);
         this.#profiles = Array.isArray(data?.profiles) ? data.profiles : [];
         this.#restoreActive();
         this.#ready = true;
@@ -124,8 +127,38 @@ class AssistantEngine {
         } catch { /* transitório — mantém estado atual */ }
     }
 
+    /**
+     * Perfis da CONTA — a lista autoritativa, vinda da tabela `profiles`.
+     *
+     * O blob só contém perfil que já foi SALVO com dado alguma vez. O dono tem
+     * 4 perfis e o chat mostrava 1: os outros existiam na conta e nunca tinham
+     * sido gravados no blob. Duas fontes de verdade, e a que o chat usava era a
+     * incompleta.
+     */
+    async #carregarPerfisDaConta() {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const uid = session?.user?.id;
+            if (!uid) return;
+            const { data, error } = await supabase
+                .from('profiles').select('id, name').eq('user_id', uid).order('id', { ascending: true });
+            if (!error && Array.isArray(data)) this.#daConta = data;
+        } catch { /* sem a tabela, cai no blob — pior, mas funciona */ }
+    }
+
+    /**
+     * União das duas fontes, sem duplicar por id. A tabela manda no NOME (é onde
+     * o usuário renomeia); o blob entra por último para não perder perfil que
+     * exista só lá (conta antiga, antes da tabela).
+     */
     listProfiles() {
-        return this.#profiles.map((p) => ({ id: String(p.id), name: p.name || p.nome || 'Perfil' }));
+        const vistos = new Map();
+        for (const p of this.#daConta) vistos.set(String(p.id), { id: String(p.id), name: p.name || 'Perfil' });
+        for (const p of this.#profiles) {
+            const id = String(p.id);
+            if (!vistos.has(id)) vistos.set(id, { id, name: p.name || p.nome || 'Perfil' });
+        }
+        return [...vistos.values()];
     }
 
     #profileKey() { return `ge_assistant_profile_${dataManager.userId || 'anon'}`; }
@@ -133,12 +166,13 @@ class AssistantEngine {
     #restoreActive() {
         let saved = null;
         try { saved = localStorage.getItem(this.#profileKey()); } catch {}
-        const exists = this.#profiles.some((p) => String(p.id) === String(saved));
-        this.#activeId = exists ? String(saved) : (this.#profiles[0] ? String(this.#profiles[0].id) : null);
+        const todos = this.listProfiles();
+        const exists = todos.some((p) => String(p.id) === String(saved));
+        this.#activeId = exists ? String(saved) : (todos[0] ? String(todos[0].id) : null);
     }
 
     setActiveProfile(id) {
-        if (!this.#profiles.some((p) => String(p.id) === String(id))) return false;
+        if (!this.listProfiles().some((p) => String(p.id) === String(id))) return false;
         this.#activeId = String(id);
         try { localStorage.setItem(this.#profileKey(), this.#activeId); } catch {}
         this.#pendingReserva = null;
@@ -147,7 +181,28 @@ class AssistantEngine {
     }
 
     get activeProfileId() { return this.#activeId; }
-    #active() { return this.#profiles.find((p) => String(p.id) === String(this.#activeId)) || null; }
+    /**
+     * O perfil ativo, pronto para escrita.
+     *
+     * Se ele existe na conta mas ainda não no blob (perfil criado e nunca usado),
+     * nasce aqui — vazio. É o mesmo que o dashboard faz ao entrar num perfil
+     * novo; sem isso, lançar pelo chat num perfil recém-criado não teria onde
+     * gravar, e o comando falharia sem explicação.
+     */
+    #active() {
+        const id = String(this.#activeId ?? '');
+        if (!id) return null;
+        const achado = this.#profiles.find((p) => String(p.id) === id);
+        if (achado) return achado;
+        const daConta = this.#daConta.find((p) => String(p.id) === id);
+        if (!daConta) return null;
+        const novo = {
+            id: daConta.id, nome: daConta.name, name: daConta.name,
+            transacoes: [], metas: [], contasFixas: [], cartoesCredito: [], assinaturas: [],
+        };
+        this.#profiles.push(novo);
+        return novo;
+    }
 
     // ── R6: o cérebro do app, dentro do chat ─────────────────────────────────
     // O dashboard aprende a categorização do histórico do próprio usuário

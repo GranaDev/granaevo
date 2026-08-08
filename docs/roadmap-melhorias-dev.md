@@ -1762,7 +1762,13 @@ auditoria (**já existem**: `financial_audit_log`, com retenção e imutabilidad
 **Verificar a cada fase:** duas abas lançando ao mesmo tempo no MESMO perfil, e
 nada se perde. É o teste que hoje falha.
 
-## PASSO 38 — Descrição e exportação: os achados dos testes de 2026-08-04 🔴
+## PASSO 38 — Descrição e exportação: os achados dos testes de 2026-08-04 ✅
+
+> **Fechado em 2026-08-07.** Os três defeitos que o dono relatou testando o app
+> estão corrigidos, e **nenhum dos três estava onde eu procurava primeiro**:
+> a descrição era a IA sobrescrevendo (não o parser), a exportação vazia era o
+> caminho até os perfis (não a planilha), e o perfil sumido eram duas fontes de
+> verdade (não o nome repetido).
 
 - **38.1** ✅ **A descrição volta a ser o que o usuário escreveu** (2026-08-07).
   · **38.1a** ✅ **Corpus** (`assistente-descricao-corpus.test.js`), com as duas
@@ -1800,9 +1806,27 @@ nada se perde. É o teste que hoje falha.
   · ⚠️ **Não aparecia como erro em lugar nenhum:** o arquivo era gerado, baixava
     e abria — só estava vazio. É o pior jeito de falhar num direito da LGPD.
     Reproduzido em teste, sem precisar dos arquivos do dono.
-- **38.3** 🔴 **Perfil some no chat.** Conta com 4 perfis (dois de nome igual) e o
-  assistente mostra 1. **Descartado** que seja o merge por perfil: testado com ids
-  repetidos, ele preserva os três. **Falta o dado do dono:** o seletor DENTRO do
+- **38.3** ✅ **O chat via 1 perfil onde a conta tem 4** (2026-08-07).
+  O nome repetido era coincidência, não causa. A causa são **duas fontes de
+  verdade** para "quais perfis existem":
+
+  | tela | fonte | o que traz |
+  |---|---|---|
+  | dashboard | tabela `profiles` | a lista completa, autoritativa |
+  | chat | `data_json.profiles` (blob) | **só quem já foi salvo com dado** |
+
+  Perfil criado e nunca usado existe na conta e não no blob. Confirmado no banco
+  de produção: 4 perfis (`Userteste · Giusepp · Meow · Userteste`).
+  · **A consequência era pior que sumir da lista:** o lançamento ia para
+    `profiles[0]` — outro perfil — e o dono procurava o dinheiro na tela errada,
+    achando que o dado tinha se perdido. Foi exatamente o que aconteceu no teste
+    dele, e eu cheguei a suspeitar disso antes de o `financial_audit_log` apontar
+    para outro lado.
+  · **Conserto:** `listProfiles()` devolve a UNIÃO das duas fontes, chaveada por
+    **id** (nomes repetidos não colapsam). A tabela manda no nome; o blob entra
+    por último para não perder perfil de conta antiga.
+  · Perfil da conta que ainda não está no blob **nasce ao ser usado** — sem isso,
+    lançar num perfil recém-criado não teria onde gravar e falharia calado.
   chat mostra quantos?
 
 **Risco:** baixo (nenhum grava dado errado). **Esforço:** ~1 dia somados.
@@ -1881,8 +1905,8 @@ edge que não esteja recebendo a chave nova.
 | 34 | Diferencial 7.5 → 10 | D-1 … D-7 | ✅ D-1..D-5 feitos; D-6/D-7 ⛔ recusados pelo dono |
 | 35 | Proposta do site 8.0 → 10 | P-1 … P-6 | ✅ P-2/P-3/P-6 feitos; P-1/P-4/P-5 ⛔ recusados pelo dono |
 | 36 | Chat Assistente 8.5 → 10 | C-1 … C-8 | 🟡 **Falta:** só herdar contexto em compra no crédito (C-1). C-1..C-8 ✅ |
-| **37** | ⭐ **Concorrência: sincronizar por OPERAÇÃO + TEMPO REAL** | 37.0 ✅ · 37.1 ✅ · 37.2 ✅ · 37.5 ✅ (Camada 1) · **falta 37.3, 37.4 e as Camadas 2-3** | ✅ **RESOLVIDO em 2026-08-07**, confirmado pelo dono em produção: lançamento no chat aparece no dashboard em tempo real. O que falta é defesa em profundidade e acabamento |
-| 38 | Descrição do lançamento + exportação | 38.1 … 38.3 | 🔴 Achados dos testes manuais de 2026-08-04 |
+| **37** | ⭐ **Concorrência: sincronizar por OPERAÇÃO + TEMPO REAL** | 37.0 ✅ · 37.1 ✅ · 37.2 ✅ · 37.3 ✅ · 37.5 ✅ (Camadas 1-3, com presença) · **falta só 37.4** | ✅ **RESOLVIDO em 2026-08-07**, confirmado pelo dono em produção. O que falta (fila local) é conveniência offline, não integridade |
+| 38 | Descrição do lançamento + exportação + perfil sumido | 38.1 ✅ · 38.2 ✅ · 38.3 ✅ | ✅ **CONCLUÍDO em 2026-08-07.** Nenhum dos três defeitos estava onde eu procurei primeiro |
 
 ---
 
