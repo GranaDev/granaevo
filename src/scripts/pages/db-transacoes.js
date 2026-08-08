@@ -8,6 +8,11 @@ import { novoId } from '../modules/registro-id.js?v=1';
 // A fronteira da reserva mora em modulo proprio para poder ser EXECUTADA por
 // teste — ver o cabecalho de categorias-edicao.js.
 import { categoriasEditaveis } from '../modules/categorias-edicao.js?v=1';
+// C-10: a regra de retirada mora em UM lugar só. `applyRetirada` é a réplica
+// fiel do db-metas e já valida reserva vazia e valor que excede — escrever uma
+// terceira cópia aqui repetiria o erro que fez o modelo antigo e o novo de
+// fatura coexistirem.
+import { applyRetirada } from '../modules/assistant/tx-builder.js';
 
 let _ctx = null;
 
@@ -58,6 +63,25 @@ export function init(ctx) {
     atualizarMovimentacoesUI();
 }
 
+// ── Limite de retiradas seguidas (C-10) ─────────────────────────────────────
+// O dono pediu rate limit junto do fluxo novo, e o motivo é concreto: retirada
+// mexe em DOIS lugares (a transação e o saldo da reserva). Um duplo-clique ou um
+// dedo nervoso tira o dobro, e desfazer isso à mão exige entender as duas metades.
+//
+// Só na memória da aba, de propósito: não é defesa contra abuso — para isso a
+// trava está no servidor. É defesa contra o próprio dedo, e o servidor não sabe
+// o que é dedo nervoso.
+const _RETIRADAS_JANELA_MS = 10_000;
+const _RETIRADAS_MAX       = 3;
+let _retiradasRecentes = [];
+
+function _podeRetirarAgora() {
+    const agora = Date.now();
+    _retiradasRecentes = _retiradasRecentes.filter(t => agora - t < _RETIRADAS_JANELA_MS);
+    return _retiradasRecentes.length < _RETIRADAS_MAX;
+}
+function _registrarRetirada() { _retiradasRecentes.push(Date.now()); }
+
 // ========== TRANSAÇÕES ==========
 function atualizarTiposDinamicos() {
     const cat = document.getElementById('selectCategoria').value;
@@ -100,6 +124,25 @@ function atualizarTiposDinamicos() {
                 const o = document.createElement('option');
                 o.value = 'meta_' + m.id;
                 o.textContent = m.descricao;
+                tipoSelect.appendChild(o);
+            });
+        }
+    } else if(cat === 'retirada_reserva') {
+        // C-10. Só reservas COM saldo entram na lista — oferecer uma reserva
+        // vazia é convidar o usuário a um erro que a gente já sabe que vai
+        // bloquear. E o disponível vai no rótulo: a pergunta "quanto posso
+        // tirar?" se responde aqui, sem sair da tela.
+        const comSaldo = _ctx.metas.filter(m => Number(m.saved || 0) > 0);
+        if (comSaldo.length === 0) {
+            const aviso = document.createElement('option');
+            aviso.value = '';
+            aviso.textContent = 'Nenhuma reserva com saldo';
+            tipoSelect.appendChild(aviso);
+        } else {
+            comSaldo.forEach(m => {
+                const o = document.createElement('option');
+                o.value = 'meta_' + m.id;
+                o.textContent = `${m.descricao} — ${_ctx.formatBRL(Number(m.saved))} disponível`;
                 tipoSelect.appendChild(o);
             });
         }
@@ -236,6 +279,63 @@ function lancarTransacao() {
 
     const valor = parseFloat(valorNum.toFixed(2));
     const dh    = _ctx.agoraDataHora();
+
+    // ── C-10: RETIRAR DA RESERVA daqui, sem entrar em Reservas ──────────────
+    // Pedido do dono (2026-08-04), com as travas que ele listou: perguntar de
+    // qual reserva, bloquear se o saldo não cobre, e limite de repetição.
+    //
+    // A regra em si NÃO é reescrita aqui. `applyRetirada` já é a réplica fiel do
+    // db-metas (debita `saved`, ajusta `monthly`, grava `historicoRetiradas`) e
+    // já valida reserva vazia e valor que excede. Uma TERCEIRA cópia da regra
+    // divergiria — foi exatamente assim que o modelo antigo e o novo de fatura
+    // passaram a coexistir e a fatura exibiu valor errado.
+    if (categoria === 'retirada_reserva') {
+        if (!tipo || !tipo.startsWith('meta_')) {
+            return _ctx.mostrarNotificacao('Escolha de qual reserva vai sair o dinheiro.', 'error');
+        }
+        if (!_podeRetirarAgora()) {
+            return _ctx.mostrarNotificacao('Muitas retiradas seguidas. Aguarde um instante.', 'warning');
+        }
+
+        const metaId = tipo.slice(5);
+        const alvo   = _ctx.metas.find(m => String(m.id) === String(metaId));
+        if (!alvo) return _ctx.mostrarNotificacao('Reserva não encontrada.', 'error');
+
+        const disponivel = Number(alvo.saved || 0);
+        if (valor > disponivel) {
+            return _campoInvalido(valorEl,
+                `Essa reserva tem ${formatBRL(disponivel)} disponível.`);
+        }
+        if (!confirm(`Retirar ${formatBRL(valor)} de "${alvo.descricao}"?\n` +
+                     `Sobra ${formatBRL(disponivel - valor)} na reserva.`)) return;
+
+        // O shim existe porque `applyRetirada` fala a linguagem de PERFIL e a
+        // tela guarda as coleções soltas. Ele muta os MESMOS arrays, então o
+        // efeito é idêntico ao do chat.
+        const r = applyRetirada(
+            { transacoes: _ctx.transacoes, metas: _ctx.metas },
+            { valor, metaId, descricao, motivoRetirada: 'Retirada pela tela de Transações' },
+        );
+        if (!r.ok) {
+            const msg = r.reason === 'excede'        ? `Essa reserva tem ${formatBRL(r.disponivel)} disponível.`
+                      : r.reason === 'reserva_vazia' ? 'Essa reserva está sem saldo.'
+                      : 'Não foi possível retirar agora.';
+            return _ctx.mostrarNotificacao(msg, 'error');
+        }
+
+        _registrarRetirada();
+        _ctx.salvarDados();
+        _ctx.atualizarTudo();
+        renderizarOrcamentos();
+
+        document.getElementById('selectCategoria').value = '';
+        atualizarTiposDinamicos();
+        document.getElementById('inputDescricao').value = '';
+        document.getElementById('inputValor').value     = '';
+
+        _ctx.mostrarNotificacao(`${formatBRL(valor)} retirados de "${alvo.descricao}".`, 'success');
+        return;
+    }
 
     if(categoria === 'saida_credito') {
         const cartaoSel   = document.getElementById('selectCartao').value;

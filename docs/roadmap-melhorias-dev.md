@@ -2553,8 +2553,9 @@ logado · gate no CI impedindo regressão.
 
 ## PASSO 36 — CHAT ASSISTENTE 8.5 → 10 🟡
 > Arquitetura já é 10. **Nenhum item abaixo manda R$ para o modelo** — e nenhum precisou.
-> **Falta:** só a continuação no CRÉDITO não herdar contexto (C-1/C-9) e o
-> **C-10** (retirar da reserva pela tela de Transações, pedido do dono).
+> **Falta:** só a continuação no CRÉDITO não herdar contexto (C-1/C-9).
+> O C-10 foi entregue em 2026-08-07, junto com o conserto do risco que ele tinha
+> anexado — e aquele risco era um bug que INVENTAVA DINHEIRO em produção.
 > O C-9 foi fechado em 2026-08-07 — e metade da lista já estava corrigida quando
 > fui medir. O "gasto falso de R$500" não acontece mais.
 > Os itens C-1..C-8 estão ✅ (sete deles resolvidos sem tocar no schema da IA).
@@ -2591,9 +2592,22 @@ logado · gate no CI impedindo regressão.
   antes, no fechamento de fatura. Cada insight tem o próprio `catch`: erro no complemento não pode
   engolir o aviso de conta vencendo, que é o essencial. **Nenhum R$ no corpo** — a notificação é
   lida por quem passa pelo celular na mesa; vai só o nome da assinatura e percentual.
-- **C-10** 🟡 **Retirar da reserva pela tela de Transações** — pedido do dono (2026-08-04).
-  **Falta:** o fluxo de CRIAÇÃO, com as travas que o dono listou (perguntar de
-  qual reserva, bloquear se o saldo não cobre, rate limit).
+- **C-10** ✅ **Retirar da reserva pela tela de Transações** (2026-08-07) —
+  pedido do dono, entregue com as três travas que ele listou.
+  · **Perguntar de qual reserva:** a lista mostra só reservas COM saldo, e cada
+    uma exibe quanto tem (`Viagem — R$ 350,00 disponível`). Oferecer reserva
+    vazia é convidar a um erro que já se sabe que vai ser bloqueado; e "quanto
+    posso tirar?" se responde na própria lista.
+  · **Bloquear se não cobre:** validado no cliente (mensagem no campo, com o
+    disponível) E dentro de `applyRetirada`, que é quem manda.
+  · **Rate limit:** 3 em 10 segundos, e a cota só é consumida quando a retirada
+    DÁ CERTO. Retirada mexe em dois lugares — transação e saldo da reserva —,
+    então um duplo-clique tira o dobro e desfazer exige entender as duas metades.
+  · Confirmação antes de gravar, mostrando o que sobra.
+  · ⭐ **A regra NÃO foi reescrita.** `applyRetirada` (réplica fiel do db-metas)
+    ganhou dois parâmetros opcionais — descrição e motivo — em vez de virar uma
+    TERCEIRA cópia. Uma terceira cópia divergiria, e é exatamente assim que o
+    modelo antigo e o novo de fatura passaram a coexistir.
   · ✅ **O RISCO ANEXO FOI CORRIGIDO PRIMEIRO (2026-08-07), e era pior do que
     estava escrito aqui.** A edição não só "gravava sem mexer no saldo": ela
     **inventava dinheiro**, e estava em produção ao alcance de qualquer usuário

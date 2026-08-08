@@ -170,16 +170,21 @@ export function applyRetirada(profile, cmd) {
     if (!Array.isArray(profile.transacoes)) profile.transacoes = [];
     const dh = agoraDataHora();
     const ym = yearMonthKey();
+    // Descrição e motivo vêm de quem chama quando existem. O chat não tem onde
+    // perguntar e usa o padrão; a tela de Transações (C-10) tem os dois campos,
+    // e jogá-los fora obrigaria a uma segunda cópia desta função — foi assim que
+    // o modelo antigo e o novo de fatura passaram a coexistir.
+    const motivo = String(cmd.motivoRetirada || '').trim().slice(0, 60) || 'Outro';
     const t = {
         id: novoId(),
         categoria: 'retirada_reserva',
         tipo: 'Retirada de Reserva',
-        descricao: `Retirada: ${metaNome(meta)}`,
+        descricao: String(cmd.descricao || '').trim().slice(0, 200) || `Retirada: ${metaNome(meta)}`,
         valor: cmd.valor,
         data: dh.data,
         hora: dh.hora,
         metaId: meta.id,
-        motivoRetirada: 'Outro',
+        motivoRetirada: motivo,
     };
     profile.transacoes.push(t);
 
@@ -190,7 +195,7 @@ export function applyRetirada(profile, cmd) {
 
     if (!Array.isArray(meta.historicoRetiradas)) meta.historicoRetiradas = [];
     meta.historicoRetiradas.push({
-        data: dh.data, valor: cmd.valor, motivo: 'Outro',
+        data: dh.data, valor: cmd.valor, motivo,
         saldoAnterior: disponivel, saldoPosterior: meta.saved,
     });
 
