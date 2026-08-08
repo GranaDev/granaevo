@@ -199,7 +199,7 @@ describe('⭐ receber o aviso não é o fim — a tela precisa repintar', () => 
   // por perfil, o adiamento e o diagnóstico foram para tempo-real.js quando o
   // teto de bundle do dashboard estourou (40,0/40 reprovou o build da Vercel).
   const APLICAR = (() => {
-    const i = DASH.indexOf('recarregar:  async () =>')
+    const i = DASH.indexOf('recarregar:  async (aviso) =>')
     return i > 0 ? DASH.slice(i, DASH.indexOf('\n        });', i)) : ''
   })()
 
@@ -301,6 +301,61 @@ describe('Camada 2 — o chat também escuta, e a aba que volta não confia no c
     // somaria um listener e o refetch viraria enxurrada.
     assert.match(CODIGO, /if \(typeof document !== 'undefined' && !_ouvindoVisibilidade\)/)
     assert.match(CODIGO, /_ouvindoVisibilidade = true/)
+  })
+})
+
+describe('Camada 3 — a tela mudou sozinha, e o usuário fica sabendo', () => {
+  const DASH3 = soCodigo(readFileSync(join(RAIZ, 'src/scripts/pages/dashboard.js'), 'utf8'))
+
+  test('mudança remota acende o indicador', () => {
+    // Números mudando sem sinal nenhum faz o usuário desconfiar do app — ou
+    // pior, achar que ele mesmo digitou errado.
+    assert.match(DASH3, /_setSyncState\('sincronizado'\)/)
+    assert.match(DASH3, /state === 'sincronizado' \? '↻ Atualizado'/)
+    assert.match(DASH3, /state === 'saved' \|\| state === 'error' \|\| state === 'sincronizado'/)
+  })
+
+  test('só acende depois do boot — o save inicial não conta como novidade', () => {
+    const fn = DASH3.match(/function _avisarSincronizado\(aviso\) \{[\s\S]*?\n\}/)[0]
+    assert.match(fn, /if \(_syncReadyForDisplay\) _setSyncState/)
+  })
+
+  test('⭐ o nome de quem mudou sai do que já está em memória', () => {
+    // Nada novo trafega pelo canal: o aviso já carrega os ids dos perfis
+    // tocados, e o nome está em `_allProfilesData`. Mandar nome pelo websocket
+    // seria dado do usuário viajando à toa.
+    const fn = DASH3.match(/function _avisarSincronizado\(aviso\) \{[\s\S]*?\n\}/)[0]
+    assert.match(fn, /_allProfilesData/)
+    assert.match(fn, /p\?\.nome \|\| p\?\.name/)
+    // E o canal continua carregando só id, nunca nome.
+    const bloco = EDGE_CODIGO.match(/payload: \{[\s\S]*?\n {8}\}/)[0]
+    assert.ok(!/nome|name|email/i.test(bloco))
+  })
+
+  test('não avisa quando foi você mesmo em outra aba', () => {
+    // O aviso chega igual (não é o próprio eco — é outra aba). Mas dizer
+    // "Fulano atualizou" quando o Fulano é você seria mentira.
+    const fn = DASH3.match(/function _avisarSincronizado\(aviso\) \{[\s\S]*?\n\}/)[0]
+    assert.match(fn, /filter\(\(id\) => id !== meu\)/)
+    assert.match(fn, /if \(!outros\.length\) return;/)
+  })
+
+  test('o aviso chega até a tela — o caminho inteiro passa o objeto', () => {
+    assert.match(CODIGO, /const aplicar = \(aviso\) =>/)
+    assert.match(CODIGO, /Promise\.resolve\(recarregar\(aviso\)\)/)
+    assert.match(CODIGO, /aplicar\(aviso\);/)
+    assert.match(DASH3, /recarregar:\s+async \(aviso\) =>/)
+    assert.match(DASH3, /_avisarSincronizado\(aviso\);/)
+  })
+
+  test('🔒 presença NÃO foi implementada, e é decisão consciente', () => {
+    // "Ke está online" exigiria o cliente ESCREVER no canal (presence state), e
+    // portanto uma política de escrita em `realtime.messages`. Hoje o cliente só
+    // escuta — ninguém consegue forjar "a conta mudou". Essa garantia vale mais
+    // que o enfeite. Se um dia entrar, que seja com política própria e revisada.
+    assert.ok(!/presence|track\(|presenceState/i.test(CODIGO),
+      'presença exige dar voz ao cliente no canal — reveja a política antes')
+    assert.match(MIG, /NENHUMA política de INSERT, de propósito/)
   })
 })
 

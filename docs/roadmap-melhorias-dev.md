@@ -1370,9 +1370,10 @@ realmente quer offline (consultar, não lançar).
 
 ## PASSO 37 — Sincronização por OPERAÇÃO + tempo real 🟡 EM ANDAMENTO ⭐
 
-**Falta:** 37.3 (versão/conflito), 37.4 (fila local) e as Camadas 2–3 do tempo
-real (o chat ainda não escuta). O defeito que abriu o passo — perda de dado por
-gravação simultânea — está RESOLVIDO e confirmado em produção.
+**Falta:** 37.3 (versão/conflito) e 37.4 (fila local) — hoje são **defesa em
+profundidade**, não o conserto. O defeito que abriu o passo — perda de dado por
+gravação simultânea — está RESOLVIDO e confirmado em produção, e o tempo real
+está completo (Camadas 1, 2 e 3).
 
 **✅ O LOST UPDATE ACABOU — confirmado pelo dono em produção (2026-08-07).**
 Lançamento no chat aparece no dashboard **em tempo real**, sem recarregar. E o
@@ -1694,11 +1695,25 @@ diverge vira o furo.
 - ✅ `activeProfileId` é GETTER, não método. Chamá-lo daria TypeError no primeiro
   aviso, e o catch do canal engoliria — chat mudo, sem explicação.
 
-**Falta (Camada 3 — acabamento, não integridade):**
-- 🔴 Avisar quem mudou quando faz sentido ("nova transação de Ke"), em vez de só
-  aplicar calado. O nome pode ser resolvido LOCALMENTE pelo id do perfil, sem
-  mandar nada novo no canal.
-- 🔴 Indicador de sincronizado e presença ("Ke está online").
+**Camada 3 ✅ (2026-08-07)**
+- ✅ **Indicador "↻ Atualizado"** por 3 segundos quando a tela muda sozinha.
+  Números mudando sem sinal nenhum faz o usuário desconfiar do app — ou pior,
+  achar que ele mesmo digitou errado. Reusa o mesmo indicador do "Salvo", e só
+  acende depois do boot (o save inicial não é novidade).
+- ✅ **Diz QUEM mudou, quando dá para saber.** O aviso já carrega os ids dos
+  perfis tocados; se vier um que não é o meu, foi outra pessoa da conta mexendo
+  em algo que me alcança (na prática, uma reserva compartilhada). O nome sai de
+  `_allProfilesData` — **nada novo trafega pelo canal**, e um teste trava que o
+  payload continue sem nome/e-mail.
+- ✅ Não avisa quando foi você mesmo em outra aba: o aviso chega igual, mas dizer
+  "Fulano atualizou" quando o Fulano é você seria mentira.
+
+**⛔ PRESENÇA ("Ke está online") — recusada, com motivo.**
+Exigiria o cliente ESCREVER no canal (presence state) e, portanto, uma política
+de escrita em `realtime.messages`. Hoje **o cliente só escuta**: ninguém consegue
+forjar "a conta mudou". Essa garantia vale mais que o enfeite. Se um dia entrar,
+que seja com política própria e revisada — há um teste que reprova a volta
+silenciosa de `presence`/`track()`.
 
 ### Ordem sugerida
 `37.0 → 37.1 → 37.2 → 37.3 → 37.4`. A identidade bloqueia tudo; o diff sem o

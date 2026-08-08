@@ -1315,7 +1315,13 @@ function gerarCobrancasAssinaturas() {
 let _syncHideTimer       = null;
 let _syncReadyForDisplay = false; // ativado após o primeiro save manual do usuário
 function _setSyncState(state) {
-    // state: 'saving' | 'saved' | 'error' | 'hidden'
+    // state: 'saving' | 'saved' | 'error' | 'sincronizado' | 'hidden'
+    //
+    // 'sincronizado' (Camada 3): a mudança veio de FORA — outra aba, outro
+    // aparelho, outra pessoa da conta. Reusa o mesmo indicador de "Salvo" de
+    // propósito: números mudando sozinhos na tela sem nenhum sinal é o tipo de
+    // coisa que faz o usuário desconfiar do app. Um pisca discreto responde
+    // "isso foi de propósito" sem interromper nada.
     const els = [
         document.getElementById('syncIndicator'),
         document.getElementById('syncIndicatorDesktop'),
@@ -1331,13 +1337,14 @@ function _setSyncState(state) {
             el.textContent =
                 state === 'saving' ? '⏳ Salvando…'
                 : state === 'saved' ? '✓ Salvo'
+                : state === 'sincronizado' ? '↻ Atualizado'
                 : '✗ Erro';
         } else {
             el.textContent = '';
         }
     });
 
-    if (state === 'saved' || state === 'error') {
+    if (state === 'saved' || state === 'error' || state === 'sincronizado') {
         _syncHideTimer = setTimeout(() => _setSyncState('hidden'), 3000);
     }
 }
@@ -5469,6 +5476,30 @@ const _AUTO_SAVE_MAX_FAILS = 3;
 // este arquivo bateu 40,0/40 KB e reprovou o build.
 let _tempoRealReaplicar = null;
 
+// Camada 3: dar SINAL de que a tela mudou sozinha.
+//
+// Números mudando sem aviso nenhum é o tipo de coisa que faz o usuário
+// desconfiar do app — ou pior, achar que ele mesmo digitou errado. Um pisca de
+// 3 segundos responde "isso foi de propósito" sem interromper nada.
+//
+// E quando dá para saber QUEM, diz o nome. O aviso do canal traz os ids dos
+// perfis tocados; se vier um que não é o meu, foi outra pessoa da conta mexendo
+// em algo que me alcança — hoje, na prática, uma reserva compartilhada. O nome
+// sai do que já está em memória: nada novo trafega pelo canal.
+function _avisarSincronizado(aviso) {
+    if (_syncReadyForDisplay) _setSyncState('sincronizado');
+
+    const meu = String(perfilAtivo?.id ?? '');
+    const outros = (aviso?.perfis ?? []).map(String).filter((id) => id !== meu);
+    if (!outros.length) return;   // foi você, em outra aba ou aparelho
+
+    const nome = outros
+        .map((id) => (_allProfilesData || []).find((p) => String(p?.id) === id))
+        .map((p) => (p?.nome || p?.name || '').trim())
+        .find(Boolean);
+    if (nome) mostrarNotificacao(`${nome} atualizou os dados`, 'info');
+}
+
 async function ligarTempoReal() {
     const conta = dataManager.contaId;
     // Um return silencioso é o suspeito nº 1 quando "nada acontece": deixa
@@ -5483,7 +5514,7 @@ async function ligarTempoReal() {
             perfilAtual: () => String(perfilAtivo?.id ?? ''),
             ocupado:     () => !!(document.getElementById('modalOverlay')?.classList.contains('active') ||
                                   document.getElementById('bottomSheetOverlay')?.classList.contains('active')),
-            recarregar:  async () => {
+            recarregar:  async (aviso) => {
                 // Save em voo pousa primeiro: recarregar no meio de um POST traz
                 // o estado de ANTES dele, e a tela mostraria o dado recém-gravado
                 // como se não existisse.
@@ -5494,6 +5525,7 @@ async function ligarTempoReal() {
                 // atualizarReferenciasGlobais(). Sem a linha abaixo, o dado só
                 // aparecia no F5 seguinte — foi o bug de 2026-08-07.
                 atualizarTudo();
+                _avisarSincronizado(aviso);
             },
         });
         _tempoRealReaplicar = r?.reaplicarPendente ?? null;

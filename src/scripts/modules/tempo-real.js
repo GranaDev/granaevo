@@ -193,13 +193,13 @@ let _ultimoAoMudar = null;
  * @returns {Promise<{reaplicarPendente: Function}>}
  */
 export async function ligarNaTela({ url, apikey, conta, token, perfilAtual, ocupado, recarregar }) {
-    const aplicar = () => {
+    const aplicar = (aviso) => {
         // Formulário aberto: trocar os arrays embaixo de quem está digitando
         // apaga o que a pessoa escreveu — a mesma perda que este passo veio
         // consertar, só que vinda de dentro. Fica pendente, não é descartado.
         if (ocupado?.()) { _pendente = true; _diag('ultimo', 'adiado: formulário aberto'); return; }
         _pendente = false;
-        Promise.resolve(recarregar())
+        Promise.resolve(recarregar(aviso))
             .then(() => _diag('ultimo', 'aplicado'))
             .catch((e) => _diag('ultimo', `falhou: ${String(e?.message ?? e).slice(0, 60)}`));
     };
@@ -212,7 +212,7 @@ export async function ligarNaTela({ url, apikey, conta, token, perfilAtual, ocup
             _diag('ultimo', `ignorado: outro perfil (${aviso.perfis.length})`);
             return;
         }
-        aplicar();
+        aplicar(aviso);
     };
     _ultimoAoMudar = aoMudar;
 
