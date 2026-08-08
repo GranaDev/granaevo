@@ -2551,19 +2551,46 @@ logado · gate no CI impedindo regressão.
 
 ---
 
-## PASSO 36 — CHAT ASSISTENTE 8.5 → 10 🟡
+## PASSO 36 — CHAT ASSISTENTE 8.5 → 10 ✅
 > Arquitetura já é 10. **Nenhum item abaixo manda R$ para o modelo** — e nenhum precisou.
-> **Falta:** só a continuação no CRÉDITO não herdar contexto (C-1/C-9).
+> **Fechado em 2026-08-08** com a continuação no CRÉDITO (último item aberto, C-1/C-9).
 > O C-10 foi entregue em 2026-08-07, junto com o conserto do risco que ele tinha
 > anexado — e aquele risco era um bug que INVENTAVA DINHEIRO em produção.
 > O C-9 foi fechado em 2026-08-07 — e metade da lista já estava corrigida quando
 > fui medir. O "gasto falso de R$500" não acontece mais.
 > Os itens C-1..C-8 estão ✅ (sete deles resolvidos sem tocar no schema da IA).
 
-- **C-1** 🟡 PENDENTE (2026-08-03) — ⭐ **Memória de conversa**. *"Gastei 50 no mercado"* → *"e mais
-  30"* agora lança sozinho, herdando categoria e tipo da frase anterior.
-  **Falta:** só a continuação de compra no **crédito**, que não herda — `#lastLancamentoCmd` é
-  gravado apenas para saída/entrada/reserva; crédito segue outro caminho (`#doCredito`).
+- **C-1** ✅ RESOLVIDO (2026-08-03, fechado em 2026-08-08) — ⭐ **Memória de conversa**.
+  *"Gastei 50 no mercado"* → *"e mais 30"* lança sozinho, herdando categoria e tipo.
+
+  **O resto (crédito), fechado em 2026-08-08.** `#lastLancamentoCmd` era gravado só por
+  saída/entrada/reserva; crédito segue outro caminho (`#doCredito` → picker → `applyCredito`)
+  e não deixava rastro. *"comprei 900 parcelado em 3x"* → *"e mais 300"* não continuava nada.
+
+  A regra tinha **três cópias** espalhadas no engine (gravar / validar / herdar) e o crédito
+  caiu fora das três. Saiu para `contexto-conversa.js`, função pura — **o teste EXECUTA a
+  regra** em vez de procurar o texto dela no fonte (5 falsos positivos nesta base já).
+
+  **O que a continuação NÃO herda, de propósito:**
+  · **parcelas** — *"parcelado em 3x"* → *"e mais 300"* viraria 3× de 100 que ninguém pediu.
+    Parcelamento é termo daquela compra, igual à descrição.
+  · **o cartão** — o picker abre com o valor pronto e o usuário confirma de onde sai o
+    dinheiro. Um toque a mais é barato; debitar o cartão errado calado, não.
+
+  **Achado no caminho:** `"de novo"` (B15) depois de uma compra no cartão chamava
+  `applyLancamento`, que **recusa** crédito (`reason: 'handoff'`) — e o ramo de erro dizia ao
+  usuário *"erro do sistema"* numa operação que não falhou. Agora desvia para o picker.
+  O teste confere `CATS_HANDOFF` **contra o tx-builder de verdade**: se alguém ensinar o
+  `applyLancamento` a fazer crédito, o desvio é sinalizado em vez de virar cruft.
+
+  **5ª mordida do `\b`, e a primeira pega por medição e não por relato:** `outro|outra` não
+  casava `"e outros 80"` — o `s` do plural fica dentro da palavra e a fronteira nunca chega.
+  Virou `outr[oa]s?`.
+
+  **8 mutações aplicadas, 8 reprovaram o teste.** Uma 9ª expôs um buraco num teste ANTIGO:
+  `"a descrição NÃO é herdada"` passava com a descrição sendo herdada (`? ctx.descricao :`
+  ficava longe demais do `descricao:` para a regex negativa ver). Corrigido: o bloco agora
+  não pode ler **nenhum** `ctx.<campo>` direto.
   ⚠️ **Correção de um erro MEU no diagnóstico (2026-08-04).** Este item dizia: *"o parser local
   nunca leu 'ontem' — `dataOverride` não existe nele"*. **Era falso.** O parser lê data sim
   (`parseDataRelativa`, linha 596) — eu sondei o campo pelo nome errado (`dataOverride`, camelCase)
@@ -2647,8 +2674,9 @@ logado · gate no CI impedindo regressão.
   · 🔎 **Achado NOVO, ninguém relatou:** *"meus gastos de hoje"* virava
     **LANÇAMENTO**. Perguntar quanto gastou tentava registrar um gasto. É o tipo
     de frase que a pessoa tenta uma vez, recebe algo estranho e não repete.
-  · 🔴 **Falta:** continuação no crédito não herda contexto
-    (`#lastLancamentoCmd` só grava saída/entrada/reserva).
+  · ✅ **Continuação no crédito** (2026-08-08) — ver C-1 acima. `#lastLancamentoCmd`
+    agora é gravado pelo `applyCredito` também, e a regra mora em
+    `contexto-conversa.js` para não haver uma quarta cópia.
 
   ⭐ **A 5ª mordida do `` foi impedida com um TESTE, não com um conserto.**
   O roadmap pedia: *"o conserto certo é um teste de flexões sobre cada radical —

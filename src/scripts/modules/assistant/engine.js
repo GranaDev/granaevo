@@ -15,6 +15,7 @@ import { parseValorBR, parseDataFutura } from './money.js';
 import { toCommand } from './normalize.js';
 import { applyLancamento, undoLancamento, resolveMeta, applyCredito, undoCredito, applyRetirada,
     resolveContaFixa, applyPagamentoConta, undoPagamentoConta, applyOrcamento, undoOrcamento } from './tx-builder.js';
+import { guardarContexto, contextoValido, heranca, ehHandoff, JANELA_CONTEXTO_MS } from './contexto-conversa.js';
 import { bump } from './stats.js';
 import * as Outbox from './outbox.js';
 import { criarLembrete, desfazerLembrete, pushLiberado } from './reminders.js';
@@ -44,7 +45,7 @@ const ESCREVE = new Set(['lancar', 'pagar_conta', 'definir_orcamento', 'lembrete
 // não é uma conversa: o "e mais 30" de agora não continua o mercado de ontem à
 // noite. Fora da janela o assistente volta a perguntar, que é o comportamento
 // seguro. Não vale para o "de novo" (B15), que é um pedido explícito e sem prazo.
-const JANELA_CONTEXTO_MS = 10 * 60 * 1000;
+// A janela em si mora no contexto-conversa.js, junto da regra que a usa.
 const LIMITE_CONFIRM = 50000; // lançamentos acima disso pedem confirmação (anti-typo)
 const RE_SIM = /^(sim|s|isso|isso ai|confirmo|confirma|pode|pode ser|claro|com certeza|aha|ok|blz|manda|vai)\b/;
 const RE_NAO = /^(nao|n|cancela|deixa|esquece|para|nem|negativo)\b/;
@@ -638,16 +639,15 @@ class AssistantEngine {
             const ctx = this.#contextoLancamento();
             if (ctx) {
                 bump('local'); // resolvido no aparelho, sem gastar token de IA
+                // O que se herda (e o que NÃO se herda: descrição, parcelas,
+                // cartão) está em heranca(), no contexto-conversa.js.
+                const herda = heranca(ctx);
                 return this.#route(toCommand({
                     ...local,
                     intencao: 'lancar',
-                    categoria: ctx.categoria,
-                    tipo: local.tipo || ctx.tipo,
-                    // `meta_hint` em snake_case: é assim que o toCommand lê (ele
-                    // converte pra metaHint). Escrever `metaHint:` aqui compila,
-                    // não quebra teste nenhum e é silenciosamente ignorado — a
-                    // continuação de reserva perderia a meta e viraria pergunta.
-                    meta_hint: local.meta_hint || ctx.metaHint,
+                    categoria: herda.categoria,
+                    tipo: local.tipo || herda.tipo,
+                    meta_hint: local.meta_hint || herda.meta_hint,
                     // A descrição NUNCA é herdada: "e mais 30" depois de "50 de
                     // pão" é outro item, não mais pão. E quando o texto só tem o
                     // marcador, o extractDescricao devolve "Também"/"Outro" —
@@ -918,9 +918,9 @@ class AssistantEngine {
         this.#lastTxInfo = (cmd.categoria === 'saida' || cmd.categoria === 'entrada')
             ? { profileId, txSnap, cmd: { intent: 'lancar', categoria: cmd.categoria, tipo: cmd.tipo, descricao: cmd.descricao } }
             : null;
-        // B15: guarda o último lançamento (saida/entrada/reserva) p/ "de novo".
+        // B15: guarda o último lançamento p/ "de novo".
         // `_em` (C-1): contexto de conversa vence; "de novo" continua sem prazo.
-        this.#lastLancamentoCmd = { intent: 'lancar', categoria: cmd.categoria, tipo: cmd.tipo, descricao: cmd.descricao, valor: cmd.valor, metaHint: cmd.metaHint, _em: Date.now() };
+        this.#lastLancamentoCmd = guardarContexto(cmd);
         // Insight opcional pós-lançamento (A6/C24/C28/A9) — no máximo UM, e só quando faz sentido.
         const extra = this.#insightPos(res.transaction);
         return extra ? { multi: [view, { text: extra }] } : view;
@@ -1075,21 +1075,21 @@ class AssistantEngine {
     }
 
     // ── C-1: contexto da conversa, se ainda estiver fresco ─────────────────────
-    // Devolve o último lançamento só enquanto ele ainda é "a frase anterior".
-    // A comparação é `!(dt < janela)` e não `dt >= janela` de propósito: sem
-    // `_em` (contexto gravado por uma versão antiga, ainda em memória num
-    // aparelho que não recarregou) a conta dá NaN, e NaN precisa reprovar.
+    // A regra (inclusive o caso `_em` ausente, que precisa REPROVAR) mora no
+    // contexto-conversa.js, onde o teste consegue executá-la.
     #contextoLancamento() {
-        const c = this.#lastLancamentoCmd;
-        if (!c || !c.categoria) return null;
-        if (!(Date.now() - c._em < JANELA_CONTEXTO_MS)) return null;
-        return c;
+        return contextoValido(this.#lastLancamentoCmd);
     }
 
     // ── Repetir o último lançamento ("de novo", "mesma coisa") — B15 ────────────
     async #repetirUltimo() {
         const cmd = this.#lastLancamentoCmd;
         if (!cmd) return { text: P.nadaPraRepetir() };
+        // O crédito não passa pelo applyLancamento (ele devolve `handoff` e não
+        // grava nada). Sem este desvio, "de novo" depois de uma compra no cartão
+        // caía no ramo de erro e dizia ao usuário que o sistema falhou — quando
+        // na verdade era só o fluxo errado. Vai pro picker com o valor pronto.
+        if (ehHandoff(cmd.categoria)) return this.#doCredito(cmd);
         const profile = this.#active();
         const profileId = this.#activeId;
         // _confirmed: já confirmou da 1ª vez (não repergunta valor alto).
@@ -1251,6 +1251,12 @@ class AssistantEngine {
         const view = P.confirmacaoCredito(res);
         view.undo = () => this.#undoCredito(profileId, snap);
         this.#lastUndo = view.undo;
+        // C-1: o crédito também deixa contexto. Sem isto, "comprei 900 parcelado
+        // em 3x" seguido de "e mais 300" não era continuação de nada — o
+        // assistente reperguntava tudo. Aqui, e não no #doCredito, porque só
+        // aqui a compra existe de fato (o #doCredito ainda ia perguntar o
+        // cartão). Sem `parcelas` e sem `cardId` de propósito: ver heranca().
+        this.#lastLancamentoCmd = guardarContexto({ categoria: 'saida_credito', tipo, descricao, valor });
         return view;
     }
 

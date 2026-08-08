@@ -124,27 +124,32 @@ describe('C-1 — a fiação no engine', () => {
   test('a descrição NÃO é herdada do contexto', () => {
     // "e mais 30" depois de "50 de pão" é outro item, não mais pão.
     const bloco = CODIGO.slice(CODIGO.indexOf('ehContinuacao(text)'), CODIGO.indexOf('const offline'))
-    assert.ok(!/descricao:\s*ctx\.descricao/.test(bloco),
-      'herdar a descrição renomearia o novo lançamento com o item anterior')
-    assert.match(bloco, /descricaoVazia\(local\.descricao\)/)
+
+    // A forma EXATA, não "menciona descricaoVazia": o ramo verdadeiro tem de
+    // ser `null`. Um `? ctx.descricao :` no lugar do null passava por
+    // `!/descricao:\s*ctx\.descricao/` — o `descricao:` fica longe do `ctx.`.
+    assert.match(bloco, /descricao: descricaoVazia\(local\.descricao\) \? null : local\.descricao,/)
+
+    // E o contexto só pode ser tocado para checar validade e extrair a herança.
+    // Qualquer outro `ctx.<campo>` aqui é um campo sendo herdado por fora da
+    // regra — que é exatamente o que heranca() existe para impedir.
+    const usos = bloco.match(/\bctx\.\w+/g) || []
+    assert.deepEqual(usos, [], `nenhum campo do contexto lido direto: ${usos.join(', ')}`)
   })
 
-  test('o contexto tem prazo de validade', () => {
-    assert.match(CODIGO, /JANELA_CONTEXTO_MS = 10 \* 60 \* 1000/)
-    assert.match(CODIGO, /#contextoLancamento\(\)/)
-    // Aba aberta desde ontem não é conversa.
-    assert.match(CODIGO, /Date\.now\(\) - c\._em < JANELA_CONTEXTO_MS/)
-  })
-
-  test('contexto sem carimbo de tempo REPROVA', () => {
-    // A comparação é negada (`!(dt < janela)`) porque um contexto gravado por
-    // uma versão anterior, ainda vivo em memória num aparelho que não
-    // recarregou, dá NaN — e NaN passaria por qualquer `>=`.
-    assert.match(CODIGO, /if \(!\(Date\.now\(\) - c\._em < JANELA_CONTEXTO_MS\)\) return null;/)
+  // A regra da janela e do carimbo saiu para `contexto-conversa.js`, onde é
+  // EXECUTADA (ver assistente-contexto-credito.test.js). Aqui fica só a fiação:
+  // o engine tem de continuar chamando ela, e não uma cópia própria.
+  test('o contexto tem prazo de validade, e quem decide é o módulo', () => {
+    assert.match(CODIGO, /#contextoLancamento\(\) \{\s*return contextoValido\(this\.#lastLancamentoCmd\);/)
+    assert.ok(!/JANELA_CONTEXTO_MS = \d/.test(CODIGO), 'nenhuma segunda janela no engine')
   })
 
   test('o carimbo é gravado junto do último lançamento', () => {
-    assert.match(CODIGO, /#lastLancamentoCmd = \{[^}]*_em: Date\.now\(\)/)
+    // Toda gravação passa pelo guardarContexto (que carimba `_em`); nenhuma
+    // é montada à mão, que foi como o crédito ficou de fora por meses.
+    assert.match(CODIGO, /#lastLancamentoCmd = guardarContexto\(/)
+    assert.ok(!/#lastLancamentoCmd = \{/.test(CODIGO), 'nenhum contexto montado à mão')
   })
 
   test('a meta da reserva é herdada com a chave que o toCommand LÊ', () => {
@@ -158,7 +163,7 @@ describe('C-1 — a fiação no engine', () => {
       'se o toCommand passar a ler outra chave, o engine precisa acompanhar')
 
     const bloco = CODIGO.slice(CODIGO.indexOf('ehContinuacao(text)'), CODIGO.indexOf('const offline'))
-    assert.match(bloco, /meta_hint:\s*local\.meta_hint \|\| ctx\.metaHint/)
+    assert.match(bloco, /meta_hint:\s*local\.meta_hint \|\| herda\.meta_hint/)
   })
 
   test('o contexto morre no logout', () => {

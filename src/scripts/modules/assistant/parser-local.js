@@ -461,7 +461,10 @@ export function parseFollowup(rawText) {
 // ("30") continua virando pergunta de propósito: herdar a direção errada em
 // silêncio grava dinheiro que não existe, e o usuário só descobriria no fim do
 // mês, sem pista de onde veio. O "e" é o consentimento — sem ele, não há herança.
-const RE_CONTINUACAO = /^(e\s+)?(mais|tambem|tb|outro|outra)\b|^e\s+(?:r\$\s*)?\d/;
+// `outr[oa]s?` e não `outro|outra`: com `\b` depois, "e outros 80" não casava
+// — o `s` do plural fica DENTRO da palavra e a fronteira nunca chega. Mesma
+// armadilha que já comeu `gasto`, `deposit`, `parcelad` e `esquec` aqui.
+const RE_CONTINUACAO = /^(e\s+)?(mais|tambem|tb|outr[oa]s?)\b|^e\s+(?:r\$\s*)?\d/;
 
 // Marcadores de ligação que o extractDescricao lê como se fossem o item
 // comprado ("também 15" → descrição "Também"). Eles emendam frases, não
