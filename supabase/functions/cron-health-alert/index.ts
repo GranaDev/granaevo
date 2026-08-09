@@ -77,8 +77,31 @@ Deno.serve(async (req: Request) => {
   }
 
   const rows = Array.isArray(failures) ? failures : [];
-  if (rows.length === 0) {
-    return json({ ok: true, failures: 0 }); // tudo saudável — sem e-mail
+
+  // ── 2b. B-4 · Eventos de SEGURANÇA na última hora ───────────────────────────
+  // `fraud_logs` e `login_lockouts` registravam e ninguém lia: força bruta ou
+  // sequência de fraude ficavam esperando alguém abrir o painel.
+  //
+  // Pega carona nesta função de propósito. Uma rota nova em api/ seria a 11ª de
+  // 12, e a 13ª CONGELA todo o deploy da Vercel em silêncio — já custou um dia
+  // em 2026-07-25. O alerta de segurança não vale um slot desses.
+  //
+  // Fail-open: se a RPC falhar, o alerta de cron continua. Monitor que derruba
+  // o outro monitor é pior que monitor nenhum.
+  let seguranca: Record<string, unknown>[] = [];
+  try {
+    const { data, error: secErr } = await supabaseAdmin.rpc("get_security_events_recent", {
+      p_minutos: 60,
+      p_limiar: 5,
+    });
+    if (secErr) console.warn("[cron-health-alert] RPC de segurança falhou:", secErr.message);
+    else if (Array.isArray(data)) seguranca = data;
+  } catch (e) {
+    console.warn("[cron-health-alert] RPC de segurança indisponível:", (e as Error).message);
+  }
+
+  if (rows.length === 0 && seguranca.length === 0) {
+    return json({ ok: true, failures: 0, seguranca: 0 }); // tudo saudável — sem e-mail
   }
 
   // ── 3. Há falhas → alerta por e-mail (Resend) ───────────────────────────────
@@ -98,9 +121,32 @@ Deno.serve(async (req: Request) => {
       <td style="padding:8px 12px;border-bottom:1px solid #1e293b;color:#94a3b8;font-size:12px">${escapeHtml(String(r.last_message ?? "").slice(0, 300))}</td>
     </tr>`).join("");
 
-  const html = `<!DOCTYPE html><html><body style="background:#060810;font-family:system-ui,sans-serif;padding:32px">
-    <div style="max-width:640px;margin:0 auto;background:#0d1117;border:1px solid #ef444433;border-radius:16px;overflow:hidden">
-      <div style="background:#7f1d1d;padding:24px 32px"><h1 style="margin:0;color:#fff;font-size:20px">⚠️ GranaEvo — Cron Job com Falha</h1></div>
+  // Bloco de segurança: só existe no e-mail quando há o que dizer. Alerta que
+  // chega com seção vazia todo dia é alerta que se aprende a não abrir.
+  //
+  // `alvos` separa os dois ataques que a mesma contagem esconde: 30 bloqueios
+  // em 1 alvo é alguém insistindo numa conta; 30 em 30 alvos é varredura.
+  const segHtml = seguranca.length === 0 ? "" : `
+    <div style="padding:0 32px 8px"><h2 style="color:#fbbf24;font-size:15px;margin:16px 0 8px">🔐 Eventos de segurança (última hora)</h2></div>
+    <div style="padding:0 32px 24px">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th style="padding:8px 12px;text-align:left;color:#64748b;font-size:11px;text-transform:uppercase">Origem</th>
+          <th style="padding:8px 12px;text-align:center;color:#64748b;font-size:11px;text-transform:uppercase">Eventos</th>
+          <th style="padding:8px 12px;text-align:center;color:#64748b;font-size:11px;text-transform:uppercase">Alvos distintos</th>
+          <th style="padding:8px 12px;text-align:left;color:#64748b;font-size:11px;text-transform:uppercase">Mais recente</th>
+        </tr></thead>
+        <tbody>${seguranca.map((r) => `
+          <tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e293b;color:#f1f5f9;font-weight:600">${escapeHtml(String(r.fonte ?? "?"))}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e293b;color:#fbbf24;text-align:center">${escapeHtml(String(r.eventos ?? "?"))}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e293b;color:#94a3b8;text-align:center">${escapeHtml(String(r.alvos ?? "?"))}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #1e293b;color:#94a3b8;font-size:12px">${escapeHtml(String(r.mais_recente ?? ""))}</td>
+          </tr>`).join("")}</tbody>
+      </table>
+    </div>`;
+
+  const cronHtml = rows.length === 0 ? "" : `
       <div style="padding:24px 32px;color:#94a3b8;font-size:14px;line-height:1.6">
         <p>${rows.length} job(s) agendado(s) falharam nas últimas 24h. Verifique no Supabase.</p>
         <table style="width:100%;border-collapse:collapse;margin-top:16px">
@@ -111,7 +157,18 @@ Deno.serve(async (req: Request) => {
           </tr></thead>
           <tbody>${rowsHtml}</tbody>
         </table>
-      </div>
+      </div>`;
+
+  // O título diz o que aconteceu de pior: segurança manda no cabeçalho quando
+  // aparece, porque é o que muda a urgência de quem abre o e-mail.
+  const titulo = seguranca.length > 0
+    ? "🔐 GranaEvo — Eventos de segurança"
+    : "⚠️ GranaEvo — Cron Job com Falha";
+
+  const html = `<!DOCTYPE html><html><body style="background:#060810;font-family:system-ui,sans-serif;padding:32px">
+    <div style="max-width:640px;margin:0 auto;background:#0d1117;border:1px solid #ef444433;border-radius:16px;overflow:hidden">
+      <div style="background:#7f1d1d;padding:24px 32px"><h1 style="margin:0;color:#fff;font-size:20px">${titulo}</h1></div>
+      ${segHtml}${cronHtml}
     </div></body></html>`;
 
   try {
@@ -121,7 +178,12 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify({
         from: "GranaEvo Alertas <noreply@granaevo.com>",
         to: recipients,
-        subject: `⚠️ [GranaEvo] ${rows.length} cron job(s) falhando`,
+        // O assunto tem que dizer QUAL alarme tocou sem abrir o e-mail. Um
+        // assunto fixo de "cron falhando" num alerta de força bruta é ruído
+        // disfarçado de sinal — e alerta que mente é alerta que se ignora.
+        subject: seguranca.length > 0
+          ? `🔐 [GranaEvo] ${seguranca.reduce((s, r) => s + Number(r.eventos ?? 0), 0)} evento(s) de segurança na última hora`
+          : `⚠️ [GranaEvo] ${rows.length} cron job(s) falhando`,
         html,
       }),
       signal: AbortSignal.timeout(8_000),

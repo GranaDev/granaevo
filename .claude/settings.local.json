@@ -55,7 +55,12 @@
       "Bash(awk 'NR>=783&&NR<=790{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/pages/db-configuracoes.js)",
       "Bash(node scripts/check-policy-grant.mjs)",
       "Bash(node --check scripts/check-policy-grant.mjs)",
-      "Bash(echo \"sintaxe: $?\")"
+      "Bash(echo \"sintaxe: $?\")",
+      "Bash(awk 'NR>=996&&NR<=1020{printf \"%4d| %s\\\\n\",NR,$0}' src/scripts/modules/assistant/engine.js)",
+      "Bash(awk 'NR>=82&&NR<=125{printf \"%3d| %s\\\\n\",NR,$0}' supabase/functions/cron-health-alert/index.ts)",
+      "Bash(awk 'NR>=76&&NR<=100{printf \"%3d| %s\\\\n\",NR,$0}' api/user-data.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -X POST \"https://fvrhqqeofqedmhadzzqw.supabase.co/functions/v1/cron-health-alert\" -H \"Content-Type: application/json\" -d '{}')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -X POST \"https://www.granaevo.com/api/user-data?cron-health=1\" -H \"Origin: https://www.granaevo.com\" -H \"User-Agent: Mozilla/5.0 Chrome/126.0\")"
     ]
   }
 }
