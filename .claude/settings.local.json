@@ -41,7 +41,9 @@
       "Skill(claude-api)",
       "Skill(claude-api:*)",
       "Bash(awk 'NR>=805&&NR<=812{printf \"%4d| %s\\\\n\",NR,$0}' docs/roadmap-melhorias-dev.md)",
-      "Bash(node scripts/corpus-ia.mjs)"
+      "Bash(node scripts/corpus-ia.mjs)",
+      "Bash(awk 'NR>=240&&NR<=250{printf \"%4d| %s\\\\n\",NR,$0}' docs/roadmap-melhorias-dev.md)",
+      "Bash(awk 'NR>=330&&NR<=345{printf \"%4d| %s\\\\n\",NR,$0}' docs/roadmap-melhorias-dev.md)"
     ]
   }
 }

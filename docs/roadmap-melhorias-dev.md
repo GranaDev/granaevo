@@ -186,6 +186,25 @@ o app perder dado sem avisar.
 
 # 🧪 FILA DE TESTES MANUAIS — o que só o dono pode verificar
 
+## ▶️ ONDE RETOMAR (2026-08-10)
+
+> **Não sobrou item de código não-bloqueado.** O que existe está abaixo, e nada
+> disso é meu para começar sozinho.
+
+| O quê | De quem depende |
+|---|---|
+| **Retestar no app**: `joguin` / `joguinho` / `jogando` → **Jogos** no chat · T7 (*"e mais 300"* → *"num carrinho"*) · planilha com a aba **Retiradas** · indicador no mobile · cartões repintando | dono |
+| **Duas decisões do T2**: IDs saem do `.xlsx`? A aba "Avisos" ganha o lugar dela? | dono |
+| **Passo 8** — um login em prod com dados na tela | dono |
+| **Passo 27** — a DSN do Sentry (hoje a política declara um tratamento que não acontece) | dono |
+| **Passo 10** — descongelar o `dashboard.js`? Está em **40.8/42 KB** | dono |
+
+**Se ele mandar "Comece" sem escolher:** rode `node scripts/corpus-ia.mjs` (≈70 s,
+19 do teto diário de 120) e leia o placar antes de propor qualquer coisa. Foi o
+que achou os dois bugs de dinheiro de ontem.
+
+---
+
 ## ✅ FILA DE 2026-08-09 — ZERADA
 
 > Os 6 itens abaixo foram entregues, mais a **auditoria completa do assistente**
@@ -203,6 +222,23 @@ o app perder dado sem avisar.
 > | 1 | T7 — o valor que ficava no ar | `7621f99` |
 > | 3 | T2 — planilha sem JSON cru + aba Retiradas | `353993c` |
 > | 6 | `__sombra` diz QUAIS campos (nunca o valor) | `51f006d` |
+> | — | ⭐ `max_tokens` cortava a cauda do JSON — o C-8 estava **inerte** | `0dcedcd` |
+> | — | ⭐ `corpus-ia.mjs` — a régua que mede a IA de verdade | `046b476` |
+> | — | Passo 14 fechado (censo: zero usuários sem aceite) | `046b476` |
+>
+> **DOIS BUGS DE DINHEIRO, os dois achados MEDINDO e não por relato:**
+> · `comprei 2 ingressos por 80` gravava **R$ 160** — `por` é total, não unitário.
+> · `torrei 40 conto no joguinho` gravava **R$ 40.000** — o modelo aplicava o
+>   sentido histórico de "conto" (mil réis) porque o prompt nunca disse quanto vale.
+>
+> **A edge `chat-parse` foi deployada e verificada em produção, com antes e depois:**
+> `gastei 40 num jogo` → era **Lazer**, agora **Jogos**. Idem `joguin`, `joguinho`,
+> `jogando`. Placar da IA real: **19/19**.
+>
+> **A proteção C-8 disparou pela primeira vez desde que foi escrita.** O campo
+> `confianca` nunca chegava (cortado pelo teto de saída), o engine fazia
+> `Number(undefined)` → NaN, e "quando a IA não tem certeza, PERGUNTE" nunca rodava.
+> Uma trava inerte é pior que nenhuma: consta no código, tem teste, não protege.
 >
 > **⚠️ FALTA UM DEPLOY:** a edge `chat-parse` precisa subir para as categorias
 > valerem em produção. O resto é cliente e sobe no deploy normal da Vercel.
@@ -236,14 +272,14 @@ o app perder dado sem avisar.
 | **5** | **Cartões não repintam no tempo real** | Cosmético e verificado; só aparece se você estiver parado na tela deles |
 | **6** | **Revisar o sumiço do crédito** | Aconteceu uma vez e não reproduziu. Sem repro, é revisão de código, não caça |
 
-### 1 · T7 — o valor que fica no ar 🔴
+### 1 · T7 — o valor que ficava no ar ✅ (7621f99)
 Dito: *"Gastei 900 no cartão em 3x e em seguida 300 reais"*. Os 900 lançaram certo
 (`Nubank · 3x de R$ 300,00`). Os 300 viraram pergunta: *"Peguei R$ 300,00 — só me diz o
 que foi que eu lanço"*. O dono respondeu *"Os 300 foram num carrinho"* e **recebeu a
 mesma pergunta de novo**. O fluxo de valor pendente não aceita a descrição como resposta.
 Ver `#pendingValor` / `parseFollowup` no `engine.js`.
 
-### 2 · T3 — a IA precisa interpretar SEMPRE 🔴 ⭐
+### 2 · T3 — a IA precisa interpretar SEMPRE ✅ (3364e80 + deploy da edge)
 Dito: *"Retirei 52 reais da reserva de emergência e gastei num jogo"*. As duas transações
 saíram **certas** (retirada 52 + saída 52). A descrição da saída saiu
 **"Emergencia e num jogo"** — costura de pedaços de duas frases.
@@ -262,8 +298,8 @@ decide. Ver `CONF_LOCAL_OK`/`completude` no `engine.js` e `describe.js`.
 **Não chamar IA em toda mensagem** — sem receita ainda, é custo por conversa e não muda
 nada em *"gastei 50"*. O ganho está justamente nos casos como o de cima.
 
-### 3 · T2 — exportação (achados do teste) 🟡
-**Falta:** achatar as metas (JSON cru na célula) + duas decisões do dono (IDs na planilha, aba Avisos).
+### 3 · T2 — exportação (achados do teste) ✅ (353993c) · 🟡 duas decisões do dono
+**Falta:** só as duas decisões abaixo — o JSON cru foi resolvido.
 A planilha **exporta e abre** (o defeito antigo morreu). Três achados novos:
 - 🔴 **Metas saem com JSON cru numa célula:** mês → `{"2026-08":949}`; histórico → o array
   inteiro de `historicoRetiradas`. Prazo idem. Precisa achatar em colunas legíveis (ou aba
@@ -273,14 +309,12 @@ A planilha **exporta e abre** (o defeito antigo morreu). Três achados novos:
 - 🟡 **Aba "Avisos".** *Falta:* decisão do dono — o dono questiona se ganha o lugar dela — *"nada mais é que as
   notificações que estão pendentes"*. Decisão dele.
 
-### 4 · T5 — indicador no mobile 🟡
-**Falta:** só o CSS — encostar o indicador na linha do menu no celular e centralizar.
+### 4 · T5 — indicador no mobile ✅ (eac04d5)
 Funcionalidade **perfeita** ("Atualizando", "Salvo", "Fulano está online"). Só o lugar: no
 celular ele aparece **bem acima** da linha do menu de navegação. Quer encostado na linha e
 mais centralizado. Só CSS.
 
-### 5 · Cartões não repintam no tempo real 🟡
-**Falta:** incluir o render de cartões no atualizarTudo().
+### 5 · Cartões não repintam no tempo real ✅ (eac04d5)
 Verificado lendo a função inteira: `atualizarTudo()` ([dashboard.js:5146](src/scripts/pages/dashboard.js#L5146))
 repinta movimentações, resumo, contas fixas, metas, visual da meta e header de reservas —
 **cartões não estão ali**. Só incomoda quem está parado na tela de cartões quando o aviso
@@ -334,9 +368,9 @@ a confirmação de quem usa.
 | T4 presença | ✅ **OK** — *"funciona perfeitamente"* |
 | T5 indicador | ✅ **OK** — *"não tem no que mexer"* na função; só o lugar no mobile |
 | T6 retirada pela tela | ✅ **OK** — a que mexe em dinheiro passou |
-| T2 exportação | 🟡 exporta e abre. **Falta:** metas com JSON cru + 2 decisões (ver COMECE AQUI · 3) |
-| T3 descrição | 🟡 boa no caso simples. **Falta:** o portão da descrição chamar a IA (ver COMECE AQUI · 2) |
-| T7 continuação no crédito | 🟡 o crédito lançou certo. **Falta:** o 2º valor não fica no ar (ver COMECE AQUI · 1) |
+| T2 exportação | ✅ **CORRIGIDO** (353993c) — JSON cru virou texto legível + aba **Retiradas** nova. ⏳ retestar |
+| T3 descrição | ✅ **CORRIGIDO** (3364e80) — portão + descrição + higiene. ⏳ retestar |
+| T7 continuação no crédito | ✅ **CORRIGIDO** (7621f99) — o valor não fica mais no ar. ⏳ retestar |
 | T8 sumiço do crédito | ✅ **não reproduziu** — `__sombra` mostrou 0 operações na aba ociosa |
 
 > **Senha da conta de teste** (`oliveiralucas00224+teste2fa@gmail.com`) foi redefinida em
@@ -1351,7 +1385,7 @@ reativação de inativo, aviso de fatura.
 | 1.5 | 15 — HIBP no signup/reset (k-anonymity) ⭐ | 🔴 alto valor | ~2–3h | ✅ aplicado em prod (2026-07-14) |
 | 1.5 | 16 — Dependabot + npm audit | 🟢 baixo | ~15 min | ✅ npm audit já existia + dependabot criado (2026-07-14) |
 | 1 | 6 — MFA/TOTP grátis (Supabase) ⭐ | 🔴 alto valor | 1–2 dias | ✅ no ar — `mfa-api.js` + `auth-session.js` (45 refs) + login.js; recovery corrigido em 2026-08-03 |
-| 2 | 7 — Podar CSS morto + virtualizar listas | 🟡 médio | half-day | 🟡 **Falta:** destino das 34 classes de telas planejadas — poda e método feitos em 2026-07-31 |
+| 2 | 7 — Podar CSS morto + virtualizar listas | 🟡 médio | half-day | ✅ FECHADO 2026-08-08 — as 34 classes eram restos de features reescritas (72844cd) |
 | 2 | 8 — Aliviar vendors (Chart/Supabase) | 🟡 médio | half-day+ | 🟡 **Falta:** só um login em prod pós-deploy — realtime+functions stubados, 48,6 para 34,3 KB |
 | 2 | 9 — Boot otimista (IndexedDB) | 🔴 alto valor | 1–2 dias | 🔴 |
 | 2 | 10 — Split do `dashboard.js` ⭐ | 🔴 alto valor | 2–3 dias | 🔴 |
