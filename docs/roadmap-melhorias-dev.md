@@ -947,8 +947,21 @@ aceitaram o texto anterior e **não houve re-aceite**. A própria política prom
 
 ---
 
-## PASSO 14 — LGPD: aceite dos 4 usuários legados (gap M1) 🟡 PENDENTE
-**Falta:** que os 4 usuários sem aceite façam login — o gate já está armado e coleta o aceite na entrada. Não há trabalho de código; é espera.
+## PASSO 14 — LGPD: aceite dos 4 usuários legados (gap M1) ✅ FECHADO (2026-08-09)
+
+> **Censo novo no banco de prod (2026-08-09): ZERO usuários sem aceite.** Os 7 em
+> `auth.users` têm linha em `terms_acceptance`. Os quatro legados
+> (clarice, marcospaulo, mvet.joaocarlos, snakegames47) aceitaram a **1.1** quando
+> voltaram a logar — o gate do Passo 13 fez o trabalho sozinho, como projetado.
+>
+> Os quatro seguem na 1.1 e a versão vigente é a **1.2**
+> (`_shared/terms.ts:CURRENT_TERMS_VERSION`). Isso **não é pendência**: é o
+> re-aceite funcionando — eles aceitam a 1.2 no próximo login. O gap M1 era
+> "usuário sem NENHUM aceite", e ele não existe mais.
+>
+> ⚠️ Este passo ficou marcado 🟡 por semanas depois de já estar resolvido, e a
+> nota "só falta a Clarice" na seção de decisões estava vencida também. O censo
+> custou uma consulta. **Medir é mais barato que lembrar.**
 > **Censo no banco de prod (2026-07-16):** 8 usuários em `auth.users`; 5 linhas em `terms_acceptance`
 > (**4 na v1.0**, 1 na v1.1). **4 usuários sem NENHUMA linha de aceite — 3 deles ATIVOS** (com
 > assinatura ativa/trialing ou membro ativo de conta casal/família).

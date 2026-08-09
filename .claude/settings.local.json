@@ -39,7 +39,9 @@
       "Bash(awk 'NR>=236&&NR<=252{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/data-manager.js)",
       "Bash(awk 'NR>=276&&NR<=296{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/data-manager.js)",
       "Skill(claude-api)",
-      "Skill(claude-api:*)"
+      "Skill(claude-api:*)",
+      "Bash(awk 'NR>=805&&NR<=812{printf \"%4d| %s\\\\n\",NR,$0}' docs/roadmap-melhorias-dev.md)",
+      "Bash(node scripts/corpus-ia.mjs)"
     ]
   }
 }
