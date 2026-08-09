@@ -186,6 +186,41 @@ o app perder dado sem avisar.
 
 # 🧪 FILA DE TESTES MANUAIS — o que só o dono pode verificar
 
+## ✅ FILA DE 2026-08-09 — ZERADA
+
+> Os 6 itens abaixo foram entregues, mais a **auditoria completa do assistente**
+> que o dono pediu no meio do dia. Tudo medido, nada por impressão.
+>
+> **Régua do assistente (`assistente-corpus-interpretacao`): 14 → 26/26 · higiene 0 → 7/7.**
+> Testes 1386 → **1460**. `dashboard.js` 40.8/42 KB (intacto).
+>
+> | # | Item | Commit |
+> |---|---|---|
+> | — | Corpus de interpretação (a régua) | `f4fb978` |
+> | — | ⭐ `por` = total: "2 ingressos por 80" gravava **160** | `6cb96b1` |
+> | — | Categorias (enum) · portão · descrição · higiene | `3364e80` |
+> | 5 | Cartões repintam + indicador no mobile | `eac04d5` |
+> | 1 | T7 — o valor que ficava no ar | `7621f99` |
+> | 3 | T2 — planilha sem JSON cru + aba Retiradas | `353993c` |
+> | 6 | `__sombra` diz QUAIS campos (nunca o valor) | `51f006d` |
+>
+> **⚠️ FALTA UM DEPLOY:** a edge `chat-parse` precisa subir para as categorias
+> valerem em produção. O resto é cliente e sobe no deploy normal da Vercel.
+>
+> **Teste manual que sobrou p/ o dono:** *"gasteis 40 reals num joguin"*,
+> *"torrei 40 conto no joguinho"* e *"gastei R$40 jogando"* têm de cair em
+> **Jogos**. A régua prova que a IA RECEBE a lista certa e É consultada; que ela
+> RESPONDE certo só o teste com rede confirma.
+>
+> **Item 6 fechado SEM código:** eu propus dar um `operations[]` ao schema da IA
+> para múltiplas operações. Medindo, é desnecessário e seria pior — o
+> `splitCompound` já divide "gastei X e paguei Y" em dois comandos e o
+> `parseRetiradaComUso` já separa retirada+uso, tudo de forma determinística e
+> sem deixar a IA inventar uma segunda transação.
+
+<details>
+<summary>A fila original (2026-08-09), como foi escrita</summary>
+
 ## ▶️ COMECE AQUI (2026-08-09) — a fila, em ordem
 
 > O dono testou os 8 itens em produção em 2026-08-08. **Quatro passaram limpos**
@@ -267,6 +302,8 @@ Fica um fio solto: **5 `set` no save 1 com o dashboard parado**. `set` é campo 
 não coleção — provavelmente o reparo idempotente de fatura no load. Vale entender que
 campos são; se algum carregar valor velho, é por ali que o sumiço volta.
 **Sem reprodução, isto é revisão de código, não caça ao bug.**
+
+</details>
 
 ---
 
