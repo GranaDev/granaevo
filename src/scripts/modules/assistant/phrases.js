@@ -677,8 +677,19 @@ export function editarAntigoMsg() {
 // eram só gasto/entrada, e quem tinha tirado da reserva ficava sem saída. O
 // engine guarda o valor (#pendingValorAmbiguo), então responder por escrito
 // ("retirada da caixinha") também funciona, não só os chips.
-export function perguntarGastoOuEntrada(valor) {
-    return `Peguei *${formatBRL(valor)}* — só me diz o que foi que eu lanço.`;
+export function perguntarGastoOuEntrada(valor, descricao) {
+    // ⚠️ A FRASE ANTIGA PEDIA A COISA ERRADA. Era "só me diz o que foi que eu
+    // lanço" — que convida o ITEM ("num carrinho"), enquanto os chips e o
+    // engine esperam a DIREÇÃO. O dono respondeu "os 300 foram num carrinho" em
+    // 2026-08-08 e levou a mesma pergunta de volta.
+    //
+    // O engine agora aceita as duas respostas, mas perguntar direito é metade
+    // do conserto: pergunta ambígua produz resposta ambígua.
+    //
+    // Com o item já sabido, ele volta na frase — mostra que foi ouvido e a
+    // pessoa não precisa repetir.
+    const oQue = descricao ? ` de *${descricao}*` : '';
+    return `Peguei *${formatBRL(valor)}*${oQue} — foi gasto, entrada ou reserva?`;
 }
 
 // B15: repetição do último lançamento

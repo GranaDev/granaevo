@@ -26,7 +26,12 @@
       "Bash(awk 'NR>=1317&&NR<=1335{printf \"%4d| %s\\\\n\",NR,$0}' src/scripts/pages/dashboard.js)",
       "Bash(awk 'NR>=5246&&NR<=5272{printf \"%4d| %s\\\\n\",NR,$0}' src/styles/dashboard/_db-all.css)",
       "Bash(awk 'NR>=170&&NR<=180{printf \"%4d| %s\\\\n\",NR,$0}' src/styles/dashboard/_db-all.css)",
-      "Bash(node scripts/css-mortas.mjs)"
+      "Bash(node scripts/css-mortas.mjs)",
+      "Bash(awk 'NR>=505&&NR<=545{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/assistant/engine.js)",
+      "Bash(awk 'NR>=675&&NR<=692{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/assistant/phrases.js)",
+      "Bash(awk 'NR>=812&&NR<=826{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/assistant/engine.js)",
+      "Bash(awk 'NR>=821&&NR<=836{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/assistant/engine.js)",
+      "Bash(node --test tests/unit/assistente-valor-no-ar.test.js)"
     ]
   }
 }

@@ -69,6 +69,7 @@ class AssistantEngine {
     // Guarda a DESCRIÇÃO junto: em "109,05 com fita de led" o item também morreria
     // na pergunta — o chip devolve só o número, e o lançamento sairia como "Gasto".
     #pendingValorAmbiguo = null; // { valor, descricao, dataOverride }
+    #itemJaPerguntado = false;  // trava de UMA repergunta quando a resposta traz o item, não a direção
     #lastUndo = null;       // fn de desfazer do último lançamento (desfazer por texto)
     #lastQuery = null;      // { consultaAlvo, palavrasChave, periodo } p/ follow-up
     #lastTxInfo = null;     // { profileId, txSnap, cmd } p/ correção inline (B20)
@@ -84,6 +85,7 @@ class AssistantEngine {
         this.#ready = false;
         this.#pendingReserva = this.#pendingRetirada = this.#pendingCredito = this.#pendingConfirm = null;
         this.#pendingConta = this.#pendingLembrete = this.#pendingValorAmbiguo = null;
+        this.#itemJaPerguntado = false;
         this.#lastUndo = this.#lastQuery = this.#lastTxInfo = this.#lastLancamentoCmd = null;
     }
 
@@ -510,11 +512,21 @@ class AssistantEngine {
         // o valor embutido no texto) e responder por escrito era um beco sem saída.
         if (this.#pendingValorAmbiguo) {
             const pend = this.#pendingValorAmbiguo;
-            this.#pendingValorAmbiguo = null;
             const p = parseLocal(text);
-            // Só combina quando a resposta é direção PURA. Se trouxe valor novo,
-            // o usuário mudou de assunto — segue o fluxo normal (sem duplicar).
-            if (p.intencao === 'lancar' && p.categoria && !(p.valor > 0)) {
+
+            // ⭐ REPETIR O VALOR NA RESPOSTA NÃO É MUDAR DE ASSUNTO.
+            //
+            // Era `!(p.valor > 0)`: qualquer número na resposta cancelava o
+            // encaixe. Só que "os 300 foram num carrinho" é a forma mais natural
+            // de responder — a pessoa repete o valor para dizer de qual ela
+            // fala. Relatado pelo dono em 2026-08-08: ele respondeu isso e
+            // recebeu A MESMA PERGUNTA de volta, e os 300 ficaram no ar.
+            // Valor DIFERENTE segue sendo assunto novo (e aí não pode duplicar).
+            const valorNovo = p.valor > 0 && p.valor !== pend.valor;
+
+            if (!valorNovo && p.intencao === 'lancar' && p.categoria) {
+                this.#pendingValorAmbiguo = null;
+                this.#itemJaPerguntado = false;  // sem isto, o PRÓXIMO valor solto já nasceria sem direito à repergunta
                 return this.#route(toCommand({
                     ...p, valor: pend.valor,
                     // A descrição da resposta ("foi um gasto") não descreve nada —
@@ -526,7 +538,29 @@ class AssistantEngine {
                     confianca: 0.9, source: 'local',
                 }));
             }
-            // não era direção → cai no fluxo normal
+
+            // ⭐ RESPONDEU O ITEM, NÃO A DIREÇÃO — guarda e pergunta de novo, uma
+            // vez só, com o item na mão.
+            //
+            // A pergunta ("me diz o que foi") CONVIDA essa resposta, então
+            // recusá-la e repetir a mesma frase é um beco: o usuário responde
+            // certo do ponto de vista dele e não sai do lugar. Medido: "num
+            // carrinho", "foi um carrinho" e "carrinho" davam todos em nada,
+            // embora o extractDescricao já lesse "Carrinho" nos três.
+            //
+            // NÃO adivinha a direção a partir do item. Um "carrinho" tanto pode
+            // ter sido comprado quanto vendido, e chutar aqui grava dinheiro no
+            // sentido errado — o erro mais caro que este app comete.
+            const doItem = extractDescricao(text).descricao;
+            if (!valorNovo && doItem && !this.#itemJaPerguntado) {
+                this.#itemJaPerguntado = true;   // uma repergunta, nunca um loop
+                this.#pendingValorAmbiguo = { ...pend, descricao: doItem };
+                return this.#perguntarDirecao(pend.valor, doItem);
+            }
+
+            this.#pendingValorAmbiguo = null;
+            this.#itemJaPerguntado = false;
+            // não era nem direção nem item → cai no fluxo normal
         }
 
         // Follow-up de consulta ("e no mês passado?", "e transporte?") — reusa
@@ -818,15 +852,7 @@ class AssistantEngine {
                 // não repete o "ontem", então sem guardar aqui o lançamento sai com a
                 // data de hoje — silenciosamente, num dado que a pessoa já tinha dado.
                 this.#pendingValorAmbiguo = { valor: v, descricao: cmd.descricao || null, dataOverride: cmd.dataOverride || null };
-                return {
-                    text: P.perguntarGastoOuEntrada(v),
-                    quickReplies: [
-                        { label: 'Foi um gasto', text: `gastei ${v}` },
-                        { label: 'Foi uma entrada', text: `recebi ${v}` },
-                        { label: 'Guardei na reserva', text: `guardei ${v}` },
-                        { label: 'Tirei da reserva', text: `retirei ${v} da reserva` },
-                    ],
-                };
+                return this.#perguntarDirecao(v, cmd.descricao || null);
             }
 
             case 'lancar':
@@ -1085,6 +1111,24 @@ class AssistantEngine {
         const fn = this.#lastUndo;
         this.#lastUndo = null;
         try { return await fn(); } catch { return { text: P.SISTEMA.erro() }; }
+    }
+
+    /**
+     * A pergunta da direção — UM lugar só, porque agora ela é feita de dois
+     * pontos: quando o valor chega solto, e quando o usuário respondeu com o
+     * item em vez da direção. Duas cópias divergiriam nos chips, e o chip é o
+     * que reenvia o valor.
+     */
+    #perguntarDirecao(valor, descricao) {
+        return {
+            text: P.perguntarGastoOuEntrada(valor, descricao),
+            quickReplies: [
+                { label: 'Foi um gasto', text: `gastei ${valor}` },
+                { label: 'Foi uma entrada', text: `recebi ${valor}` },
+                { label: 'Guardei na reserva', text: `guardei ${valor}` },
+                { label: 'Tirei da reserva', text: `retirei ${valor} da reserva` },
+            ],
+        };
     }
 
     // ── C-1: contexto da conversa, se ainda estiver fresco ─────────────────────
