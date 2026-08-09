@@ -201,3 +201,69 @@ describe('⭐ nada de JSON cru dentro de uma célula', () => {
     }
   })
 })
+
+describe('⭐ a planilha não mostra id interno — mas não perde a ligação', () => {
+  // Decisão do dono (2026-08-09): a aba Transações trazia SEIS colunas de UUID
+  // e nenhuma diz nada a quem abre o arquivo para conferir o mês.
+  //
+  // A LGPD não é afetada: o JSON é que cumpre a portabilidade (art. 18, V) e
+  // segue com todos os ids. A planilha é para LER.
+  const PACOTE = {
+    dados_financeiros: [{
+      nome: 'X', id: 'p1',
+      transacoes: [
+        { id: 't1', data: '01/08', descricao: 'Retirada: Viagem', valor: 50, categoria: 'retirada_reserva', metaId: 'm1' },
+        { id: 't2', data: '02/08', descricao: 'Parcela tênis', valor: 99, categoria: 'saida_credito', cartaoId: 'c1', faturaId: 'f1', compraId: 'x9', contaFixaId: 'cf1' },
+      ],
+      metas: [{ id: 'm1', nome: 'Viagem', saved: 100 }],
+      cartoesCredito: [{ id: 'c1', nomeBanco: 'Nubank', limite: 1000 }],
+      contasFixas: [{ id: 'cf1', nome: 'Luz', valor: 120, cartaoId: 'c1' }],
+    }],
+  }
+  const abas = montarPlanilha(PACOTE)
+  const cabecalho = (n) => abas.find((a) => a.nome === n).linhas[0].map((c) => String(c?.v ?? c))
+  const corpo = (n) => abas.find((a) => a.nome === n).linhas.slice(1)
+    .map((l) => l.map((c) => String(c?.v ?? c)))
+
+  test('⭐ nenhuma aba tem coluna de id — a CONDIÇÃO, não o caso', () => {
+    // Campo novo terminado em Id cai aqui antes de chegar ao usuário.
+    for (const aba of abas) {
+      if (aba.nome === 'Resumo') continue     // o Resumo é texto corrido, não tabela
+      for (const h of aba.linhas[0].map((c) => String(c?.v ?? c))) {
+        assert.ok(!/^id$|\bid$/i.test(h), `coluna de id sobrou na aba ${aba.nome}: "${h}"`)
+      }
+    }
+  })
+
+  test('⭐ e nenhuma CÉLULA carrega um id disfarçado de valor', () => {
+    // Tirar o cabeçalho e deixar o UUID no corpo seria trocar de lugar, não resolver.
+    for (const aba of abas) {
+      if (aba.nome === 'Resumo') continue
+      for (const linha of aba.linhas.slice(1)) {
+        for (const c of linha) {
+          const v = String(c?.v ?? c)
+          assert.ok(!/^(t\d|m\d|c\d|cf\d|f\d|x\d|p\d)$/.test(v), `id cru numa célula de ${aba.nome}: "${v}"`)
+        }
+      }
+    }
+  })
+
+  test('a referência vira NOME — a informação não se perde', () => {
+    const h = cabecalho('Transações')
+    for (const col of ['Reserva', 'Cartão', 'Conta fixa']) {
+      assert.ok(h.includes(col), `faltou a coluna ${col}`)
+    }
+    const linhas = corpo('Transações')
+    assert.ok(linhas[0].includes('Viagem'), 'a retirada precisa dizer de qual reserva saiu')
+    assert.ok(linhas[1].includes('Nubank'), 'a compra precisa dizer em qual cartão foi')
+  })
+
+  test('referência órfã não vira coluna vazia', () => {
+    // Um metaId apontando para meta apagada não pode criar uma coluna "Reserva"
+    // em branco na aba inteira.
+    const orfa = montarPlanilha({ dados_financeiros: [{ nome: 'X',
+      transacoes: [{ id: 't1', data: '01/08', descricao: 'x', valor: 1, metaId: 'sumiu' }], metas: [] }] })
+    const h = orfa.find((a) => a.nome === 'Transações').linhas[0].map((c) => String(c?.v ?? c))
+    assert.ok(!h.includes('Reserva'))
+  })
+})

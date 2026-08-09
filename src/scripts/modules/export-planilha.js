@@ -117,15 +117,65 @@ export function celula(chave, valor) {
     return { v: String(valor), s: S.texto };
 }
 
+/**
+ * Identificadores internos: SAEM da planilha, FICAM no JSON.
+ *
+ * Decisão do dono (2026-08-09). A aba Transações trazia SEIS colunas de UUID —
+ * `ID`, `Meta (id)`, `Cartao id`, `Fatura id`, `Compra id`, `Conta fixa id` —
+ * e nenhuma diz nada a quem abre o arquivo para conferir o mês.
+ *
+ * ⚠️ ISTO NÃO AFETA A LGPD. Os dois arquivos têm funções diferentes: a planilha
+ * é para LER, o JSON é para LEVAR EMBORA, e é o JSON que cumpre o art. 18, V
+ * (portabilidade). O JSON segue com todos os ids — é o mesmo pacote de sempre.
+ *
+ * ⚠️ E NÃO PERDE INFORMAÇÃO. Onde o id era a única pista de a QUE algo se
+ * referia — em qual cartão foi a compra, de qual reserva saiu — ele vira o
+ * NOME, em `resolverReferencias` logo abaixo. Apagar sem resolver teria trocado
+ * ilegível por incompleto.
+ */
+const ID_INTERNO = new Set(['id', 'metaId', 'cartaoId', 'faturaId', 'compraId', 'contaFixaId', 'assinaturaId']);
+
 /** Tabela genérica: as colunas saem da união das chaves de todas as linhas. */
 function tabela(itens) {
     const colunas = [];
     for (const it of itens) {
         if (!it || typeof it !== 'object') continue;
-        for (const k of Object.keys(it)) if (!colunas.includes(k)) colunas.push(k);
+        for (const k of Object.keys(it)) if (!colunas.includes(k) && !ID_INTERNO.has(k)) colunas.push(k);
     }
     if (colunas.length === 0) return null;
     return { colunas, linhas: itens.map(it => colunas.map(c => celula(c, it?.[c]))) };
+}
+
+/** Nome legível de um registro, na ordem em que o app os batiza. */
+const nomeDe = (r) => String(r?.nome ?? r?.nomeBanco ?? r?.descricao ?? '').trim();
+
+/** id → nome, por coleção, dentro de UM perfil (ids não cruzam perfis). */
+function indice(perfil, chave) {
+    const m = new Map();
+    for (const r of (Array.isArray(perfil?.[chave]) ? perfil[chave] : [])) {
+        if (r?.id != null) m.set(String(r.id), nomeDe(r));
+    }
+    return m;
+}
+
+/**
+ * Troca a referência interna pelo nome antes de o id ser descartado.
+ * "Cartao id: 9f2c…" vira "Cartão: Nubank" — a mesma informação, legível.
+ * Só acrescenta a coluna quando há nome: referência órfã não vira célula vazia
+ * numa aba inteira.
+ */
+function resolverReferencias(item, perfil) {
+    const fora = { ...item };
+    for (const [fk, colecao, rotuloCol] of [
+        ['cartaoId', 'cartoesCredito', 'Cartão'],
+        ['metaId', 'metas', 'Reserva'],
+        ['contaFixaId', 'contasFixas', 'Conta fixa'],
+    ]) {
+        if (item?.[fk] == null) continue;
+        const nome = indice(perfil, colecao).get(String(item[fk]));
+        if (nome) fora[rotuloCol] = nome;
+    }
+    return fora;
 }
 
 /** Junta a mesma lista de todos os perfis, prefixando a coluna "Perfil". */
@@ -133,7 +183,7 @@ function porPerfil(perfis, chave) {
     const juntos = [];
     for (const p of perfis) {
         const lista = Array.isArray(p?.[chave]) ? p[chave] : [];
-        for (const item of lista) juntos.push({ Perfil: p?.nome ?? '—', ...item });
+        for (const item of lista) juntos.push({ Perfil: p?.nome ?? '—', ...resolverReferencias(item, p) });
     }
     return juntos;
 }

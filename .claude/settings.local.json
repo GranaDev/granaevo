@@ -44,7 +44,11 @@
       "Bash(node scripts/corpus-ia.mjs)",
       "Bash(awk 'NR>=240&&NR<=250{printf \"%4d| %s\\\\n\",NR,$0}' docs/roadmap-melhorias-dev.md)",
       "Bash(awk 'NR>=330&&NR<=345{printf \"%4d| %s\\\\n\",NR,$0}' docs/roadmap-melhorias-dev.md)",
-      "Bash(grep -oE \"^### [A-Z]+-[0-9]+ · [^\\\\`]+\" docs/caminho-10-10-2026-07-27.md)"
+      "Bash(grep -oE \"^### [A-Z]+-[0-9]+ · [^\\\\`]+\" docs/caminho-10-10-2026-07-27.md)",
+      "Bash(awk 'NR>=106&&NR<=135{printf \"%s\\\\n\",$0}' docs/testes-manuais-pendentes.md)",
+      "Bash(awk '/^### 2\\\\.1/,/^### 2\\\\.2/' docs/testes-manuais-pendentes.md)",
+      "Bash(awk '/^### 2\\\\.2/,0' docs/testes-manuais-pendentes.md)",
+      "Bash(grep -vE \"^\\\\s*$\")"
     ]
   }
 }
