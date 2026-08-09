@@ -97,3 +97,44 @@ describe('o schema TRAVA a categoria — a IA não pode inventar', () => {
     }
   })
 })
+
+describe('⭐ o teto de saída cabe o schema inteiro', () => {
+  // Achado em produção 2026-08-09: com `max_tokens: 300` a resposta chegava com
+  // 14 dos 17 campos obrigatórios — faltando os TRÊS ÚLTIMOS da lista
+  // `required`: lembrete_texto, lembrete_data e `confianca`. Não era o `strict`
+  // falhando; era a cauda do JSON sendo cortada.
+  //
+  // O campo perdido mais caro era o `confianca`: o engine faz
+  // `Number(ai.parse?.confianca)` → NaN, e o C-8 ("quando a IA não tem certeza,
+  // PERGUNTE") nunca disparava. Uma trava inerte é pior que nenhuma — consta no
+  // código, tem teste, e não protege ninguém.
+  // ⚠️ PENEIRA OS COMENTÁRIOS. Sem isto, a regex casava o `max_tokens: 300`
+  // escrito DENTRO do comentário que explica o conserto — o teste lia a
+  // documentação do bug em vez do código, e reprovava com o teto já corrigido.
+  // Mesma armadilha que este repositório já anotou: comentário aqui cita o
+  // código que explica, então toda asserção sobre fonte tem de filtrar antes.
+  const SO_CODIGO = EDGE.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+  const teto = Number((SO_CODIGO.match(/max_tokens:\s*(\d+)/) || [])[1])
+  const obrigatorios = (() => {
+    const i = EDGE.indexOf('    required: [')
+    return EDGE.slice(i, EDGE.indexOf(']', i)).match(/'[a-z_]+'/g).length
+  })()
+
+  test('o teto comporta os campos obrigatórios com folga', () => {
+    // ~18 tokens por campo é a medida grosseira que bate com a saída real.
+    // Não é precisão: é uma trava contra alguém baixar o teto sem perceber que
+    // a cauda some CALADA — a API devolve um JSON válido e mais curto.
+    assert.ok(teto >= obrigatorios * 18,
+      `max_tokens=${teto} é apertado para ${obrigatorios} campos obrigatórios`)
+  })
+
+  test('⭐ `confianca` não pode ser o último do required', () => {
+    // Se a cauda voltar a ser cortada por qualquer motivo, o campo que some
+    // primeiro não pode ser o que protege o dinheiro.
+    const i = EDGE.indexOf('    required: [')
+    const lista = EDGE.slice(i, EDGE.indexOf(']', i)).match(/'[a-z_]+'/g).map((s) => s.slice(1, -1))
+    assert.ok(lista.includes('confianca'))
+    assert.notEqual(lista[lista.length - 1], 'confianca',
+      'deixe outro campo por último — a cauda é o que se perde')
+  })
+})

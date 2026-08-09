@@ -225,10 +225,16 @@ const PARSE_TOOL = {
           'Responder 0,9 por hábito desliga a proteção e transforma palpite em lançamento gravado.',
       },
     },
+    // ⚠️ `confianca` VEM CEDO DE PROPÓSITO. O modelo emite os campos nesta
+    // ordem, então a cauda é o que se perde se a saída for cortada — e foi
+    // exatamente o que aconteceu com `max_tokens: 300` (2026-08-09): sumiram os
+    // três últimos, entre eles a confiança, deixando a proteção C-8 inerte.
+    // O teto agora tem folga, mas o campo que decide "gravo ou pergunto?" não
+    // fica dependendo disso. Um teste reprova se ele voltar para o fim.
     required: [
-      'intencao', 'categoria', 'valor', 'tipo', 'descricao', 'meta_hint',
+      'intencao', 'confianca', 'categoria', 'valor', 'tipo', 'descricao', 'meta_hint',
       'parcelas', 'cartao_hint', 'aporte_mensal', 'periodo', 'palavras_chave', 'consulta_alvo',
-      'data_override', 'conta_hint', 'lembrete_texto', 'lembrete_data', 'confianca',
+      'data_override', 'conta_hint', 'lembrete_texto', 'lembrete_data',
     ],
   },
 }
@@ -386,7 +392,20 @@ Deno.serve(async (req: Request) => {
 
   const body = {
     model: MODEL,
-    max_tokens: 300,
+    // ⚠️ ERA 300, E CORTAVA A CAUDA DO JSON — medido em produção 2026-08-09.
+    // O schema tem 17 campos obrigatórios; a resposta chegava com 14 e os TRÊS
+    // ÚLTIMOS da lista `required` faltando: lembrete_texto, lembrete_data e
+    // `confianca`. Não era o `strict` falhando — era o teto de saída.
+    //
+    // O campo perdido mais caro era o `confianca`: o engine faz
+    // `Number(ai.parse?.confianca)` → NaN, e a proteção C-8 ("quando a IA diz
+    // que não tem certeza, PERGUNTE em vez de gravar") nunca disparava. Uma
+    // trava de segurança inerte é pior que nenhuma: ela consta no código, tem
+    // teste, e não protege ninguém.
+    //
+    // 600 dá folga de sobra (a saída completa passa pouco de 300) sem custo
+    // real: cobra-se o que é gerado, não o teto.
+    max_tokens: 600,
     system: [
       { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
     ],
