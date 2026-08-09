@@ -45,22 +45,36 @@ export function parseValorBR(text) {
 
 /**
  * Aritmética simples de quantidade × preço unitário:
- *   "2 cafés de 8" = 16 · "3 pães a 2,50" = 7,5 · "4 cervejas por 6" = 24.
+ *   "2 cafés de 8" = 16 · "3 pães a 2,50" = 7,5 · "4 cervejas vezes 6" = 24.
  * Conservador: exige um substantivo entre a quantidade e o conector,
  * quantidade 2..99, ignora palavras de moeda como "substantivo".
+ *
+ * ⚠️ `por` NÃO ENTRA AQUI — e entrava até 2026-08-09, gravando o dobro CALADO.
+ * Em português `por` anuncia o preço TOTAL, não o unitário:
+ *   "comprei 2 ingressos POR 80"  → 80  (o app gravava 160)
+ *   "comprei 12 ovos POR 18"      → 18  (gravava 216)
+ * O sentido de total é tão firme que o próprio prompt da IA usa "vendi meu
+ * celular POR 500" para dizer quanto entrou. `de` e `a` continuam: aqueles sim
+ * anunciam o unitário ("3 pães A 2,50").
+ *
+ * Devolver `null` quando o conector é `por` NÃO bastaria: o parser de valor
+ * pegaria o primeiro número da frase, que é a QUANTIDADE — "2 ingressos por 80"
+ * viraria R$ 2. Por isso o `por` é reconhecido e devolve o valor ANUNCIADO.
+ *
  * @returns {number|null}
  */
 export function parseAritmetica(text) {
     if (typeof text !== 'string') return null;
     const t = text.toLowerCase();
-    const m = t.match(/\b([2-9]|[1-9]\d)\s+([\p{L}][\p{L}\s]{1,20}?)\s+(?:de|a|por|vezes)\s+(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\b/u);
+    const m = t.match(/\b([2-9]|[1-9]\d)\s+([\p{L}][\p{L}\s]{1,20}?)\s+(de|a|por|vezes)\s+(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\b/u);
     if (!m) return null;
     const noun = m[2].trim();
     if (/\b(reais?|pila|pilas|conto|contos|mango|mangos|pau|paus)\b/.test(noun)) return null;
     const qtd = parseInt(m[1], 10);
-    const unit = _parseNum(m[3], null);
-    if (unit === null || qtd < 2 || qtd > 99) return null;
-    const total = Math.round(qtd * unit * 100) / 100;
+    const valor = _parseNum(m[4], null);
+    if (valor === null || qtd < 2 || qtd > 99) return null;
+    // `por` = total anunciado; `de`/`a`/`vezes` = unitário, então multiplica.
+    const total = m[3] === 'por' ? valor : Math.round(qtd * valor * 100) / 100;
     return total > 0 && total <= 100_000_000 ? total : null;
 }
 

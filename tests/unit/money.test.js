@@ -56,7 +56,24 @@ describe('parseValorBR — valor monetário de texto livre', () => {
 describe('parseAritmetica — quantidade × preço unitário', () => {
   test('"2 cafés de 8" → 16', () => assert.equal(parseAritmetica('2 cafés de 8'), 16))
   test('"3 pães a 2,50" → 7,5', () => assert.equal(parseAritmetica('3 pães a 2,50'), 7.5))
-  test('"4 cervejas por 6" → 24', () => assert.equal(parseAritmetica('4 cervejas por 6'), 24))
+  // ⭐ MUDOU EM 2026-08-09, e a mudança é intencional: era 24, agora é 6.
+  //
+  // Esta linha afirmava que `por` anuncia preço UNITÁRIO, igual a `de` e `a`.
+  // Em português `por` anuncia o preço TOTAL — é a preposição do que se pagou:
+  // "vendi por 500", "comprei por 80", "paguei por 40". Com o sentido antigo o
+  // app gravava o dobro sem avisar:
+  //   "comprei 2 ingressos por 80"  → 160
+  //   "comprei 12 ovos por 18"      → 216   ← ninguém paga isso em ovos
+  // O próprio prompt da IA (chat-parse) usa "vendi meu celular POR 500" com o
+  // sentido de total, então o sistema se contradizia.
+  //
+  // `de` e `a` seguem multiplicando — ali o unitário é o sentido certo.
+  test('"4 cervejas por 6" → 6 (por = TOTAL pago, não unitário)', () =>
+    assert.equal(parseAritmetica('4 cervejas por 6'), 6))
+  test('"2 ingressos por 80" → 80, não 160', () =>
+    assert.equal(parseAritmetica('2 ingressos por 80'), 80))
+  test('"12 ovos por 18" → 18, não 216', () =>
+    assert.equal(parseAritmetica('12 ovos por 18'), 18))
   test('substantivo de moeda é rejeitado ("2 reais de 8") → null', () =>
     assert.equal(parseAritmetica('2 reais de 8'), null))
   test('quantidade 1 não dispara (exige 2..99) → null', () =>

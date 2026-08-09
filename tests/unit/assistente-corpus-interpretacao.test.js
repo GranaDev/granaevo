@@ -83,9 +83,9 @@ const CORPUS = [
   //   "2 ingressos POR 80" = 80, não 160
   // O próprio prompt da IA usa "vendi meu celular POR 500" com esse sentido.
   // Consequência: o app grava o dobro, o triplo, o dôdruplo — calado.
-  { t: 'comprei 2 ingressos por 80',  via: 'local', cat: 'saida', val: 80 },
-  { t: 'comprei 12 ovos por 18',      via: 'local', cat: 'saida', val: 18 },
-  { t: 'comprei 3 camisetas por 120', via: 'local', cat: 'saida', val: 120 },
+  { t: 'comprei 2 ingressos por 80',  via: 'ia', val: 80 },
+  { t: 'comprei 12 ovos por 18',      via: 'ia', val: 18 },
+  { t: 'comprei 3 camisetas por 120', via: 'ia', val: 120 },
   // Estes DEVEM multiplicar — a regra é boa, só o conector "por" que não é dela.
   { t: 'comprei 2 cafes de 8',        via: 'ia',    val: 16 },
   { t: 'comprei 3 paes a 2,50',       via: 'ia',    val: 7.5 },
@@ -129,7 +129,7 @@ function conferir(caso, r) {
 // SUBIR este número quando uma correção fizer mais casos passarem. NUNCA baixar
 // sem o dono decidir: baixar é apagar a prova de que algo piorou.
 // ─────────────────────────────────────────────────────────────────────────────
-const LINHA_DE_BASE = 14
+const LINHA_DE_BASE = 17
 
 describe('⭐ corpus de interpretação — a régua', () => {
   test(`pelo menos ${LINHA_DE_BASE} dos ${CORPUS.length} casos interpretados corretamente`, () => {
