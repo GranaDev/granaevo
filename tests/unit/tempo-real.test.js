@@ -483,3 +483,33 @@ describe('o aviso não carrega dinheiro', () => {
     assert.ok(iInsert > 0 && iAviso > iInsert)
   })
 })
+
+describe('o tempo real repinta TUDO — inclusive cartões', () => {
+  // Achado em 2026-08-09: `atualizarTudo()` repintava movimentações, resumo,
+  // contas fixas, metas e reservas — e NÃO cartões. Quem estivesse parado na
+  // tela de cartões quando a compra chegasse de outra aba não via nada mudar.
+  // Passava meio despercebido porque a FATURA repinta (ela é conta fixa), então
+  // o número aparecia num canto e não no outro.
+  //
+  // Recorta a FUNÇÃO, não o arquivo: `_dbCartoes` é citado em outros pontos do
+  // dashboard, e procurar no arquivo inteiro passaria com a linha removida.
+  const DASH = readFileSync(join(RAIZ, 'src/scripts/pages/dashboard.js'), 'utf8')
+  const CORPO = (() => {
+    const i = DASH.indexOf('function atualizarTudo() {')
+    return DASH.slice(i, DASH.indexOf('\n}', i))
+  })()
+
+  test('atualizarTudo() manda repintar os cartões', () => {
+    assert.match(CORPO, /window\._dbCartoes\?\.atualizarTelaCartoes\?\.\(\)/)
+  })
+
+  test('e as outras telas seguem lá — nada foi trocado por isto', () => {
+    for (const re of [
+      /_dbTransacoes\?\.atualizarMovimentacoesUI/,
+      /atualizarDashboardResumo\(\)/,
+      /atualizarListaContasFixas\(\)/,
+      /_dbMetas\?\.renderMetasList/,
+      /atualizarHeaderReservas\(\)/,
+    ]) assert.match(CORPO, re)
+  })
+})

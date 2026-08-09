@@ -924,7 +924,7 @@
 .sync-indicator-desktop {
     position: fixed;
     right: 1rem;
-    bottom: 5.5rem;                 /* acima do bottom-nav */
+    bottom: 5.5rem;                 /* desktop; o mobile é reposicionado abaixo */
     z-index: 60;
     display: none;
     padding: 0.375rem 0.75rem;
@@ -955,6 +955,38 @@
     from { opacity: 0; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ── Mobile: encostado na linha do menu, e centralizado ──────────────────────
+ * Pedido do dono (2026-08-09): "ele está beeeeem acima da linha, só quero que
+ * ele fique em cima da linha mais centralizado".
+ *
+ * Estava a 5.5rem (88px) do fundo com o menu ocupando 70px — 18px de folga, que
+ * no celular lê como um balão solto no meio da tela. Agora são 8px: encosta.
+ *
+ * 70px é a altura REAL do menu: `box-sizing: border-box` é global (_db-all.css
+ * :174), então o `padding-bottom: env(safe-area-inset-bottom)` dele come por
+ * dentro em vez de somar. Somar o inset aqui empurraria o balão para cima de
+ * novo justamente nos aparelhos com barra de gestos.
+ *
+ * ⚠️ O `transform` da centralização COLIDE com o da animação de entrada: o
+ * `sync-entra` termina em `translateY(0)` e apagaria o `translateX(-50%)`,
+ * jogando o balão meia-largura para a direita durante a animação. Por isso o
+ * mobile tem keyframe próprio, que carrega os dois eixos.
+ */
+@media (max-width: 1023px) {
+    .sync-indicator {
+        right: auto;
+        left: 50%;
+        bottom: calc(70px + 0.5rem);
+        transform: translateX(-50%);
+        animation-name: sync-entra-centro;
+    }
+}
+@keyframes sync-entra-centro {
+    from { opacity: 0; transform: translate(-50%, 4px); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .sync-indicator, .sync-indicator-desktop { animation: none; }
 }

@@ -5150,6 +5150,13 @@ function atualizarTudo() {
     window._dbMetas?.renderMetasList?.();
     window.renderMetaVisual?.();
     atualizarHeaderReservas();
+    // Cartões faltavam aqui, e o tempo real chama esta função. Quem estivesse
+    // PARADO na tela de cartões quando a compra chegasse de outra aba não via
+    // nada mudar — o dado já estava nos arrays, só a tela ficava velha. Passava
+    // meio despercebido porque a FATURA repinta junto (ela é conta fixa), então
+    // o valor aparecia num canto e não no outro. Encadeado opcional igual aos
+    // demais: a tela pode nem ter sido carregada ainda.
+    window._dbCartoes?.atualizarTelaCartoes?.();
 }
 
 function atualizarHeaderReservas() {

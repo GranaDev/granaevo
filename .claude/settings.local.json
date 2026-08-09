@@ -22,7 +22,11 @@
       "Bash(grep -vE \"^--$|higiene|ignore|mostre|DROP|script|System|^\\\\s+→\")",
       "Bash(awk 'NR>=540&&NR<=565{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/assistant/parser-local.js)",
       "Bash(awk 'NR>=1&&NR<=44{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/assistant/money.js)",
-      "Bash(node --test tests/unit/assistente-categorias-enum.test.js)"
+      "Bash(node --test tests/unit/assistente-categorias-enum.test.js)",
+      "Bash(awk 'NR>=1317&&NR<=1335{printf \"%4d| %s\\\\n\",NR,$0}' src/scripts/pages/dashboard.js)",
+      "Bash(awk 'NR>=5246&&NR<=5272{printf \"%4d| %s\\\\n\",NR,$0}' src/styles/dashboard/_db-all.css)",
+      "Bash(awk 'NR>=170&&NR<=180{printf \"%4d| %s\\\\n\",NR,$0}' src/styles/dashboard/_db-all.css)",
+      "Bash(node scripts/css-mortas.mjs)"
     ]
   }
 }
