@@ -48,7 +48,14 @@
       "Bash(awk 'NR>=106&&NR<=135{printf \"%s\\\\n\",$0}' docs/testes-manuais-pendentes.md)",
       "Bash(awk '/^### 2\\\\.1/,/^### 2\\\\.2/' docs/testes-manuais-pendentes.md)",
       "Bash(awk '/^### 2\\\\.2/,0' docs/testes-manuais-pendentes.md)",
-      "Bash(grep -vE \"^\\\\s*$\")"
+      "Bash(grep -vE \"^\\\\s*$\")",
+      "Bash(awk 'NR>=126&&NR<=140{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/assistant/reminders.js)",
+      "Bash(awk 'NR>=100&&NR<=118{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/notificacoes-inbox.js)",
+      "Bash(awk 'NR>=483&&NR<=490{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/pages/db-configuracoes.js)",
+      "Bash(awk 'NR>=783&&NR<=790{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/pages/db-configuracoes.js)",
+      "Bash(node scripts/check-policy-grant.mjs)",
+      "Bash(node --check scripts/check-policy-grant.mjs)",
+      "Bash(echo \"sintaxe: $?\")"
     ]
   }
 }
