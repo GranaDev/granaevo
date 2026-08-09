@@ -10,7 +10,12 @@
       "Grep",
       "Glob",
       "Bash",
-      "PowerShell"
+      "PowerShell",
+      "Bash(node -e ' *)",
+      "Bash(awk 'NR>=627&&NR<=680{printf \"%3d| %s\\\\n\",NR,$0}' api/user-data.js)",
+      "Bash(node \"C:/Users/SnaKito/AppData/Local/Temp/claude/c--Users-SnaKito-Desktop-Apps-Aleat-rios-Gerais-GranaEvo-Oficial/951953b5-a23e-40ed-920f-77146f8aea20/scratchpad/medir-corpus.mjs\")",
+      "Bash(node --test tests/unit/assistente-corpus-interpretacao.test.js)",
+      "Bash(awk 'NR>=44&&NR<=70{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/assistant/money.js)"
     ]
   }
 }
