@@ -33,14 +33,34 @@ export function parseValorBR(text) {
     // Token numérico (com separadores) opcionalmente seguido de "k"/"mil".
     // Ex.: 1.234,56 | 1234,56 | 1.500 | 40 | 1,5k | 2 mil
     const re = /(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s*(k\b|mil\b)?/g;
+
+    // ⭐ O NÚMERO MARCADO COMO DINHEIRO GANHA DO PRIMEIRO NÚMERO DA FRASE.
+    //
+    // Era "primeiro token vence", e isso lia a QUANTIDADE como valor:
+    //   "paguei 2 cafes 15 reais"       → R$ 2   (era pra ser 15)
+    //   "peguei 2 uber hoje, 45 no total" → R$ 2   (era pra ser 45)
+    // Medido em 2026-08-09. Grava dinheiro errado calado, que é o pior defeito
+    // possível aqui — some no saldo e o usuário não tem como desconfiar.
+    //
+    // "Marcado" = tem `R$` colado antes, ou palavra de moeda logo depois. Quem
+    // escreve o valor quase sempre marca; quem escreve quantidade quase nunca.
+    // Sem nenhum marcado, mantém a regra antiga (primeiro vence) — é o caso
+    // comum "gastei 40 no jogo", e mexer nele seria trocar certo por incerto.
+    const candidatos = [];
     let m;
     while ((m = re.exec(s)) !== null) {
         // Ignora número de PARCELAS ("3x", "em 1x") — não é valor monetário.
         if (!m[2] && s[re.lastIndex] === 'x') continue;
         const num = _parseNum(m[1], m[2]);
-        if (num !== null) return num; // primeiro token monetário válido
+        if (num === null) continue;
+        const antes = s.slice(Math.max(0, m.index - 3), m.index);
+        const depois = s.slice(re.lastIndex, re.lastIndex + 12);
+        const marcado = /r\$\s*$/.test(antes) ||
+            /^\s*(reais?|real|pila[s]?|conto[s]?|mango[s]?|pau[s]?)\b/.test(depois);
+        candidatos.push({ num, marcado });
     }
-    return null;
+    if (candidatos.length === 0) return null;
+    return (candidatos.find((c) => c.marcado) ?? candidatos[0]).num;
 }
 
 /**
@@ -91,6 +111,19 @@ export function parseParcelas(text) {
 const _UNI = { zero: 0, um: 1, uma: 1, dois: 2, duas: 2, tres: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9, dez: 10, onze: 11, doze: 12, treze: 13, quatorze: 14, catorze: 14, quinze: 15, dezesseis: 16, dezessete: 17, dezoito: 18, dezenove: 19 };
 const _DEZ = { vinte: 20, trinta: 30, quarenta: 40, cinquenta: 50, sessenta: 60, setenta: 70, oitenta: 80, noventa: 90 };
 const _CEM = { cem: 100, cento: 100, duzentos: 200, trezentos: 300, quatrocentos: 400, quinhentos: 500, seiscentos: 600, setecentos: 700, oitocentos: 800, novecentos: 900 };
+
+/**
+ * As MESMAS palavras que `parseExtenso` lê como número, para quem precisa
+ * REMOVÊ-LAS (o describe.js tira o valor da descrição).
+ *
+ * Exportado em vez de copiado: o extrator tinha só a regex de dígitos, então
+ * "gastei quarenta reais no jogo" gravava a descrição "Quarenta reais no jogo"
+ * — o valor aparecia duas vezes na tela, uma como número e outra como texto.
+ * Uma segunda lista aqui envelheceria sozinha; esta é a mesma que decide o valor.
+ */
+export const PALAVRAS_NUMERO = Object.freeze([
+    ...Object.keys(_UNI), ...Object.keys(_DEZ), ...Object.keys(_CEM), 'mil', 'milhao', 'milhoes',
+]);
 
 /**
  * Interpreta valores por extenso: "cinquenta reais"=50, "mil e duzentos"=1200.

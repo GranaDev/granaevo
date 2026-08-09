@@ -21,7 +21,38 @@
 // 100% local, puro, sem DOM/rede. Zero token de IA. Testes: tests/unit/assistente-descricao.test.js
 // ---------------------------------------------------------------------------
 
+import { PALAVRAS_NUMERO } from './money.js';
+
 const norm = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+// ── Valor escrito por EXTENSO ───────────────────────────────────────────────
+// A regex de valor só via dígitos, então "gastei quarenta reais no jogo" gravava
+// "Quarenta reais no jogo": o valor aparecia duas vezes na tela do usuário, uma
+// no campo de valor e outra dentro do nome da transação.
+//
+// A lista vem do money.js — é a MESMA que decide quanto vale a frase. Duas
+// listas divergiriam, e foi exatamente assim que "Jogos" sumiu do prompt da IA.
+//
+// Aplicada sobre o texto SEM acento (o `norm` já rodou), porque é assim que o
+// parseExtenso lê. Só remove quando a palavra está isolada.
+const RE_EXTENSO = new RegExp(`\\b(?:${PALAVRAS_NUMERO.join('|')})\\b`, 'gi');
+
+// A palavra de moeda sozinha, que sobra quando o número saiu. `RE_VALOR` só a
+// remove grudada num dígito ("40 reais"); com o valor por extenso o que restava
+// era "Reais no jogo" e "Conto no jogo". Moeda nunca descreve uma compra.
+const RE_MOEDA_SOLTA = /\b(reais?|real|pila[s]?|conto[s]?|mango[s]?|pau[s]?)\b/gi;
+
+// ── Sujeira que nunca é descrição ───────────────────────────────────────────
+// NÃO é a defesa de segurança — essa é o schema travado da IA (nada de texto
+// livre) e o `textContent` da UI (nada de HTML). Isto é higiene do extrato: o
+// usuário não pode abrir a lista de gastos e encontrar "DROP TABLE" ou
+// "<script>" como nome de uma compra que ele fez.
+//
+// Medido em 2026-08-09: "gastei 40 no jogo; DROP TABLE transactions" gravava
+// a descrição "Jogo; DROP TABLE transactions".
+const RE_MARCACAO = /<[^>]*>?/g;                                    // tag, aberta ou não
+const RE_SQL      = /[;,]?\s*\b(drop|delete|insert|update|select|alter|truncate|union)\b[\s\S]*/gi;
+const RE_INSTRUCAO = /\b(ignore|ignora|esquec[ae]|desconsidere)\b[\s\S]*|(?:mostre|revele|exiba|diga)\s+(?:seu|o)\s+(?:prompt|system|instru\w*)[\s\S]*|\bsystem\s*:[\s\S]*/gi;
 
 // ── Ruído estrutural ────────────────────────────────────────────────────────
 // Valor + moeda coloquial. Casa "R$ 1.234,56", "75,69", "40 pila", "1,5k", "2 mil".
@@ -97,14 +128,42 @@ const MAX_DESC = 80; // descrição é rótulo, não redação. normalize.js rec
 // números/preposições que a regex de valor comeria pela metade.
 function limparRuido(rawText) {
     return String(rawText ?? '')
+        // Sujeira PRIMEIRO: uma tag pode conter dígito (`alert(1)`) e a regex de
+        // valor comeria o miolo dela, deixando "<script>alert( )</script>".
+        .replace(RE_MARCACAO, ' ')
+        .replace(RE_SQL, ' ')
+        .replace(RE_INSTRUCAO, ' ')
         .replace(RE_PARCELA, ' ')
         .replace(RE_PGTO, ' ')
         .replace(RE_VALOR, ' ')
+        .replace(RE_EXTENSO, ' ')
+        .replace(RE_MOEDA_SOLTA, ' ')
         .replace(RE_VERBO, ' ')
         .replace(RE_PRONOME, ' ')
         .replace(RE_DATA, ' ')
         .replace(/\s{2,}/g, ' ')
         .trim();
+}
+
+/**
+ * Corta a frase na fronteira entre DUAS ORAÇÕES de lançamento.
+ *
+ * "Retirei 50 da reserva de emergência E GASTEI num jogo" são dois eventos, e a
+ * descrição saía costurada: **"Reserva de emergencia e num jogo"** — origem
+ * grudada em destino, sem sentido em nenhum dos dois lançamentos.
+ *
+ * O corte é feito ANTES de remover os verbos, porque é o segundo verbo que
+ * revela a fronteira; depois da limpeza ela some e sobra só um " e " inocente.
+ *
+ * @param {'primeira'|'ultima'} qual  qual oração interessa a quem perguntou
+ */
+function recortarOracao(rawText, qual) {
+    const t = String(rawText ?? '');
+    // " e " (ou vírgula) seguido, em até 3 palavras, de outro verbo de lançamento.
+    const re = /\s(?:,|e|entao|então|dai|daí|depois)\s+(?=(?:\w+\s+){0,2}?(?:gastei|gasto|gastos|paguei|comprei|torrei|usei|meti|mandei|guardei|reservei|poupei|juntei|separei|recebi|ganhei|tirei|retirei|saquei|resgatei)\b)/i;
+    const m = t.match(re);
+    if (!m || m.index == null) return t;
+    return qual === 'ultima' ? t.slice(m.index + m[0].length) : t.slice(0, m.index);
 }
 
 /**
@@ -116,8 +175,13 @@ function limparRuido(rawText) {
  *          cair no rótulo do tipo (comportamento antigo, ainda correto p/
  *          "gastei 50" ou "guardei 200").
  */
-export function extractDescricao(rawText) {
-    const s = limparRuido(rawText);
+export function extractDescricao(rawText, opcoes) {
+    // Por padrão descreve a PRIMEIRA oração. Numa frase com dois lançamentos, é
+    // ela o evento principal — o segundo tem quem o descreva (o
+    // parseRetiradaComUso já extrai o `uso` do próprio trecho de destino, e o
+    // splitCompound já separa "gastei X e paguei Y" em dois comandos).
+    // `oracao: 'ultima'` fica disponível para quem precisar do outro lado.
+    const s = limparRuido(recortarOracao(rawText, opcoes?.oracao ?? 'primeira'));
     if (!s) return { descricao: null, fonte: 'nenhuma' };
 
     // Cláusula "com <item>" — o sinal mais forte que existe. O comerciante já

@@ -71,6 +71,25 @@ function json(body: unknown, status: number, cors: Record<string, string>): Resp
   })
 }
 
+// ── Categorias: ESPELHO de parser-local.js ──────────────────────────────────
+//
+// ⭐ POR QUE ISTO EXISTE (2026-08-09) — foi a causa nº 1 de categoria errada.
+// Até aqui a lista de categorias vivia SOLTA na descrição do campo `tipo`, como
+// texto livre, e tinha 19 nomes. A lista REAL do app tem 23. Faltavam quatro,
+// entre elas `Jogos`. Então "gastei 40 no jogo" voltava como **Lazer** — não
+// por burrice do modelo, mas porque `Jogos` nunca foi oferecido a ele.
+//
+// Agora é `enum` no schema: o modelo não consegue emitir nada fora daqui.
+//
+// ⚠️ A edge (Deno) não importa de `src/scripts` — deploys separados. Este array
+// é um ESPELHO, e espelho envelhece. A trava contra isso é o teste
+// `tests/unit/assistente-categorias-enum.test.js`, que lê os DOIS arquivos e
+// reprova se divergirem em um único nome. Mexeu num, mexa no outro.
+const TIPOS_SAIDA = ['Mercado', 'Farmácia', 'Saúde', 'Eletrônico', 'Roupas', 'Assinaturas', 'Beleza',
+  'Presente', 'Conta fixa', 'Cartão', 'Academia', 'Lazer', 'Transporte', 'Viagem', 'Pet', 'Educação',
+  'Shopee', 'Mercado Livre', 'Ifood', 'Amazon', 'Casa', 'Jogos', 'Outros']
+const TIPOS_ENTRADA = ['Salário', 'Renda Extra', 'Investimento', 'Outros Recebimentos']
+
 // ── Contrato de saída (schema travado — strict tool use) ────────────────────
 // Todas as chaves são obrigatórias; opcionais viram anyOf com null.
 // A IA SÓ consegue emitir este formato — impossível vazar prompt/free-text.
@@ -108,11 +127,12 @@ const PARSE_TOOL = {
         description: 'Valor em reais, sempre positivo. Ex: "40 pila"=40, "1,5k"=1500, "mil e duzentos"=1200.',
       },
       tipo: {
-        anyOf: [{ type: 'string' }, { type: 'null' }],
-        description: 'A CATEGORIA/estabelecimento — ONDE o dinheiro foi gasto. ' +
-          'Saída: Mercado, Farmácia, Saúde, Transporte, Ifood, Shopee, Amazon, Mercado Livre, Lazer, Roupas, ' +
-          'Eletrônico, Beleza, Presente, Conta fixa, Academia, Educação, Viagem, Pet, Outros. ' +
-          'Entrada: Salário, Renda Extra, Investimento, Outros Recebimentos.',
+        anyOf: [{ type: 'string', enum: [...TIPOS_SAIDA, ...TIPOS_ENTRADA] }, { type: 'null' }],
+        description: 'A CATEGORIA — ONDE o dinheiro foi gasto ou de onde veio. ' +
+          'Escolha UMA da lista; nenhum valor fora dela é aceito. ' +
+          'Prefira SEMPRE a categoria específica à genérica: um gasto com jogo é "Jogos", ' +
+          'não "Lazer"; uma corrida de app é "Transporte", não "Outros". ' +
+          '"Outros" é último recurso, quando nenhuma outra serve.',
       },
       descricao: {
         anyOf: [{ type: 'string' }, { type: 'null' }],

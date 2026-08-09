@@ -665,7 +665,20 @@ class AssistantEngine {
         // conteúdo era final: a IA ficava trancada do lado de fora justamente
         // nas mensagens mais ricas. Agora "sei que é saída, li 'caderno kalunga',
         // mas não sei a categoria" cai pra IA — que conhece a Kalunga.
-        if (local.confianca >= CONF_LOCAL_OK && local.completude >= 1) {
+        // ── 3ª pergunta do portão: "o que eu li dá pra usar?" ────────────────
+        //
+        // As duas perguntas acima medem o ESFORÇO do parser, não o RESULTADO.
+        // Medido em 2026-08-09: "gasteis 40 reals num joguin" sai com
+        // intencao=valor_ambiguo, categoria=NULL — e mesmo assim confiança 0,9 e
+        // completude 1. O portão aprovava, e a IA, que resolve "joguin" sem
+        // esforço, nunca era consultada. O usuário via uma pergunta boba de volta.
+        //
+        // Um parse sem categoria não é um parse completo, é um parse vazio com
+        // nota alta. Quando não há categoria para trabalhar, delega — perguntar
+        // ao usuário é o último recurso, não o primeiro.
+        const vazio = !local.categoria &&
+            (local.intencao === 'lancar' || local.intencao === 'valor_ambiguo');
+        if (!vazio && local.confianca >= CONF_LOCAL_OK && local.completude >= 1) {
             bump('local'); // telemetria anônima: resolvido 100% no aparelho
             return this.#route(toCommand(local));
         }
