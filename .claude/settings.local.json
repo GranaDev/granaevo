@@ -31,7 +31,11 @@
       "Bash(awk 'NR>=675&&NR<=692{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/assistant/phrases.js)",
       "Bash(awk 'NR>=812&&NR<=826{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/assistant/engine.js)",
       "Bash(awk 'NR>=821&&NR<=836{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/assistant/engine.js)",
-      "Bash(node --test tests/unit/assistente-valor-no-ar.test.js)"
+      "Bash(node --test tests/unit/assistente-valor-no-ar.test.js)",
+      "Bash(awk 'NR>=205&&NR<=262{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/export-dados.js)",
+      "Bash(awk 'NR>=55&&NR<=150{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/export-planilha.js)",
+      "Bash(node --test tests/unit/export-dados-portabilidade.test.js)",
+      "Bash(awk 'NR>=130&&NR<=150{printf \"%3d| %s\\\\n\",NR,$0}' tests/unit/export-planilha.test.js)"
     ]
   }
 }

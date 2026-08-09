@@ -48,7 +48,12 @@ const MOVIMENTO = {
     reserva: 'Reserva', retirada_reserva: 'Retirada',
 };
 
-const EH_DINHEIRO = /^(valor|preco|preço|limite|saldo|objetivo|guardado|mensalidade|total)$/i;
+// ⚠️ Era ancorado em `saldo` exato, então `saldoAnterior` e `saldoPosterior` —
+// as duas colunas do histórico de retirada — saíam como número cru ao lado de
+// colunas formatadas. `saved` (o quanto a reserva tem) e `valorParcela` idem.
+// Numa planilha de finanças, valor sem formato é o tipo de detalhe que faz a
+// pessoa desconfiar do arquivo inteiro.
+const EH_DINHEIRO = /^(valor|valorParcela|preco|preço|limite|saldo\w*|saved|usado|objetivo|guardado|mensalidade|total)$/i;
 
 /**
  * Rótulo humano de uma coluna. Sem tradução conhecida, quebra o camelCase e o
@@ -66,13 +71,49 @@ function rotulo(k) {
     return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** Um valor vira célula legível. Objeto/array vira JSON curto, nunca "[object Object]". */
+const brl = (n) => Number(n).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+/**
+ * Objeto/array vira texto que uma PESSOA lê.
+ *
+ * ⚠️ Era `JSON.stringify` direto, e o dono abriu a planilha em 2026-08-09 e
+ * encontrou, dentro de uma célula da aba Metas:
+ *     {"2026-08":949}
+ *     [{"data":"07/08/2026","valor":50,"motivo":"Outro","saldoAnterior":1500, …}]
+ * Isso é despejo de banco, não portabilidade. A LGPD pede dado compreensível ao
+ * titular; e mesmo sem a lei, uma planilha que ninguém lê não serve pra nada.
+ *
+ * Três formas, que cobrem tudo que o app guarda aninhado:
+ *   mapa mês→valor  →  "08/2026: R$ 949,00 · 09/2026: R$ 120,00"
+ *   lista de fatos  →  "3 registro(s)" (os fatos viram ABA própria — ver o
+ *                      histórico de retiradas em montarPlanilha)
+ *   lista simples   →  "a, b, c"
+ */
+function legivel(valor) {
+    if (Array.isArray(valor)) {
+        if (valor.length === 0) return '';
+        const simples = valor.every((v) => v == null || typeof v !== 'object');
+        return simples ? valor.join(', ') : `${valor.length} registro(s)`;
+    }
+    const pares = Object.entries(valor);
+    if (pares.length === 0) return '';
+    return pares
+        .map(([k, v]) => {
+            // "2026-08" é ano-mês; vira "08/2026", que é como se lê no Brasil.
+            const m = /^(\d{4})-(\d{2})$/.exec(k);
+            const rot = m ? `${m[2]}/${m[1]}` : rotulo(k);
+            return `${rot}: ${typeof v === 'number' ? brl(v) : String(v)}`;
+        })
+        .join(' · ');
+}
+
+/** Um valor vira célula legível. Objeto/array vira texto de gente, nunca JSON. */
 export function celula(chave, valor) {
     if (valor == null || valor === '') return '';
     if (chave === 'categoria' && MOVIMENTO[valor]) return { v: MOVIMENTO[valor], s: S.texto };
     if (typeof valor === 'number')  return EH_DINHEIRO.test(chave) ? { v: valor, s: S.dinheiro } : valor;
     if (typeof valor === 'boolean') return { v: valor ? 'Sim' : 'Não', s: S.texto };
-    if (typeof valor === 'object')  return { v: JSON.stringify(valor), s: S.mudo };
+    if (typeof valor === 'object')  return { v: legivel(valor), s: S.mudo };
     return { v: String(valor), s: S.texto };
 }
 
@@ -139,9 +180,23 @@ export function montarPlanilha(pacote) {
         }
     }
 
+    // Retiradas das reservas: são FATOS com data, valor, motivo e saldo antes e
+    // depois — merecem linhas, como as transações. Dentro da célula da meta
+    // viravam um array JSON ilegível, e é justamente o registro que responde
+    // "por que minha reserva diminuiu?".
+    const retiradas = [];
+    for (const p of perfis) {
+        for (const m of (Array.isArray(p?.metas) ? p.metas : [])) {
+            for (const h of (Array.isArray(m?.historicoRetiradas) ? m.historicoRetiradas : [])) {
+                retiradas.push({ Perfil: p?.nome ?? '—', reserva: m?.nome ?? m?.descricao ?? '—', ...h });
+            }
+        }
+    }
+
     const candidatas = [
         ['Transações',       porPerfil(perfis, 'transacoes')],
         ['Metas',            porPerfil(perfis, 'metas')],
+        ['Retiradas',        retiradas],
         ['Contas fixas',     porPerfil(perfis, 'contasFixas')],
         ['Cartões',          porPerfil(perfis, 'cartoesCredito')],
         ['Assinaturas',      porPerfil(perfis, 'assinaturas')],

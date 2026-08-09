@@ -134,8 +134,15 @@ describe('montarPlanilha — os rótulos não mentem', () => {
     assert.equal(c.s, 3, 'Estilo 3 = formato R$ (ver _STYLES em xlsx.js).');
   });
 
-  test('objeto aninhado não vira "[object Object]"', () => {
-    assert.match(celula('config', { tema: 'escuro' }).v, /tema/);
+  test('objeto aninhado não vira "[object Object]" — nem JSON cru', () => {
+    // 2026-08-09: era `JSON.stringify`, e o dono abriu a planilha e encontrou
+    // `{"2026-08":949}` dentro de uma célula. Agora sai texto de gente, com o
+    // rótulo já capitalizado ("Tema: escuro") — por isso a comparação passou a
+    // ignorar caixa: o que importa é a CHAVE estar legível, não como está escrita.
+    const v = celula('config', { tema: 'escuro' }).v;
+    assert.match(v, /tema/i);
+    assert.match(v, /escuro/);
+    assert.ok(!/[[{"]/.test(v), `sobrou pontuação de JSON: ${v}`);
   });
 });
 

@@ -23,7 +23,7 @@ import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { montarPlanilha } from '../../src/scripts/modules/export-planilha.js'
+import { montarPlanilha, celula } from '../../src/scripts/modules/export-planilha.js'
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const soCodigo = (t) => t.split('\n')
@@ -129,5 +129,75 @@ describe('o que a exportação promete e não pode quebrar', () => {
     // sobre o que a empresa guarda.
     assert.match(EXPORT, /montarPlanilha\(pacote\)/)
     assert.match(EXPORT, /function _montar\(/)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T2 (2026-08-09) — o que o dono encontrou ao abrir a planilha de verdade.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('⭐ nada de JSON cru dentro de uma célula', () => {
+  const META = {
+    nome: 'Emergência', saved: 949,
+    monthly: { '2026-08': 949 },
+    historicoRetiradas: [
+      { data: '07/08/2026', valor: 50, motivo: 'Outro', saldoAnterior: 1500, saldoPosterior: 1450 },
+      { data: '08/08/2026', valor: 500, motivo: 'Retirada pela tela de Transações', saldoAnterior: 1449, saldoPosterior: 949 },
+    ],
+  }
+  const PACOTE = { dados_financeiros: [{ nome: 'Userteste', metas: [META] }] }
+  const abas = montarPlanilha(PACOTE)
+  const texto = (aba) => aba.linhas.map((l) => l.map((c) => String(c?.v ?? c)).join('|')).join('\n')
+
+  test('o mapa mês→valor vira "08/2026: R$ 949,00"', () => {
+    // Era {"2026-08":949} dentro da célula.
+    //
+    // ⚠️ Compara com o espaço NORMALIZADO: `toLocaleString('pt-BR')` põe um
+    // espaço NÃO-QUEBRÁVEL (U+00A0) entre "R$" e o número. Escrever a string à
+    // mão dá um teste que falha mostrando duas linhas idênticas na tela — e o
+    // próximo a ler perde meia hora achando que é bug do assert.
+    const semNbsp = (s) => String(s).replace(/ /g, ' ')
+    assert.equal(semNbsp(celula('monthly', META.monthly).v), '08/2026: R$ 949,00')
+  })
+
+  test('a lista de retiradas não despeja o array na célula', () => {
+    const c = celula('historicoRetiradas', META.historicoRetiradas)
+    assert.equal(c.v, '2 registro(s)')
+    assert.ok(!/[[{]/.test(c.v), 'nenhum colchete/chave de JSON sobrou')
+  })
+
+  test('⭐ nenhuma célula da planilha contém JSON', () => {
+    // A CONDIÇÃO, não o caso: qualquer campo aninhado que alguém acrescentar ao
+    // app cai aqui antes de chegar ao usuário.
+    for (const aba of abas) {
+      for (const linha of aba.linhas) {
+        for (const c of linha) {
+          const v = String(c?.v ?? c)
+          assert.ok(!/^\s*[[{]/.test(v), `JSON cru na aba ${aba.nome}: ${v}`)
+        }
+      }
+    }
+  })
+
+  test('as retiradas ganham ABA própria, com uma linha por retirada', () => {
+    const r = abas.find((a) => a.nome === 'Retiradas')
+    assert.ok(r, 'a aba Retiradas precisa existir')
+    assert.equal(r.linhas.length, 3, 'cabeçalho + 2 retiradas')
+    const t = texto(r)
+    assert.match(t, /Emergência/)
+    assert.match(t, /Retirada pela tela de Transações/)
+    assert.match(t, /Saldo anterior/)
+  })
+
+  test('sem retiradas, a aba não aparece vazia', () => {
+    const semNada = montarPlanilha({ dados_financeiros: [{ nome: 'X', metas: [{ nome: 'M' }] }] })
+    assert.equal(semNada.find((a) => a.nome === 'Retiradas'), undefined)
+  })
+
+  test('as colunas de dinheiro do histórico saem formatadas', () => {
+    // Anteriormente `saldoAnterior`/`saldoPosterior`/`saved` caíam fora do
+    // EH_DINHEIRO (ancorado em "saldo" exato) e saíam como número cru.
+    for (const k of ['saldoAnterior', 'saldoPosterior', 'saved', 'valor']) {
+      assert.equal(typeof celula(k, 1450), 'object', `${k} devia ter estilo de dinheiro`)
+    }
   })
 })
