@@ -276,10 +276,26 @@ class DataManager {
             if (OPS_DEBUG) {
                 if (!Array.isArray(window.__sombra)) window.__sombra = [];
                 if (window.__sombra.length < 20) {
+                    // QUAIS campos mudaram, não o que eles passaram a valer.
+                    //
+                    // O dono rodou o diagnóstico em 2026-08-08 e o 1º save trouxe
+                    // `set: 5` com o dashboard PARADO — cinco campos de perfil
+                    // reescritos sem ninguém tocar em nada. A contagem sozinha
+                    // não diz se é rotina (carimbo, saneamento) ou se é dado
+                    // velho voltando, que é como o Lost Update se parece por
+                    // dentro. O nome da chave separa os dois casos na hora.
+                    //
+                    // ⚠️ SÓ o nome. Nunca `op.v`: em produção esse array é lido
+                    // no console de um usuário real, e `v` carrega o dinheiro
+                    // dele. Mesma regra do radar e dos logs.
+                    const campos = [...new Set(
+                        ops.filter((o) => o.op === 'set' || o.op === 'unset').map((o) => o.k),
+                    )].sort();
                     window.__sombra.push({
                         save: window.__sombra.length + 1,
                         n: ops.length, ...porTipo,
                         completo,
+                        campos: campos.join(', ') || '—',
                         motivos: [...motivos].join(', ') || '—',
                     });
                 }

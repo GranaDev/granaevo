@@ -35,7 +35,9 @@
       "Bash(awk 'NR>=205&&NR<=262{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/export-dados.js)",
       "Bash(awk 'NR>=55&&NR<=150{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/export-planilha.js)",
       "Bash(node --test tests/unit/export-dados-portabilidade.test.js)",
-      "Bash(awk 'NR>=130&&NR<=150{printf \"%3d| %s\\\\n\",NR,$0}' tests/unit/export-planilha.test.js)"
+      "Bash(awk 'NR>=130&&NR<=150{printf \"%3d| %s\\\\n\",NR,$0}' tests/unit/export-planilha.test.js)",
+      "Bash(awk 'NR>=236&&NR<=252{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/data-manager.js)",
+      "Bash(awk 'NR>=276&&NR<=296{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/modules/data-manager.js)"
     ]
   }
 }

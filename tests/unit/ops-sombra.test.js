@@ -448,3 +448,29 @@ describe('o save do unload também declara o que tocou', () => {
     assert.match(EDGE, /let profilesFinais = profiles/)
   })
 })
+
+describe('⭐ o diagnóstico diz QUAIS campos, e nunca o valor deles', () => {
+  // Acrescentado em 2026-08-09: o dono rodou o `?opsdebug=1` e viu `set: 5` com
+  // o dashboard PARADO. A contagem sozinha não separa rotina (carimbo,
+  // saneamento) de dado velho voltando — que é como o Lost Update se parece por
+  // dentro. O nome da chave separa na hora.
+  const DM = readFileSync(join(RAIZ, 'src/scripts/modules/data-manager.js'), 'utf8')
+  const BLOCO = DM.slice(DM.indexOf('if (OPS_DEBUG) {'), DM.indexOf('if (IS_DEV) {'))
+
+  test('registra a lista de campos', () => {
+    assert.match(BLOCO, /campos: campos\.join\(', '\)/)
+    assert.match(BLOCO, /\.map\(\(o\) => o\.k\)/)
+  })
+
+  test('⭐ NUNCA registra o valor — em prod isso é o dinheiro do usuário', () => {
+    // `o.v` carrega saldo, meta, orçamento. Este array é lido no console de uma
+    // pessoa real, e o mesmo cuidado do radar e dos logs vale aqui.
+    assert.ok(!/o\.v\b/.test(BLOCO), 'o valor da operação não pode entrar no diagnóstico')
+    assert.ok(!/JSON\.stringify\(ops/.test(BLOCO), 'despejar `ops` inteiro levaria os valores junto')
+  })
+
+  test('só sai com ?opsdebug=1 — nunca por padrão', () => {
+    assert.match(DM, /const OPS_DEBUG = \(\(\) => \{/)
+    assert.match(DM, /get\('opsdebug'\) === '1'/)
+  })
+})
