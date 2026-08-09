@@ -959,9 +959,9 @@ aceitaram o texto anterior e **não houve re-aceite**. A própria política prom
 > re-aceite funcionando — eles aceitam a 1.2 no próximo login. O gap M1 era
 > "usuário sem NENHUM aceite", e ele não existe mais.
 >
-> ⚠️ Este passo ficou marcado 🟡 por semanas depois de já estar resolvido, e a
-> nota "só falta a Clarice" na seção de decisões estava vencida também. O censo
-> custou uma consulta. **Medir é mais barato que lembrar.**
+> ⚠️ Este passo ficou marcado como pendente por semanas depois de já estar
+> resolvido, e a nota "só falta a Clarice" na seção de decisões estava vencida
+> também. O censo custou **uma consulta**. Medir é mais barato que lembrar.
 > **Censo no banco de prod (2026-07-16):** 8 usuários em `auth.users`; 5 linhas em `terms_acceptance`
 > (**4 na v1.0**, 1 na v1.1). **4 usuários sem NENHUMA linha de aceite — 3 deles ATIVOS** (com
 > assinatura ativa/trialing ou membro ativo de conta casal/família).
