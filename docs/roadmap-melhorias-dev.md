@@ -196,8 +196,10 @@ o app perder dado sem avisar.
 | **Retestar no app**: `joguin` / `joguinho` / `jogando` → **Jogos** no chat · T7 (*"e mais 300"* → *"num carrinho"*) · planilha com a aba **Retiradas** · indicador no mobile · cartões repintando | dono |
 | **Duas decisões do T2**: IDs saem do `.xlsx`? A aba "Avisos" ganha o lugar dela? | dono |
 | **Passo 8** — um login em prod com dados na tela | dono |
-| **Passo 27** — a DSN do Sentry (hoje a política declara um tratamento que não acontece) | dono |
-| **Passo 10** — descongelar o `dashboard.js`? Está em **40.8/42 KB** | dono |
+| ~~**Passo 27** — a DSN do Sentry~~ | ✅ **JÁ ESTAVA FEITO** (2026-08-10). A DSN está no bundle de **produção** (`/assets/error-tracking-*.js`). Eu tinha grepado o `dist/` local, que nasce sem as `VITE_*` da Vercel — nunca teria a DSN. A política não mente. |
+| ~~**B-3** — rate limit na borda (Cloudflare)~~ | ✅ **feito e PROVADO** (2026-08-10): 10 req/10 s em `/api/auth-session`, a 11ª requisição volta **429**. Cache Rule `/api/*` → `{"cache":false}` entrou junto (estava faltando). |
+| **Passo 10** — descongelar o `dashboard.js`? Está em **40.8/42 KB** | dono — **marcado para a noite de 2026-08-10** |
+| **M-7** — escolher a ferramenta de analytics cookieless | dono |
 
 **Se ele mandar "Comece" sem escolher:** rode `node scripts/corpus-ia.mjs` (≈70 s,
 19 do teto diário de 120) e leia o placar antes de propor qualquer coisa. Foi o
