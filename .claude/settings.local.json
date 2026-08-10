@@ -63,7 +63,12 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -X POST \"https://www.granaevo.com/api/user-data?cron-health=1\" -H \"Origin: https://www.granaevo.com\" -H \"User-Agent: Mozilla/5.0 Chrome/126.0\")",
       "Bash(grep -oE '<meta property=\"og:[a-z:]+\" content=\"[^\"]{0,90}' index.html)",
       "Bash(awk 'NR>=10&&NR<=14{printf \"%3d| %s\\\\n\",NR,$0}' privacidade.html)",
-      "Bash(awk 'NR>=6&&NR<=12{printf \"%3d| %s\\\\n\",NR,$0}' login.html)"
+      "Bash(awk 'NR>=6&&NR<=12{printf \"%3d| %s\\\\n\",NR,$0}' login.html)",
+      "Bash(awk '{printf \"  %8.1f KB  %s\\\\n\", $1/1024, $2}')",
+      "Bash(grep -hoE '.{0,80}fetchpriority.{0,60}' index.html dashboard.html login.html)",
+      "Bash(node -e \"try{require.resolve\\('sharp'\\);console.log\\('sim'\\)}catch{console.log\\('NAO'\\)}\")",
+      "Bash(awk '{print $1}')",
+      "Bash(awk 'NR>=528&&NR<=552{printf \"%3d| %s\\\\n\",NR,$0}' src/scripts/pages/db-relatorios-export.js)"
     ]
   }
 }

@@ -308,7 +308,7 @@
     },
 
     {
-      "source": "/assets/icons/granaevo-logo.jpg",
+      "source": "/assets/icons/granaevo-logo.webp",
       "headers": [
         { "key": "Cross-Origin-Resource-Policy", "value": "cross-origin" },
         { "key": "Access-Control-Allow-Origin",  "value": "*" },

@@ -180,7 +180,7 @@ function _showManualInstructions() {
     <div class="pwa-modal-overlay"></div>
     <div class="pwa-modal-card">
       <div class="pwa-modal-header">
-        <img src="/assets/icons/granaevo-logo.jpg" alt="GranaEvo" class="pwa-modal-logo">
+        <img src="/assets/icons/granaevo-logo.webp" alt="GranaEvo" class="pwa-modal-logo">
         <h3 class="pwa-modal-title">Instalar GranaEvo</h3>
         <button class="pwa-modal-close" aria-label="Fechar" type="button">
           <i class="fas fa-times"></i>
