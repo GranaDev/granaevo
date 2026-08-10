@@ -60,7 +60,10 @@
       "Bash(awk 'NR>=82&&NR<=125{printf \"%3d| %s\\\\n\",NR,$0}' supabase/functions/cron-health-alert/index.ts)",
       "Bash(awk 'NR>=76&&NR<=100{printf \"%3d| %s\\\\n\",NR,$0}' api/user-data.js)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -X POST \"https://fvrhqqeofqedmhadzzqw.supabase.co/functions/v1/cron-health-alert\" -H \"Content-Type: application/json\" -d '{}')",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -X POST \"https://www.granaevo.com/api/user-data?cron-health=1\" -H \"Origin: https://www.granaevo.com\" -H \"User-Agent: Mozilla/5.0 Chrome/126.0\")"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -X POST \"https://www.granaevo.com/api/user-data?cron-health=1\" -H \"Origin: https://www.granaevo.com\" -H \"User-Agent: Mozilla/5.0 Chrome/126.0\")",
+      "Bash(grep -oE '<meta property=\"og:[a-z:]+\" content=\"[^\"]{0,90}' index.html)",
+      "Bash(awk 'NR>=10&&NR<=14{printf \"%3d| %s\\\\n\",NR,$0}' privacidade.html)",
+      "Bash(awk 'NR>=6&&NR<=12{printf \"%3d| %s\\\\n\",NR,$0}' login.html)"
     ]
   }
 }
