@@ -52,31 +52,46 @@ faça mais restaurações; o backup dos outros perfis ainda está guardado.
 
 ---
 
+## ❌ FASE 3 — DESCARTADA pelo dono em 2026-08-09 — NÃO TESTAR
+
+> **Os 9 itens abaixo são de uma feature que não vai existir.** O dono decidiu:
+> *"hoje em dia reserva compartilhada já funciona bem, não vamos fazer"*. O fluxo
+> de convite→aceite foi cancelado; a reserva compartilhada atual (roster direto,
+> sem convite) continua no ar e é a que vale.
+>
+> Ficam registrados só como histórico do que foi projetado. Se um dia a decisão
+> mudar, o desenho está aqui — mas **não gaste sessão de teste com eles**.
+
+<details>
+<summary>Itens da Fase 3 (cancelados — clique só se for reabrir a decisão)</summary>
+
 ## FASE 3 — Reserva compartilhada v2: convite → aceite _(família/casal)_
 
 > Objetivo: ao criar uma reserva compartilhada, os outros perfis **recebem um convite** e
 > decidem **aceitar/recusar**. Enquanto não aceitam, não veem a reserva como sua nem
 > contribuem. _(Não há push: o convite aparece ao entrar no perfil convidado.)_
 
-- [ ] **3.1** No perfil **A**, crie uma **Reserva** e marque **👥 Compartilhada**; no roster,
+- ❌ ~~**3.1** No perfil **A**, crie uma **Reserva** e marque **👥 Compartilhada**; no roster,~~
       selecione **B** (e C, se quiser). Salve.
-- [ ] **3.2** Ainda em **A**: a reserva aparece normalmente (A é o criador, já aceito). A pode
+- ❌ ~~**3.2** Ainda em **A**: a reserva aparece normalmente (A é o criador, já aceito). A pode~~
       guardar/retirar nela.
-- [ ] **3.3** Entre no perfil **B** → aba **Reservas**. Esperado: um **banner no topo**
+- ❌ ~~**3.3** Entre no perfil **B** → aba **Reservas**. Esperado: um **banner no topo**~~
       _"👥 Convite de reserva compartilhada — «A» quer criar a reserva «…» com você"_ com
       **Aceitar** / **Recusar**.
-- [ ] **3.4** Em **B**, **antes de aceitar**: a reserva **não** aparece como card normal e B
+- ❌ ~~**3.4** Em **B**, **antes de aceitar**: a reserva **não** aparece como card normal e B~~
       **não** consegue guardar/retirar nela (não participa ainda).
-- [ ] **3.5** Clique **Aceitar** em B. Esperado: banner some, a reserva passa a aparecer como
+- ❌ ~~**3.5** Clique **Aceitar** em B. Esperado: banner some, a reserva passa a aparecer como~~
       card normal, e B consegue guardar/retirar. Dê F5 — continua aceita.
-- [ ] **3.6** _(perfil C, se convidou)_ Entre em **C** e clique **Recusar**. Esperado: banner
+- ❌ ~~**3.6** _(perfil C, se convidou)_ Entre em **C** e clique **Recusar**. Esperado: banner~~
       some, a reserva **não** aparece para C. Dê F5 — não volta o convite.
-- [ ] **3.7** **Atribuição** (quem colocou/tirou): A guarda R$X, B guarda R$Y. Nos detalhes da
+- ❌ ~~**3.7** **Atribuição** (quem colocou/tirou): A guarda R$X, B guarda R$Y. Nos detalhes da~~
       reserva, a trilha mostra os dois corretamente (fluxo já existente).
-- [ ] **3.8** **Edição não apaga convite em voo**: convide **D**; sem D aceitar, edite a reserva
+- ❌ ~~**3.8** **Edição não apaga convite em voo**: convide **D**; sem D aceitar, edite a reserva~~
       em A (mude o objetivo) e salve. Entre em **D**: o convite **ainda está lá**.
-- [ ] **3.9** **Reserva compartilhada antiga** (criada antes desta versão, se houver): continua
+- ❌ ~~**3.9** **Reserva compartilhada antiga** (criada antes desta versão, se houver): continua~~
       visível para quem já participava, sem exigir aceite (compatibilidade).
+
+</details>
 
 ---
 
