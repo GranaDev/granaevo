@@ -58,6 +58,24 @@ const SafeRedirect = {
         for (const scheme of this._DANGEROUS_SCHEMES) {
             if (lower.startsWith(scheme)) return false;
         }
+
+        // [SEC-006] Mesma correção do auth-guard.js — esta é uma SEGUNDA cópia
+        // do mesmo predicado, e foi por isso que ela ficou para trás na primeira
+        // rodada: corrigir uma primitiva duplicada corrige uma das cópias.
+        // `//evil.com` não começa com http:// nem https://, então caía no
+        // `return true` abaixo como se fosse caminho interno — e o browser
+        // resolve para https://evil.com. A contrabarra entra junto porque
+        // IE/Edge legados tratam `\\host` como `//host`.
+        // (Sem escapes hexadecimais de propósito: charCodeAt <= 32 cobre
+        // exatamente os controles C0 + espaço que o parser de URL descarta.)
+        let _ini = 0;
+        while (_ini < url.length && url.charCodeAt(_ini) <= 32) _ini++;
+        const semEsquema = url.slice(_ini);
+        if (semEsquema.startsWith('//') || semEsquema.startsWith('\\\\') ||
+            semEsquema.startsWith('/\\') || semEsquema.startsWith('\\/')) {
+            return false;
+        }
+
         if (!url.startsWith('http://') && !url.startsWith('https://')) return true;
         try {
             return new URL(url, window.location.origin).origin === window.location.origin;

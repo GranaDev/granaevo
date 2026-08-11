@@ -454,6 +454,58 @@ Deno.serve(async (req) => {
       .update({ used: true, used_at: new Date().toISOString() })
       .eq('id', resetEntry.id)
 
+    // ── 6. [SEC-008] EXPULSAR TODA SESSÃO ANTIGA ───────────────────────────
+    //
+    // Sem isto, o reset de senha não remediava a única coisa que ele existe
+    // para remediar. O cenário: a conta foi comprometida (token roubado,
+    // aparelho perdido, sessão esquecida), a pessoa faz "esqueci minha senha" e
+    // acredita ter expulsado o invasor — mas a sessão dele sobrevivia, com o
+    // refresh token rotacionando por mais 30 dias.
+    //
+    // O `delete-account` já fazia isso (`admin.signOut(token, 'global')`), e o
+    // CLAUDE.md lista a armadilha como crítica. A defesa existia; faltava aqui.
+    //
+    // Não dá para usar `admin.signOut`: ele exige o JWT do usuário, e quem
+    // reseta senha por código está DESLOGADO — prova identidade pelo código do
+    // e-mail, não por sessão. O que temos é o user_id, e o schema `auth` não é
+    // alcançável pelo PostgREST. Daí a RPC (service_role, migration
+    // 20260811010000).
+    //
+    // Best-effort DE PROPÓSITO: a senha JÁ foi trocada quando isto roda.
+    // Devolver erro aqui faria o usuário achar que o reset falhou e tentar de
+    // novo com a senha antiga — que não vale mais. O pior caso desta falha é o
+    // estado anterior à correção, registrado em log para ser visto.
+    //
+    // `userIdParaRevogar`: linhas legadas de password_reset_codes podem ter
+    // `user_id` nulo (o recovery flow resolve o usuário só pelo e-mail). Nesse
+    // caso resolvemos pelo e-mail — senão a correção seria parcial justamente
+    // nas contas mais antigas, que são as com mais chance de ter sessão velha
+    // esquecida por aí. `get_auth_user_id_by_email` já existe e é service_role.
+    let userIdParaRevogar = userId
+    if (!userIdParaRevogar) {
+      try {
+        const { data: idPorEmail } = await supabase
+          .rpc('get_auth_user_id_by_email', { p_email: normalizedEmail })
+        if (typeof idPorEmail === 'string' && idPorEmail) userIdParaRevogar = idPorEmail
+      } catch { /* cai no aviso abaixo */ }
+    }
+
+    if (userIdParaRevogar) {
+      try {
+        const { data: n, error: revErr } = await supabase
+          .rpc('revogar_sessoes_usuario', { p_user_id: userIdParaRevogar })
+        if (revErr) {
+          console.error(`[verify-reset] SEC-008 revogação FALHOU (senha já trocada): ${revErr.message}`)
+        } else {
+          console.log(`[verify-reset] SEC-008 ${n ?? 0} sessão(ões) encerrada(s) para ${userIdParaRevogar.slice(0, 8)}`)
+        }
+      } catch (e) {
+        console.error('[verify-reset] SEC-008 revogação lançou:', String(e))
+      }
+    } else {
+      console.warn('[verify-reset] SEC-008 sem user_id — sessões antigas NÃO revogadas')
+    }
+
     console.log(`[verify-reset] Senha alterada com sucesso: ${normalizedEmail}`)
     return json({ status: 'success' })
 

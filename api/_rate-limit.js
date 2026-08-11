@@ -193,17 +193,41 @@ setInterval(() => {
  * @param {string} ip
  * @returns {Promise<boolean>}
  */
+// ── [SEC-005] Comando do Redis SEMPRE pelo corpo, nunca pelo caminho da URL ───
+//
+// No REST do Upstash, o CAMINHO é o que escolhe o COMANDO. Toda chave
+// interpolada num path é, por construção, uma chance de trocar o comando: um
+// `x/../../flushall` normaliza para `${REDIS_URL}/flushall` e apaga todos os
+// rate limits e bloqueios de uma vez.
+//
+// A primeira versão desta correção só passava `encodeURIComponent` na chave. Ela
+// tapava o buraco e ABRIA OUTRO, pior porque silencioso: as ESCRITAS deste
+// módulo (`blockIP`, `blockKey`, `bumpCounter`) mandam a chave pelo pipeline, em
+// JSON, LITERAL. Codificar só na leitura faz os dois lados mirarem chaves
+// diferentes sempre que a chave tem `:` — que é o caso de TODAS elas
+// (`blocklist:ip:…`, `loginlock:…`, `loginfail:…`, `mfatries:…`). O resultado
+// seria a blocklist e o lockout de conta respondendo "não bloqueado" para
+// sempre: um controle de segurança desligado por uma correção de segurança.
+//
+// Se a resposta depende de o Upstash decodificar ou não o path, a pergunta está
+// errada. O pipeline elimina a pergunta: a chave viaja no corpo, exatamente como
+// nas escritas, e simetria entre leitura e escrita deixa de ser suposição.
+async function _redisCmd(...comando) {
+  const res = await fetch(`${REDIS_URL}/pipeline`, {
+    method:  'POST',
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+    body:    JSON.stringify([comando]),
+    signal:  AbortSignal.timeout(2_000),
+  })
+  if (!res.ok) throw new Error('redis_http_' + res.status)
+  return (await res.json())?.[0]?.result
+}
+
 export async function isIPBlocked(ip) {
   if (!ip || ip === 'unknown') return false
   if (USE_REDIS) {
     try {
-      const res = await fetch(`${REDIS_URL}/exists/${BLOCKLIST_PREFIX}${ip}`, {
-        headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
-        signal:  AbortSignal.timeout(2_000),
-      })
-      if (!res.ok) return _blockedIPs.has(ip) && Date.now() < (_blockedIPs.get(ip) ?? 0)
-      const data = await res.json()
-      return (data?.result ?? 0) > 0
+      return Number(await _redisCmd('EXISTS', `${BLOCKLIST_PREFIX}${ip}`) ?? 0) > 0
     } catch {
       return _blockedIPs.has(ip) && Date.now() < (_blockedIPs.get(ip) ?? 0)
     }
@@ -286,11 +310,10 @@ export async function bumpCounter(key, windowSecs) {
 export async function readCounter(key) {
   if (USE_REDIS) {
     try {
-      const res = await fetch(`${REDIS_URL}/get/${encodeURIComponent(key)}`, {
-        headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
-        signal:  AbortSignal.timeout(2_000),
-      })
-      if (res.ok) return Number((await res.json())?.result ?? 0) || 0
+      // Pipeline pelo mesmo motivo do isIPBlocked: `bumpCounter` grava esta
+      // chave LITERAL pelo corpo, e ela contém `:`. Ler por path codificado
+      // miraria outra chave e o gate de captcha nunca dispararia.
+      return Number(await _redisCmd('GET', key) ?? 0) || 0
     } catch { /* cai no fallback */ }
   }
   const r = _counters.get(key)
@@ -303,11 +326,10 @@ export async function isKeyBlocked(key) {
   if (!key) return false
   if (USE_REDIS) {
     try {
-      const res = await fetch(`${REDIS_URL}/exists/${encodeURIComponent(key)}`, {
-        headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
-        signal:  AbortSignal.timeout(2_000),
-      })
-      if (res.ok) return ((await res.json())?.result ?? 0) > 0
+      // Idem: `blockKey` grava `loginlock:<hash>` literal pelo corpo. Esta é a
+      // leitura que decide se a conta está travada (S-2) — se ela mirar a chave
+      // errada, o lockout por conta responde "livre" para sempre.
+      return Number(await _redisCmd('EXISTS', key) ?? 0) > 0
     } catch { /* cai no fallback */ }
   }
   return _blockedKeys.has(key) && Date.now() < (_blockedKeys.get(key) ?? 0)

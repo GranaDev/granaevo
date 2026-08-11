@@ -380,6 +380,48 @@ Deno.serve(async (req: Request) => {
     return json({ path: filePath, signedUrl: null }, 200);
   }
 
+  // ── 12. [SEC-007] Retenção: a pasta do usuário guarda no máximo N arquivos ──
+  //
+  // Cada upload cria `{uid}/{timestamp}.{ext}` e NADA apagava o anterior. Sem
+  // teto, o crescimento é ilimitado: o rate limit permite 10 uploads/hora por
+  // conta × 5 MB = 1,2 GB/dia de UM usuário, contra 1 GB de cota do projeto.
+  // Não é só custo — um abusador esgota o storage e derruba o upload de foto de
+  // TODO MUNDO. Medido em 2026-08-11: 43 objetos, 6,6 MB, 15 pastas.
+  //
+  // Mantemos MAX_POR_PASTA e não apenas 1: uma URL assinada emitida antes vale
+  // 7 dias, e apagar o arquivo anterior na hora quebraria a foto ainda em uso em
+  // outra aba/aparelho. Com 3, a troca de foto é suave e o teto continua firme.
+  //
+  // Best-effort DE PROPÓSITO: o upload JÁ terminou e a URL já foi gerada.
+  // Falhar a limpeza não pode transformar um upload bem-sucedido em erro — o
+  // pior caso é o estado anterior a esta correção, registrado em log.
+  const MAX_POR_PASTA = 3;
+  try {
+    const { data: existentes } = await supabaseAdmin.storage
+      .from("profile-photos")
+      .list(effectiveUserId, { limit: 100, sortBy: { column: "name", order: "desc" } });
+
+    if (existentes && existentes.length > MAX_POR_PASTA) {
+      // `name` é o timestamp: ordem decrescente = mais novo primeiro. O recém
+      // enviado está no topo, então a cauda são os antigos.
+      const sobrando = existentes
+        .slice(MAX_POR_PASTA)
+        .map((o) => `${effectiveUserId}/${o.name}`);
+
+      const { error: rmErr } = await supabaseAdmin.storage
+        .from("profile-photos")
+        .remove(sobrando);
+
+      if (rmErr) {
+        console.warn(`[upload-profile-photo] retenção falhou: ${rmErr.message}`);
+      } else {
+        console.log(`[upload-profile-photo] retenção: ${sobrando.length} antigo(s) removido(s)`);
+      }
+    }
+  } catch (e) {
+    console.warn("[upload-profile-photo] retenção lançou:", String(e));
+  }
+
   console.log(
     `[upload-profile-photo] Upload OK: ${filePath} ` +
     `(caller: ${callerUserId.slice(0,8)}..., effective: ${effectiveUserId.slice(0,8)}...)`

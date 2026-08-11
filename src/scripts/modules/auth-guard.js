@@ -737,6 +737,22 @@ const SafeRedirect = {
             }
         }
 
+        // [SEC-006] URL relativa-de-protocolo é EXTERNA, não relativa.
+        // `//evil.com` não começa com http:// nem https://, então caía no
+        // `return true` abaixo como se fosse um path do próprio site — e o
+        // browser resolve para `https://evil.com`. A contrabarra entra junto
+        // porque IE/Edge legados tratam `\\host` como `//host`.
+        // Nenhum chamador de hoje passa dado do usuário (todos são constantes),
+        // mas o nome da função é SafeRedirect: quem chamar amanhã vai confiar
+        // que ela verifica isto.
+        let _ini = 0;
+        while (_ini < url.length && url.charCodeAt(_ini) <= 32) _ini++;
+        const semEsquema = url.slice(_ini);
+        if (/^[/\\]{2}/.test(semEsquema)) {
+            console.error('[AUTH GUARD] Redirect relativo-de-protocolo bloqueado.');
+            return false;
+        }
+
         // URLs relativas são aceitas (same-origin por natureza)
         if (!url.startsWith('http://') && !url.startsWith('https://')) return true;
 

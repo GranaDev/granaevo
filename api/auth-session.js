@@ -48,7 +48,7 @@ import { checkRate, checkRateWindow, isIPBlocked,
          bumpCounter, readCounter, isKeyBlocked, blockKey, clearKeys } from './_rate-limit.js'
 import { logger } from './_logger.js'
 import { turnstileOk } from './_turnstile.js'
-import { createHash } from 'node:crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
 const PATH         = '/api/auth-session'
 const SUPABASE_URL = process.env.SUPABASE_URL ?? ''
@@ -197,8 +197,44 @@ function readRefreshCookie(cookieHeader) {
 // recuperação: quando o usuário destrava com um código de recuperação, os fatores
 // são removidos e a sessão aal1 passa a ser a sessão final — sem o refresh
 // guardado, ele entraria e seria deslogado uma hora depois sem poder renovar.
+//
+// ── [SEC-002] POR QUE ESTE COOKIE É ASSINADO E O CONTADOR MORA FORA DELE ───────
+// "HttpOnly" só impede o JAVASCRIPT da página de ler o cookie. Não impede nada
+// de quem fala HTTP direto — e é exatamente esse o atacante aqui: alguém que já
+// tem a SENHA da vítima e está preso no 2º fator. Ele vê o Set-Cookie na resposta
+// do login, decodifica o base64url e reescreve o que quiser.
+//
+// Duas travas do MFA moravam DENTRO desse JSON e eram, portanto, dele:
+//   `tries` — bastava reenviar o cookie original a cada palpite para o contador
+//             de 5 tentativas nunca sair de zero.
+//   `exp`   — bastava aumentar o número para a janela de 5 minutos virar eterna
+//             (o Max-Age do browser não vincula quem monta o request na mão).
+//
+// A correção tem duas metades, e as duas são necessárias:
+//   1. HMAC-SHA256 sobre o payload → `exp`, `fid` e `remember` viram imutáveis.
+//      Sem a chave, forjar um payload novo é inviável.
+//   2. `tries` SAI do cookie e vira contador de servidor, chaveado por um `sid`
+//      aleatório que nasce dentro do payload assinado. Só o HMAC não bastaria:
+//      um cookie legitimamente assinado com tries=0 pode ser REPETIDO à vontade.
+//      Com o contador no servidor, repetir o mesmo cookie é repetir o mesmo sid
+//      — e o contador continua de onde parou.
+//
+// A chave é derivada do PROXY_SECRET com um rótulo próprio, em vez de uma env
+// var nova: separa o uso criptográfico (nada aqui vaza o PROXY_SECRET, que só
+// entra num SHA-256) sem exigir configuração manual num deploy de segurança.
+const MFA_COOKIE_KEY = createHash('sha256')
+  .update('granaevo-ge-mfa-cookie-v1|' + (process.env.PROXY_SECRET ?? ''))
+  .digest()
+
+const mfaSign = (b64) =>
+  createHmac('sha256', MFA_COOKIE_KEY).update(b64).digest('base64url')
+
 function buildMfaCookie(payload, { clear, domain } = {}) {
-  const value = clear ? '' : Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')
+  let value = ''
+  if (!clear) {
+    const b64 = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')
+    value = `${b64}.${mfaSign(b64)}`
+  }
   const parts = [
     `${MFA_COOKIE_NAME}=${value}`,
     'HttpOnly', 'Secure', 'SameSite=Strict',
@@ -218,15 +254,34 @@ function readMfaCookie(cookieHeader) {
     const raw = part.slice(idx + 1).trim()
     if (!raw) return null
     try {
-      const d = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'))
+      // Formato: <payload base64url>.<hmac base64url>. Sem assinatura válida o
+      // cookie não existe — nem tenta parsear o JSON.
+      const dot = raw.lastIndexOf('.')
+      if (dot <= 0) return null
+      const b64 = raw.slice(0, dot)
+      const sig = Buffer.from(raw.slice(dot + 1), 'base64url')
+      const esperada = Buffer.from(mfaSign(b64), 'base64url')
+      if (sig.length !== esperada.length || !timingSafeEqual(sig, esperada)) return null
+
+      const d = JSON.parse(Buffer.from(b64, 'base64url').toString('utf8'))
       // exp é a autoridade: o Max-Age do cookie é uma dica ao browser, não uma
       // garantia — um cliente que reenvie o cookie vencido não ganha nada.
+      // Agora está coberto pelo HMAC, então também não dá para esticá-lo.
       if (!d?.at || !d?.rt || typeof d.exp !== 'number' || Date.now() > d.exp) return null
+      // `sid` amarra o cookie ao contador de tentativas do servidor. Um payload
+      // sem sid é de um deploy anterior a esta correção: recusar força um login
+      // novo (custo: um formulário), em vez de cair no caminho sem contagem.
+      if (typeof d.sid !== 'string' || d.sid.length < 16) return null
       return d
     } catch { return null }
   }
   return null
 }
+
+// Chave do contador de tentativas do 2º fator, no Redis (in-memory como
+// fallback). TTL igual ao do cookie: a sessão em trânsito morre, o contador
+// morre junto — ninguém carrega punição de uma tentativa de ontem.
+const mfaTriesKey = (sid) => `mfatries:${sid}`
 
 // Emite Set-Cookie para ge_rt e ge_mfa ao mesmo tempo, preservando a limpeza do
 // cookie host-only legado que setRefreshCookie() já fazia.
@@ -472,7 +527,10 @@ export default async function handler(req, res) {
           rt:       grant.refresh_token,
           fid:      factors[0].id,
           remember: remember === true,
-          tries:    0,
+          // [SEC-002] `tries` não mora mais aqui — ver o bloco do buildMfaCookie.
+          // `sid` é o que amarra este desafio ao contador do servidor; sendo
+          // aleatório e coberto pelo HMAC, não dá para trocar por um "sid limpo".
+          sid:      randomBytes(16).toString('base64url'),
           exp:      Date.now() + MFA_TTL_SECS * 1000,
         }, { domain }),
         // Derruba qualquer ge_rt anterior: enquanto o 2º fator não vier, esta
@@ -541,9 +599,14 @@ export default async function handler(req, res) {
         return res.status(502).json({ error: 'Gateway indisponível' })
       }
       if (!rec.ok) {
-        const tries = (pend.tries ?? 0) + 1
-        if (tries >= MFA_MAX_ATTEMPTS) { limparTudo(); return res.status(429).json({ error: 'mfa_locked' }) }
-        setCookies(res, [buildMfaCookie({ ...pend, tries }, { domain })])
+        // [SEC-002] contador no SERVIDOR (chave = sid do cookie assinado).
+        // Reenviar o mesmo cookie reenvia o mesmo sid: a contagem não zera.
+        const tries = await bumpCounter(mfaTriesKey(pend.sid), MFA_TTL_SECS)
+        if (tries >= MFA_MAX_ATTEMPTS) {
+          limparTudo()
+          clearKeys(mfaTriesKey(pend.sid)).catch(() => {})
+          return res.status(429).json({ error: 'mfa_locked' })
+        }
         logger.warn('mfa_recovery_failed', PATH, { ip })
         return res.status(401).json({ error: 'codigo_invalido', attempts_left: MFA_MAX_ATTEMPTS - tries })
       }
@@ -565,6 +628,7 @@ export default async function handler(req, res) {
         buildMfaCookie(null, { clear: true, domain }),
         ...(domain ? [buildRefreshCookie('', { clear: true })] : []),
       ])
+      clearKeys(mfaTriesKey(pend.sid)).catch(() => {})
       logger.warn('mfa_disabled_by_recovery', PATH, { ip })
       return res.status(200).json({ ...sessionPayload(novo), mfa_disabled: true })
     }
@@ -589,13 +653,15 @@ export default async function handler(req, res) {
     } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
 
     if (!vr.ok) {
-      const tries = (pend.tries ?? 0) + 1
+      // [SEC-002] mesma troca do caminho de recuperação: a contagem é do
+      // servidor, não do cookie que o cliente devolve.
+      const tries = await bumpCounter(mfaTriesKey(pend.sid), MFA_TTL_SECS)
       if (tries >= MFA_MAX_ATTEMPTS) {
         limparTudo()
+        clearKeys(mfaTriesKey(pend.sid)).catch(() => {})
         logger.warn('mfa_locked', PATH, { ip })
         return res.status(429).json({ error: 'mfa_locked' })
       }
-      setCookies(res, [buildMfaCookie({ ...pend, tries }, { domain })])
       logger.warn('mfa_code_failed', PATH, { ip })
       return res.status(401).json({ error: 'codigo_invalido', attempts_left: MFA_MAX_ATTEMPTS - tries })
     }
@@ -611,6 +677,7 @@ export default async function handler(req, res) {
       buildMfaCookie(null, { clear: true, domain }),
       ...(domain ? [buildRefreshCookie('', { clear: true })] : []),
     ])
+    clearKeys(mfaTriesKey(pend.sid)).catch(() => {})
     return res.status(200).json(sessionPayload(elevado))
   }
 
@@ -706,6 +773,25 @@ export default async function handler(req, res) {
     } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
     if (!user?.email) return res.status(409).json({ error: 'conta_sem_email' })
 
+    // [SEC-003] Este caminho também é um oráculo de senha, e precisa das MESMAS
+    // travas do login. Ele faz um password grant de verdade contra o GoTrue:
+    // quem tem um access token roubado (XSS, aparelho emprestado, sessão
+    // esquecida) podia adivinhar a senha aqui à vontade, porque o teto era só
+    // 8/10min POR IP — e o S-2 nasceu justamente porque limite por IP não
+    // segura força bruta distribuída. Pior: acertar a senha aqui destrava
+    // `mfa-disable` e a exclusão de conta, que é o fim da linha.
+    //
+    // Reusa `kFail`/`kLock` do login — mesma conta, mesmo contador. Um atacante
+    // que alterne entre /login e este endpoint soma no mesmo balde.
+    const kContaSU = chaveConta(String(user.email).toLowerCase())
+    const kLockSU  = `loginlock:${kContaSU}`
+    const kFailSU  = `loginfail:${kContaSU}`
+    if (await isKeyBlocked(kLockSU)) {
+      logger.warn('stepup_conta_travada', PATH, { ip })
+      res.setHeader('Retry-After', '900')
+      return res.status(429).json({ error: 'account_locked' })
+    }
+
     let checa
     try {
       checa = await gotrue('token?grant_type=password', {
@@ -714,9 +800,23 @@ export default async function handler(req, res) {
     } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
 
     if (!checa.ok) {
+      try {
+        const falhas = await bumpCounter(kFailSU, LOCK_JANELA)
+        const degrau = LOCK_DEGRAUS.find(d => falhas >= d.falhas)
+        if (degrau) {
+          await blockKey(kLockSU, degrau.ttl)
+          logger.warn('login_lockout_aplicado', PATH, { ip, falhas, ttl: degrau.ttl, origem: 'stepup' })
+          import('./_alert.js')
+            .then(({ trackSecurityEvent }) => trackSecurityEvent('login_lockout', { ip, falhas, ttl: degrau.ttl }))
+            .catch(() => {})
+        }
+      } catch { /* nunca derruba o step-up por falha do contador */ }
       logger.warn('stepup_senha_incorreta', PATH, { ip })
       return res.status(401).json({ error: 'senha_incorreta' })
     }
+    // Senha certa: zera o histórico, igual ao login. Sem isto, confirmações
+    // legítimas com um erro de digitação no meio somariam até travar a conta.
+    clearKeys(kFailSU, kLockSU).catch(() => {})
     // O grant acima criou uma sessão paralela que ninguém vai usar. Não a
     // devolvemos (o cliente segue com a sessão dele) e revogamos na hora, para
     // não deixar refresh token órfão vivo no GoTrue a cada confirmação.
@@ -878,6 +978,18 @@ export default async function handler(req, res) {
       if (!user.email) return res.status(409).json({ error: 'conta_sem_email' })
       if (ativos.length === 0) return res.status(200).json({ ok: true, enabled: false })
 
+      // [SEC-003] Mesma trava do login e do step-up, e aqui ela pesa mais que
+      // nos outros dois: adivinhar a senha neste endpoint DESLIGA o 2º fator.
+      // O teto de 12/10min por IP (bucket mfa-admin) não é freio contra botnet.
+      const kContaMD = chaveConta(String(user.email).toLowerCase())
+      const kLockMD  = `loginlock:${kContaMD}`
+      const kFailMD  = `loginfail:${kContaMD}`
+      if (await isKeyBlocked(kLockMD)) {
+        logger.warn('mfa_disable_conta_travada', PATH, { ip })
+        res.setHeader('Retry-After', '900')
+        return res.status(429).json({ error: 'account_locked' })
+      }
+
       let checa
       try {
         checa = await gotrue('token?grant_type=password', {
@@ -885,9 +997,21 @@ export default async function handler(req, res) {
         })
       } catch { return res.status(502).json({ error: 'Gateway indisponível' }) }
       if (!checa.ok) {
+        try {
+          const falhas = await bumpCounter(kFailMD, LOCK_JANELA)
+          const degrau = LOCK_DEGRAUS.find(d => falhas >= d.falhas)
+          if (degrau) {
+            await blockKey(kLockMD, degrau.ttl)
+            logger.warn('login_lockout_aplicado', PATH, { ip, falhas, ttl: degrau.ttl, origem: 'mfa-disable' })
+            import('./_alert.js')
+              .then(({ trackSecurityEvent }) => trackSecurityEvent('login_lockout', { ip, falhas, ttl: degrau.ttl }))
+              .catch(() => {})
+          }
+        } catch { /* nunca derruba o fluxo por falha do contador */ }
         logger.warn('mfa_disable_bad_password', PATH, { ip })
         return res.status(401).json({ error: 'senha_incorreta' })
       }
+      clearKeys(kFailMD, kLockMD).catch(() => {})
 
       // Mesma limpeza do step-up do Passo 25, pelo mesmo motivo: o grant acima
       // é só uma prova de senha, mas cria uma sessão de verdade. Sem revogar,

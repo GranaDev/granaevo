@@ -718,7 +718,20 @@ describe('step-up de senha — provar a senha não pode deslogar quem provou', (
       // ela media o trecho errado do arquivo.
       const i = bff.indexOf(`if (action === '${acao}')`)
       assert.ok(i > -1, `Não achei o bloco de ${acao}.`)
-      const bloco = bff.slice(i, i + 4000)
+
+      // Recorta até o PRÓXIMO `if (action ===`, e não uma janela de N chars.
+      // A janela fixa era 4000 e reprovou em 2026-08-11 sem nada ter sido
+      // removido: o bloco de verify-password cresceu (ganhou o lockout por
+      // conta do SEC-003) e empurrou a revogação para o offset 4207. O de
+      // mfa-disable estava a 12 caracteres de cair pelo mesmo motivo.
+      // Um teste de segurança que reprova quando o arquivo ENGORDA treina
+      // quem mantém a suíte a aumentar o número até o vermelho sumir — que é
+      // como uma verificação de verdade morre. Delimitar pelo bloco não tem
+      // essa falha e ainda cobre o bloco INTEIRO, não só os primeiros 4000.
+      const resto = bff.slice(i + `if (action === '${acao}')`.length)
+      const j     = resto.indexOf('if (action ===')
+      const bloco = resto.slice(0, j === -1 ? undefined : j)
+
       assert.match(bloco, /gotrue\('logout\?scope=local'/,
         `O bloco de ${acao} faz grant_type=password e não revoga a sessão criada — `
         + 'refresh token órfão a cada uso.')

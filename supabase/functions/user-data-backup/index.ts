@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 import { buildRestoredBlob } from './_restore-core.js'
+import { mfaBloqueia } from '../_shared/mfa-gate.ts'
 
 // Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS).
 // SEM fallback na legada: as chaves antigas (anon e service_role) foram
@@ -23,6 +24,7 @@ function getSecretKey(): string {
 // Segurança:
 //   • Proxy secret obrigatório (x-proxy-secret)
 //   • JWT validado via auth.getUser() (ES256, não decode manual)
+//   • Gate de 2º fator (mfaBloqueia) — ver o bloco [SEC-004] abaixo
 //   • Autorização: usuário só acessa/restaura seus próprios dados
 //   • data_json nunca retornado via API (apenas metadados)
 //   • snapshot_date validado com regex estrita antes de qualquer query
@@ -117,6 +119,29 @@ Deno.serve(async (req: Request) => {
   if (authError || !user?.id) {
     console.warn('[user-data-backup] JWT inválido:', authError?.message ?? 'user null')
     return json({ error: 'Token inválido' }, 401, cors)
+  }
+
+  // ── 3.5 [SEC-004] Gate do 2º fator — a mesma trava de get/save-user-data ───
+  //
+  // O cabeçalho do _shared/mfa-gate.ts diz por que o gate existe: as policies
+  // `exige_aal2` cobrem o que o cliente alcança por PostgREST, mas estas edges
+  // falam com o banco usando service_role, que BYPASSA RLS.
+  //
+  // Esta função se encaixa nessa descrição palavra por palavra — e escapou.
+  // Ela lê e ESCREVE em `user_data`, a mesma tabela e o mesmo blob financeiro,
+  // com o mesmo service_role. O resultado era um MFA com a porta dos fundos
+  // aberta: uma sessão aal1 (a de um aparelho que já estava logado quando o 2FA
+  // foi ligado, ou um access token roubado) não conseguia LER nem GRAVAR pelo
+  // caminho normal, mas conseguia RESTAURAR — que é sobrescrever a vida
+  // financeira inteira da conta por um retrato de até 5 dias atrás.
+  //
+  // O GET entra no gate junto: datas e tamanhos de snapshot não são o blob, mas
+  // são o mapa que diz QUAL data reverter para causar o maior estrago.
+  //
+  // Falha FECHADO, como nas outras duas (ver o comentário no mfa-gate).
+  if (await mfaBloqueia(admin, token, user.id, 'user-data-backup')) {
+    console.warn('[user-data-backup] 2FA exigido e sessão não elevada:', user.id.slice(0, 8))
+    return json({ error: 'Verificação em duas etapas necessária', mfa_required: true }, 403, cors)
   }
 
   // ── 3b. Convidado → DONO (mesma resolução de get-user-data/save-user-data) ─

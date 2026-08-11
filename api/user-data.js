@@ -410,7 +410,7 @@ export default async function handler(req, res) {
         }
 
         if (edgeRes.status === 200 && userId && REDIS_URL && REDIS_TOKEN) {
-            fetch(`${REDIS_URL}/del/gd:${userId}`, {
+            fetch(`${REDIS_URL}/del/gd:${encodeURIComponent(userId)}`, {
                 method:  'POST',
                 headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
                 signal:  AbortSignal.timeout(2_000),
@@ -582,7 +582,7 @@ export default async function handler(req, res) {
 
         // Invalida cache Redis do usuário após exclusão
         if (daRes.status === 200 && userId && REDIS_URL && REDIS_TOKEN) {
-            fetch(`${REDIS_URL}/del/gd:${userId}`, {
+            fetch(`${REDIS_URL}/del/gd:${encodeURIComponent(userId)}`, {
                 method:  'POST',
                 headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
                 signal:  AbortSignal.timeout(2_000),
@@ -732,7 +732,7 @@ export default async function handler(req, res) {
 
     // Invalida cache Redis após save bem-sucedido
     if (edgeRes.status === 200 && userId && REDIS_URL && REDIS_TOKEN) {
-        fetch(`${REDIS_URL}/del/gd:${userId}`, {
+        fetch(`${REDIS_URL}/del/gd:${encodeURIComponent(userId)}`, {
             method:  'POST',
             headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
             signal:  AbortSignal.timeout(2_000),
