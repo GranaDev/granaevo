@@ -49,7 +49,33 @@ const BUDGETS_KB = {
   // exatamente isso. O conserto de verdade é o PASSO 10 (quebrar o monólito dashboard.js),
   // que deixa de ser opcional: com 42 não há espaço para mais nenhuma feature no
   // boot. A próxima que precisar de espaço aqui divide o arquivo antes.
-  'dashboard.js':        42,
+  //
+  // 42 → 38 (2026-08-10, PASSO 10 DE VERDADE). 40,8 → 35,3 KB. A nota acima
+  // dizia "o conserto de verdade é quebrar o monólito"; foi feito:
+  //   · db-contas-fixas.js — 588 linhas de interação (ver/editar/pagar/
+  //     antecipar), tudo atrás de um clique;
+  //   · perfil-acoes.js — 374 linhas (criar perfil, trocar foto), duas ações
+  //     que o usuário faz uma vez na vida;
+  //   · 28 chaves órfãs fora do _makeCtx (0,8 KB de peso morto no boot).
+  //
+  // Teto novo pela razão escrita em 2026-07-18 e comprovada em 2026-08-07:
+  // ganho de Passo 10 sem teto novo é reocupado em silêncio até voltar a 98%.
+  //
+  // 38 e não 37: um teto que já nasce em 95% não é aviso, é aviso disparado —
+  // o primeiro polimento reprova o build e o teto sobe de novo, que foi
+  // exatamente o ciclo 40 → 42. Com 38 sobram 2,7 KB: cabe polimento, não cabe
+  // feature. Quem precisar de mais espaço divide o arquivo, como foi feito
+  // aqui. (Menos que os ~15% de folga do cabeçalho, e de propósito.)
+  //
+  // MEDIDO E NÃO FEITO, para ninguém repetir a conta:
+  //   · painel do sino (89 linhas) e seletor de mês (81) sobraram frios, mas
+  //     exigiriam 5 e 2 chaves novas no _makeCtx. O contrato custa ~25 bytes
+  //     gzip por chave e os blocos valem ~0,35 KB cada — sobra quase nada;
+  //   · `atualizarListaContasFixas` (12,7 KB de fonte, o maior bloco restante)
+  //     PINTA a seção da tela inicial. Dá para adiar como recorrencias.js faz,
+  //     mas é mudança de comportamento na tela principal — precisa de decisão
+  //     do dono, não de refactor.
+  'dashboard.js':        38,
   // Passo 8: realtime-js E functions-js stubados → 34,3 KB. O teto era 40, e 40
   // só pegava a volta do realtime (~48,6). A volta do functions-js sozinho daria
   // 35,1 — passaria despercebida. 36 dá 1,7 KB de folga e barra as duas.
