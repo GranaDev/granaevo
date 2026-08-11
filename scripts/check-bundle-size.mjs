@@ -74,16 +74,41 @@ function gzipKB(file) {
 }
 
 // Casa cada arquivo do dist com seu prefixo de orçamento (ignora o -hash).
+//
+// ⚠️ CONSERTO 2026-08-10 — o guard media o ARQUIVO ERRADO, em silêncio.
+// O casamento era `startsWith(base + '-') && endsWith(ext)`, e
+// `db-relatorios-export-CDZ9Lehn.js` satisfaz os dois para o orçamento de
+// `db-relatorios.js`. Quem vencia dependia da ORDEM do readdir, que muda com o
+// hash: naquele build o orçamento de 30 KB estava sendo conferido contra um
+// arquivo de 12,0 KB, enquanto o db-relatorios real tinha 27,7 KB (92%).
+// Verde que não prova nada — o teto podia estourar e ninguém saberia.
+//
+// A trava agora é o formato do hash do Vite: EXATAMENTE 8 caracteres de
+// [A-Za-z0-9_-] entre o `-` e a extensão. (O hash pode conter `-`, como em
+// `db-relatorios-D-_VZJA2.css`, então "sem traço" não serviria de regra.)
+// E ambiguidade agora REPROVA em vez de escolher sozinha.
 const files = readdirSync(DIST);
 let failed = false;
 const rows = [];
+
+const RE_HASH = /^[A-Za-z0-9_-]{8}$/;
 
 for (const [prefix, budget] of Object.entries(BUDGETS_KB)) {
   const dot = prefix.lastIndexOf('.');
   const base = prefix.slice(0, dot);          // ex.: "dashboard"
   const ext  = prefix.slice(dot);             // ex.: ".css"
-  const match = files.find(f => f.startsWith(base + '-') && f.endsWith(ext));
-  if (!match) { rows.push(`  ⚠️  ${prefix.padEnd(22)} não encontrado no dist`); continue; }
+  const candidatos = files.filter(f =>
+    f.startsWith(base + '-') && f.endsWith(ext) &&
+    RE_HASH.test(f.slice(base.length + 1, f.length - ext.length))
+  );
+  if (candidatos.length > 1) {
+    failed = true;
+    rows.push(`  ❌ ${prefix.padEnd(22)} AMBÍGUO: ${candidatos.join(', ')}`);
+    continue;
+  }
+  const match = candidatos[0];
+  // Orçamento sem arquivo é orçamento morto ou build quebrado — reprova.
+  if (!match) { failed = true; rows.push(`  ❌ ${prefix.padEnd(22)} não encontrado no dist`); continue; }
   const kb = gzipKB(join(DIST, match));
   const over = kb > budget;
   if (over) failed = true;
