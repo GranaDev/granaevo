@@ -2433,10 +2433,7 @@ function _makeCtx() {
         filtroMovAtivo:      { get: () => filtroMovAtivo,      set: v => { filtroMovAtivo = v; },      enumerable: true },
         filtroMovMes:        { get: () => filtroMovMes,        set: v => { filtroMovMes = v; },        enumerable: true },
         filtroMovAno:        { get: () => filtroMovAno,        set: v => { filtroMovAno = v; },        enumerable: true },
-        nextTransId:         { get: () => nextTransId,         set: v => { nextTransId = v; },         enumerable: true },
-        nextMetaId:          { get: () => nextMetaId,          set: v => { nextMetaId = v; },          enumerable: true },
         nextCartaoId:        { get: () => nextCartaoId,        set: v => { nextCartaoId = v; },        enumerable: true },
-        nextContaFixaId:     { get: () => nextContaFixaId,     set: v => { nextContaFixaId = v; },     enumerable: true },
         metaSelecionadaId:   { get: () => metaSelecionadaId,   set: v => { metaSelecionadaId = v; },   enumerable: true },
         cartaoSelecionadoId: { get: () => cartaoSelecionadoId, set: v => { cartaoSelecionadoId = v; }, enumerable: true },
         tipoRelatorioAtivo:  { get: () => tipoRelatorioAtivo,  set: v => { tipoRelatorioAtivo = v; },  enumerable: true },
@@ -2444,26 +2441,17 @@ function _makeCtx() {
         tiposPersonalizados:  { get: () => tiposPersonalizados,  set: v => { tiposPersonalizados = v; },  enumerable: true },
         configPerfil:         { get: () => configPerfil,         set: v => { configPerfil = _sanitizarConfigPerfil(v); },     enumerable: true },
         desafiosPerfil:       { get: () => desafiosPerfil,       set: v => { desafiosPerfil = _sanitizarDesafiosPerfil(v); }, enumerable: true },
-        _effectiveUserId:    { get: () => _effectiveUserId,    set: v => { _effectiveUserId = v; },    enumerable: true },
-        _effectiveEmail:     { get: () => _effectiveEmail,     set: v => { _effectiveEmail = v; },     enumerable: true },
         _movPaginaAtual:     { get: () => _movPaginaAtual,     set: v => { _movPaginaAtual = v; },     enumerable: true },
         _movVisivelCache:    { get: () => _movVisivelCache,    set: v => { _movVisivelCache = v; },    enumerable: true },
-        _movDelegateSet:     { get: () => _movDelegateSet,     set: v => { _movDelegateSet = v; },     enumerable: true },
         _chartJsCarregado:   { get: () => _chartJsCarregado,   set: v => { _chartJsCarregado = v; },   enumerable: true },
-        _chartJsCarregando:  { get: () => _chartJsCarregando,  set: v => { _chartJsCarregando = v; },  enumerable: true },
         _gerandoRelatorio:   { get: () => _gerandoRelatorio,   set: v => { _gerandoRelatorio = v; },   enumerable: true },
         // Constants
-        limitesPlano:        { value: limitesPlano,        enumerable: true },
         BANCO_ABREV:         { value: BANCO_ABREV,         enumerable: true },
         BANCO_COR:           { value: BANCO_COR,           enumerable: true },
         BANCO_ICON:          { value: BANCO_ICON,          enumerable: true },
         _CHARTJS_SRC:        { value: _CHARTJS_SRC,        enumerable: true },
         _CHARTJS_INTEGRITY:  { value: _CHARTJS_INTEGRITY,  enumerable: true },
         _validators:         { value: _validators,         enumerable: true },
-        _SAVE_LIMITS:        { value: _SAVE_LIMITS,        enumerable: true },
-        _ALLOWED_KEYS:       { value: _ALLOWED_KEYS,       enumerable: true },
-        _sessionNonce:       { get: () => _sessionNonce,   enumerable: true },
-        _notificacaoControl:        { get: () => _notificacaoControl, enumerable: true },
         verificarAnomaliaGasto:     { value: (tipo, v) => _notificacaoControl.verificarAnomaliaGasto(tipo, v), enumerable: true },
         // Conquistas: avaliação + leitura do estado/desbloqueios p/ a tela de perfil
         checarConquistas:    { value: () => checarConquistas(),       enumerable: true },
@@ -2478,17 +2466,11 @@ function _makeCtx() {
         agoraDataHora:       { value: (...a) => agoraDataHora(...a),       enumerable: true },
         isoDate:             { value: (...a) => isoDate(...a),             enumerable: true },
         yearMonthKey:        { value: (...a) => yearMonthKey(...a),        enumerable: true },
-        formatarTelefone:    { value: (...a) => formatarTelefone(...a),    enumerable: true },
-        formatarCPF:         { value: (...a) => formatarCPF(...a),         enumerable: true },
-        numeroParaExtenso:   { value: (...a) => numeroParaExtenso(...a),   enumerable: true },
         sanitizeNumber:      { value: (...a) => sanitizeNumber(...a),      enumerable: true },
         sanitizeDate:        { value: (...a) => sanitizeDate(...a),        enumerable: true },
         _sanitizeText:       { value: (...a) => _sanitizeText(...a),       enumerable: true },
         _sanitizeImgUrl:     { value: (...a) => _sanitizeImgUrl(...a),     enumerable: true },
-        _sanitizeObject:     { value: (...a) => _sanitizeObject(...a),     enumerable: true },
-        _validarMagicBytes:  { value: (...a) => _validarMagicBytes(...a),  enumerable: true },
         sanitizeHTML:        { value: (...a) => sanitizeHTML(...a),        enumerable: true },
-        escapeHTML:          { value: (...a) => escapeHTML(...a),          enumerable: true },
         _aplicarEstilosCSOM: { value: (...a) => _aplicarEstilosCSOM(...a), enumerable: true },
         criarPopup:          { value: (...a) => criarPopup(...a),          enumerable: true },
         criarPopupDOM:       { value: (...a) => criarPopupDOM(...a),       enumerable: true },
@@ -2502,16 +2484,12 @@ function _makeCtx() {
         // OUTROS perfis (o blob é uma linha só, array de perfis). Expõe a fonte de
         // verdade; a lógica de propagação vive em db-metas (chunk lazy, com folga).
         allProfilesData:     { get: () => _allProfilesData,              enumerable: true },
-        _throttledSave:      { value: (...a) => _throttledSave(...a),      enumerable: true },
-        atualizarDashboardResumo:  { value: (...a) => atualizarDashboardResumo(...a),  enumerable: true },
         atualizarTudo:             { value: (...a) => atualizarTudo(...a),             enumerable: true },
         atualizarListaContasFixas: { value: (...a) => atualizarListaContasFixas(...a), enumerable: true },
-        verificarVencimentos:      { value: (...a) => verificarVencimentos(...a),      enumerable: true },
         // Usado pela restauração de backup (db-configuracoes): trava as gravações
         // ANTES de pedir o snapshot ao servidor, para a memória velha não gravar
         // por cima do que foi restaurado. Sem contrapartida — só o reload libera.
         congelarGravacoes:         { value: () => congelarGravacoes(),                enumerable: true },
-        atualizarBadgeVencimentos: { value: (...a) => atualizarBadgeVencimentos(...a), enumerable: true },
         // As 3 abaixo eram chamadas pelas pages lazy SEM estar no ctx — ReferenceError
         // silencioso desde o split de dashboard.js (achado por scripts/check-refs.mjs).
         atualizarHeaderReservas:   { value: (...a) => atualizarHeaderReservas(...a),   enumerable: true },
@@ -2523,13 +2501,9 @@ function _makeCtx() {
         // `_cache` poderia trocá-lo por outro e o dashboard nunca saberia.
         _invalidarCache:           { value: (...chaves) => { for (const k of chaves) if (k in _cache) _cache[k] = null; }, enumerable: true },
         _requerPerfilAtivo:        { value: (...a) => _requerPerfilAtivo(...a),        enumerable: true },
-        _requerNonce:              { value: (...a) => _requerNonce(...a),              enumerable: true },
-        exportarDadosJSON:         { value: (...a) => exportarDadosJSON(...a),         enumerable: true },
-        exportarDadosCSV:          { value: (...a) => exportarDadosCSV(...a),          enumerable: true },
         // Único que faltava para o módulo lazy de exportação (Passo 10);
         // _validators e confirmarAcao já estão expostos acima.
         _EXPORT_MAX_REGISTROS:     { get: () => _EXPORT_MAX_REGISTROS,                  enumerable: true },
-        sistemaLog:                { get: () => sistemaLog,                             enumerable: true },
         mostrarSelecaoPerfis:      { value: (...a) => mostrarSelecaoPerfis(...a),      enumerable: true },
         // Navegação entre abas — usada por avisos proativos que levam o usuário
         // até a tela onde a ação correta existe (ex.: duplicados.js → Transações).
@@ -2540,12 +2514,10 @@ function _makeCtx() {
         mostrarPopupLimite:        { value: (...a) => mostrarPopupLimite(...a),        enumerable: true },
         abrirPopupPagarContaFixa:  { value: (...a) => abrirPopupPagarContaFixa(...a), enumerable: true },
         gerarCobrancasAssinaturas: { value: (...a) => gerarCobrancasAssinaturas(...a), enumerable: true },
-        _calcularFaturaParaData:   { value: (...a) => _calcularFaturaParaData(...a),   enumerable: true },
         // Cross-section lazy calls
         atualizarMovimentacoesUI: { value: () => window._dbTransacoes?.atualizarMovimentacoesUI?.(), enumerable: true },
         renderMetasList:          { value: () => window._dbMetas?.renderMetasList?.(),               enumerable: true },
         atualizarTelaCartoes:     { value: () => window._dbCartoes?.atualizarTelaCartoes?.(),        enumerable: true },
-        inicializarGraficos:      { value: () => window._dbGraficos?.inicializarGraficos?.(),        enumerable: true },
         popularFiltrosRelatorio:  { value: () => window._dbRelatorios?.popularFiltrosRelatorio?.(),  enumerable: true },
     });
 }

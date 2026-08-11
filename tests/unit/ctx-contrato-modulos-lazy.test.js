@@ -68,12 +68,29 @@ function chavesDoCtx() {
     return chaves;
 }
 
-/** Tudo que um módulo pede via `_ctx.x`. */
-function usosDeCtx(src) {
+/**
+ * O que um arquivo pede do contexto. DUAS peneiras, porque as duas perguntas
+ * deste teste erram para lados opostos.
+ *
+ * A palavra `ctx` é ambígua neste projeto e isso não é sujeira — são três
+ * coisas diferentes com o mesmo nome:
+ *   · o contexto do dashboard (`_ctx.salvarDados`);
+ *   · o contexto 2D de canvas (`_ctx.fillStyle`, `_ctx.arc`) nos gráficos;
+ *   · o contexto de CONVERSA do assistente (`ctx.categoria`, `ctx._em`).
+ *
+ * Uma peneira só não serve:
+ *   · para achar chave ÓRFÃ, contar demais é seguro (no máximo deixo de
+ *     apontar peso morto) e contar de menos REPROVA quem não errou — foi o que
+ *     aconteceu com `desafiosPerfil`, lida como `ctx.desafiosPerfil`;
+ *   · para achar chave FANTASMA é o contrário: contar demais transforma
+ *     `_ctx.fillStyle` de um canvas em "chave que falta no _makeCtx". Dez
+ *     reprovações falsas de uma vez, todas em código correto.
+ */
+function usosAmplos(src) {           // para a busca de ÓRFÃ — erra para "usada"
     const usos = new Set();
-    for (const m of semRuido(src).matchAll(/\b_ctx\.([A-Za-z_$][\w$]*)/g)) usos.add(m[1]);
-    // Também `const { a, b } = _ctx`
-    for (const m of semRuido(src).matchAll(/\{([^}]+)\}\s*=\s*_ctx\b/g)) {
+    const limpo = semRuido(src);
+    for (const m of limpo.matchAll(/\b_?ctx\.([A-Za-z_$][\w$]*)/g)) usos.add(m[1]);
+    for (const m of limpo.matchAll(/\{([^}]+)\}\s*=\s*_?ctx\b/g)) {
         for (const n of m[1].split(',')) {
             const nome = n.trim().split(/[:=]/)[0].trim();
             if (nome) usos.add(nome);
@@ -82,9 +99,43 @@ function usosDeCtx(src) {
     return usos;
 }
 
-const modulos = readdirSync(PAGES)
-    .filter(f => f.endsWith('.js') && f !== 'dashboard.js')
-    .filter(f => /\b_ctx\b/.test(readFileSync(join(PAGES, f), 'utf8')));
+function usosEstritos(src) {         // para a busca de FANTASMA — só `_ctx.`
+    const usos = new Set();
+    const limpo = semRuido(src);
+    for (const m of limpo.matchAll(/\b_ctx\.([A-Za-z_$][\w$]*)/g)) usos.add(m[1]);
+    for (const m of limpo.matchAll(/\{([^}]+)\}\s*=\s*_ctx\b/g)) {
+        for (const n of m[1].split(',')) {
+            const nome = n.trim().split(/[:=]/)[0].trim();
+            if (nome) usos.add(nome);
+        }
+    }
+    return usos;
+}
+
+/** Todo .js sob um diretório, recursivo. */
+function jsEm(dir, acc = []) {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+        const p = join(dir, e.name);
+        if (e.isDirectory()) jsEm(p, acc);
+        else if (e.name.endsWith('.js')) acc.push(p);
+    }
+    return acc;
+}
+
+const MODULES = join(RAIZ, 'src', 'scripts', 'modules');
+const TODOS = [...jsEm(PAGES), ...jsEm(MODULES)].filter(p => !p.endsWith('dashboard.js'));
+const nomeCurto = (p) => p.slice(p.indexOf('scripts') + 8).replace(/\\/g, '/');
+
+// Quem BINDA o contexto do dashboard em `_ctx` — o idioma do projeto:
+// `let _ctx = null;` no topo e `export function init(ctx) { _ctx = ctx; }`.
+// É esta a população da checagem de fantasma: só nesses arquivos um `_ctx.x`
+// significa "peço isso ao dashboard". Fora daí, `_ctx` é outra coisa.
+const CONSUMIDORES = TODOS.filter(p => /^let _ctx\s*=/m.test(readFileSync(p, 'utf8')));
+
+// A primeira versão varria apenas `pages/`, e `modules/` ficava de fora
+// justamente na checagem de fantasma — a que quebra na mão do usuário.
+// Precisei conferir 28 nomes à mão numa limpeza; é esse trabalho manual que o
+// teste existe para não repetir.
 
 describe('contrato _ctx — todo módulo lazy só pede o que _makeCtx entrega', () => {
     test('_makeCtx() existe e expõe um conjunto não-trivial de chaves', () => {
@@ -97,13 +148,36 @@ describe('contrato _ctx — todo módulo lazy só pede o que _makeCtx entrega', 
     });
 
     test('há módulos lazy de fato consumindo _ctx (o teste não está varrendo o vazio)', () => {
-        assert.ok(modulos.length >= 5, `só ${modulos.length} módulos usam _ctx — a varredura não achou o que devia.`);
+        assert.ok(CONSUMIDORES.length >= 8,
+            `só ${CONSUMIDORES.length} módulos bindam _ctx — a varredura não achou o que devia.`);
+        assert.ok(CONSUMIDORES.some(p => p.endsWith('db-contas-fixas.js')),
+            'db-contas-fixas.js não entrou na varredura — o chunk do Passo 10 ficaria sem cobertura.');
     });
 
-    for (const arquivo of modulos) {
+    // O contrato vale nos DOIS sentidos. Uma chave que ninguém consome é peso
+    // no chunk de boot sem retorno: em 2026-08-10 havia 28 delas, valendo
+    // 0,8 KB gzip — mais que o painel de alertas inteiro que foi extraído no
+    // Passo 10 anterior. Elas se acumulam porque remover o consumidor não
+    // remove a chave, e nada reclamava.
+    test('nenhuma chave do _makeCtx está órfã (peso de boot sem consumidor)', () => {
+        const chaves = chavesDoCtx();
+        const consumidos = new Set();
+        for (const p of TODOS) {   // peneira AMPLA, em todo o src: errar para "usada"
+            for (const n of usosAmplos(readFileSync(p, 'utf8'))) consumidos.add(n);
+        }
+        const orfas = [...chaves].filter(k => !consumidos.has(k));
+        assert.deepEqual(
+            orfas, [],
+            `_makeCtx expõe ${orfas.length} chave(s) que nenhum módulo consome: ${orfas.join(', ')}. ` +
+            `Cada uma viaja no chunk de boot de graça. Remova a chave, ou o consumidor sumiu junto com ela.`
+        );
+    });
+
+    for (const caminho of CONSUMIDORES) {
+        const arquivo = nomeCurto(caminho);
         test(`${arquivo} — nenhum _ctx.x fantasma`, () => {
             const chaves = chavesDoCtx();
-            const pedidos = usosDeCtx(readFileSync(join(PAGES, arquivo), 'utf8'));
+            const pedidos = usosEstritos(readFileSync(caminho, 'utf8'));
             const fantasmas = [...pedidos].filter(n => !chaves.has(n));
             assert.deepEqual(
                 fantasmas, [],
