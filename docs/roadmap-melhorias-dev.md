@@ -198,7 +198,7 @@ o app perder dado sem avisar.
 | **Passo 8** — um login em prod com dados na tela | dono |
 | ~~**Passo 27** — a DSN do Sentry~~ | ✅ **JÁ ESTAVA FEITO** (2026-08-10). A DSN está no bundle de **produção** (`/assets/error-tracking-*.js`). Eu tinha grepado o `dist/` local, que nasce sem as `VITE_*` da Vercel — nunca teria a DSN. A política não mente. |
 | ~~**B-3** — rate limit na borda (Cloudflare)~~ | ✅ **feito e PROVADO** (2026-08-10): 10 req/10 s em `/api/auth-session`, a 11ª requisição volta **429**. Cache Rule `/api/*` → `{"cache":false}` entrou junto (estava faltando). |
-| **Passo 10** — descongelar o `dashboard.js`? Está em **40.8/42 KB** | dono — **marcado para a noite de 2026-08-10** |
+| ~~**Passo 10** — descongelar o `dashboard.js`~~ | ✅ **FEITO em 2026-08-10.** 40,8/42 (97%) → **35,3/38 (93%)**; 6.322 → 5.399 linhas. Dois chunks lazy (`db-contas-fixas.js`, `perfil-acoes.js`) + 28 chaves órfãs fora do `_makeCtx`. Teto baixado para travar a reocupação. |
 | **M-7** — escolher a ferramenta de analytics cookieless | dono |
 
 **Se ele mandar "Comece" sem escolher:** rode `node scripts/corpus-ia.mjs` (≈70 s,
