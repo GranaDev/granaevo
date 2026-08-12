@@ -52,8 +52,9 @@
  *    LOGIN, e aí o backup não restaura o sistema, só os dados.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { r2Configurado, r2Put, r2Tamanho, r2Listar, r2Apagar } from './_r2.mjs';
 
 const DRY = process.argv.includes('--dry-run');
 
@@ -63,6 +64,7 @@ const DESTINO   = process.env.GRANAEVO_BACKUP_DIR ?? 'C:\\Users\\SnaKito\\Deskto
 const PGBIN     = process.env.PGBIN ?? 'C:\\Program Files\\PostgreSQL\\17\\bin';
 const RETENCAO  = Number(process.env.GRANAEVO_BACKUP_KEEP ?? 14);
 const SCHEMAS   = ['public', 'auth', 'storage'];
+const BUCKET    = process.env.GRANAEVO_R2_BUCKET ?? 'granaevo-backups';
 
 const falhar = (msg) => { console.error(`\n[backup-db] FALHOU: ${msg}`); process.exit(1); };
 const exigir = (v) => process.env[v] || falhar(`variável de ambiente ${v} ausente`);
@@ -184,16 +186,62 @@ try {
     falhar('não consegui decifrar o que acabei de cifrar: ' + (e.stderr?.toString() ?? e.message).slice(0, 160));
 }
 
-// ── 5. retenção ─────────────────────────────────────────────────────────────
+// ── 5. subir para fora da máquina ───────────────────────────────────────────
+// É este passo que transforma "cópia" em "backup". Enquanto o arquivo mora só
+// no disco do operador, incêndio/roubo/ransomware levam o banco e a cópia
+// juntos — e o cenário que o backup existe para cobrir é justamente esse.
+//
+// Falha aqui é ERRO, não aviso: um backup que não saiu da máquina não cumpriu
+// o objetivo, e o exit code precisa refletir isso para o agendador alertar.
+const nomeRemoto = cifrado.split(/[\\/]/).pop();
+if (!r2Configurado()) {
+    console.log('  R2 ........... NÃO CONFIGURADO — backup existe só localmente');
+    console.log('\n[backup-db] ⚠️  ARQUIVO SÓ NA MÁQUINA DO OPERADOR. Defina');
+    console.log('[backup-db]     CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID e R2_SECRET_ACCESS_KEY.');
+    process.exitCode = 1;
+} else {
+    const bytesLocais = statSync(cifrado).size;
+    try {
+        await r2Put(BUCKET, nomeRemoto, readFileSync(cifrado));
+    } catch (e) {
+        falhar('upload para o R2: ' + e.message);
+    }
+
+    // Conferir o tamanho remoto, e não só o 200 do PUT: um upload truncado por
+    // conexão instável pode responder sucesso e gravar menos bytes.
+    const bytesRemotos = await r2Tamanho(BUCKET, nomeRemoto);
+    if (bytesRemotos !== bytesLocais) {
+        falhar(`upload divergente: ${bytesLocais} bytes locais x ${bytesRemotos} remotos`);
+    }
+    console.log(`  R2 ........... ${nomeRemoto} (${mb(bytesRemotos)}) confirmado`);
+
+    // Retenção remota. O `sort()` funciona porque o nome começa com timestamp
+    // ISO — ordem alfabética é ordem cronológica.
+    const remotos = (await r2Listar(BUCKET, 'granaevo-')).filter((k) => k.endsWith('.dump.gpg'));
+    const sobrando = remotos.slice(0, -RETENCAO);
+    for (const k of sobrando) await r2Apagar(BUCKET, k);
+    if (sobrando.length) console.log(`  R2 retenção .. ${sobrando.length} antigo(s) removido(s)`);
+    console.log(`  R2 total ..... ${remotos.length - sobrando.length} backup(s) remoto(s)`);
+}
+
+// ── 6. retenção local ───────────────────────────────────────────────────────
 const antigos = readdirSync(DESTINO)
     .filter((f) => /^granaevo-.*\.dump\.gpg$/.test(f))
     .sort()
     .slice(0, -RETENCAO);
 for (const f of antigos) rmSync(join(DESTINO, f));
-if (antigos.length) console.log(`  retenção ..... ${antigos.length} antigo(s) removido(s)`);
+if (antigos.length) console.log(`  local retenção ${antigos.length} antigo(s) removido(s)`);
 
 const mantidos = readdirSync(DESTINO).filter((f) => /\.dump\.gpg$/.test(f)).length;
-console.log(`\n[backup-db] OK em ${((Date.now() - inicio) / 1000).toFixed(1)}s — ${mantidos} backup(s) mantido(s)`);
-console.log('[backup-db] ⚠️  ESTE ARQUIVO AINDA ESTÁ NA MESMA MÁQUINA DO OPERADOR.');
-console.log('[backup-db]     Item 3 (armazenamento externo) continua ABERTO.');
+
+// A última linha tem de CONCORDAR com o exit code. A versão anterior imprimia
+// "OK" mesmo quando o upload não acontecia e o processo saía com 1 — quem lesse
+// o log via sucesso, quem lesse o exit code via falha. Num alerta automático,
+// essa discordância é como o monitoramento aprende a mentir.
+const segundos = ((Date.now() - inicio) / 1000).toFixed(1);
+if (process.exitCode) {
+    console.log(`\n[backup-db] INCOMPLETO em ${segundos}s — ${mantidos} local, ZERO remoto`);
+} else {
+    console.log(`\n[backup-db] OK em ${segundos}s — ${mantidos} local, retenção ${RETENCAO}`);
+}
 }
