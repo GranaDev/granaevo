@@ -52,9 +52,10 @@
  *    LOGIN, e aí o backup não restaura o sistema, só os dados.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { r2Configurado, r2Put, r2Tamanho, r2Listar, r2Apagar } from './_r2.mjs';
+import { CONSULTA_PRIVILEGIOS, montarScript } from './_privilegios.mjs';
 
 const DRY = process.argv.includes('--dry-run');
 
@@ -89,6 +90,25 @@ async function poolerHost() {
     if (!r.ok) falhar(`não consegui ler a config do pooler: HTTP ${r.status}`);
     const j = await r.json();
     return (Array.isArray(j) ? j[0] : j).db_host;
+}
+
+async function consultar(query) {
+    const r = await fetch(`https://api.supabase.com/v1/projects/${REF}/database/query`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${PAT}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+    });
+    if (!r.ok) falhar(`consulta ao banco: HTTP ${r.status} ${(await r.text()).slice(0, 200)}`);
+    return r.json();
+}
+
+/** gpg simétrico, passphrase por stdin (argv é visível na lista de processos). */
+function cifrar(entrada, saida) {
+    execFileSync('gpg', [
+        '--batch', '--yes', '--quiet', '--symmetric', '--cipher-algo', 'AES256',
+        '--passphrase-fd', '0', '--pinentry-mode', 'loopback',
+        '--output', saida, entrada,
+    ], { input: KEY, stdio: ['pipe', 'ignore', 'pipe'], timeout: 300_000 });
 }
 
 const inicio = Date.now();
@@ -156,20 +176,35 @@ try {
 }
 console.log(`  integridade .. ${entradas} entradas, ${acl} ACL`);
 
+// ── 2.5 ESTADO DE PRIVILÉGIOS ───────────────────────────────────────────────
+//
+// O pg_dump NÃO basta para restaurar a segurança. Medido em 2026-08-12, no
+// primeiro restore de verdade: um banco restaurado só com o dump ficou com
+// 34 SECURITY DEFINER expostas a `anon` (contra 2 em produção) e 28 tabelas
+// graváveis por `authenticated` (contra 4). O `anon` executava
+// `salvar_dados_usuario` e `revogar_sessoes_usuario`.
+//
+// Motivo: o pg_dump só emite GRANT — nunca o REVOKE que representa "isto foi
+// tirado de propósito" — e os ALTER DEFAULT PRIVILEGES do Supabase concedem
+// acesso no CREATE. O REVOKE some, e some em silêncio.
+//
+// Este arquivo é o antídoto e viaja junto com todo backup.
+const privLinhas = (await consultar(CONSULTA_PRIVILEGIOS)).map((r) => r.linha);
+if (privLinhas.length < 50) falhar(`script de privilégios suspeito: só ${privLinhas.length} statements`);
+const privBruto = join(DESTINO, `granaevo-${stamp}.privilegios.sql`);
+writeFileSync(privBruto, montarScript(privLinhas, { origem: REF }), 'utf8');
+console.log(`  privilégios .. ${privLinhas.length} statements`);
+
 // ── 3. cifrar ───────────────────────────────────────────────────────────────
-// AES-256 simétrico. A passphrase entra por stdin, nunca por argv (argv é
-// visível para qualquer processo da máquina via lista de processos).
+const privCifrado = `${privBruto}.gpg`;
 try {
-    execFileSync('gpg', [
-        '--batch', '--yes', '--quiet',
-        '--symmetric', '--cipher-algo', 'AES256',
-        '--passphrase-fd', '0', '--pinentry-mode', 'loopback',
-        '--output', cifrado, bruto,
-    ], { input: KEY, stdio: ['pipe', 'ignore', 'pipe'], timeout: 300_000 });
+    cifrar(bruto, cifrado);
+    cifrar(privBruto, privCifrado);
 } catch (e) {
     falhar('gpg: ' + (e.stderr?.toString() ?? e.message).slice(0, 200));
 }
-rmSync(bruto);   // o texto claro não sobrevive ao script
+rmSync(bruto);       // o texto claro não sobrevive ao script
+rmSync(privBruto);
 console.log(`  cifrado ...... ${mb(statSync(cifrado).size)}  (AES-256)`);
 
 // ── 4. provar que decifra ───────────────────────────────────────────────────
@@ -200,36 +235,50 @@ if (!r2Configurado()) {
     console.log('[backup-db]     CLOUDFLARE_ACCOUNT_ID, R2_ACCESS_KEY_ID e R2_SECRET_ACCESS_KEY.');
     process.exitCode = 1;
 } else {
-    const bytesLocais = statSync(cifrado).size;
-    try {
-        await r2Put(BUCKET, nomeRemoto, readFileSync(cifrado));
-    } catch (e) {
-        falhar('upload para o R2: ' + e.message);
+    // Os DOIS arquivos sobem: o dump sem os privilégios restaura um banco
+    // inseguro, e os privilégios sem o dump não restauram nada.
+    for (const alvo of [cifrado, privCifrado]) {
+        const nome = alvo.split(/[\\/]/).pop();
+        const bytesLocais = statSync(alvo).size;
+        try {
+            await r2Put(BUCKET, nome, readFileSync(alvo));
+        } catch (e) {
+            falhar(`upload de ${nome} para o R2: ` + e.message);
+        }
+        // Conferir o TAMANHO remoto, e não só o 200 do PUT: upload truncado por
+        // conexão instável responde sucesso e grava menos bytes.
+        const bytesRemotos = await r2Tamanho(BUCKET, nome);
+        if (bytesRemotos !== bytesLocais) {
+            falhar(`upload divergente em ${nome}: ${bytesLocais} locais x ${bytesRemotos} remotos`);
+        }
+        console.log(`  R2 ........... ${nome} (${mb(bytesRemotos)}) confirmado`);
     }
-
-    // Conferir o tamanho remoto, e não só o 200 do PUT: um upload truncado por
-    // conexão instável pode responder sucesso e gravar menos bytes.
-    const bytesRemotos = await r2Tamanho(BUCKET, nomeRemoto);
-    if (bytesRemotos !== bytesLocais) {
-        falhar(`upload divergente: ${bytesLocais} bytes locais x ${bytesRemotos} remotos`);
-    }
-    console.log(`  R2 ........... ${nomeRemoto} (${mb(bytesRemotos)}) confirmado`);
 
     // Retenção remota. O `sort()` funciona porque o nome começa com timestamp
     // ISO — ordem alfabética é ordem cronológica.
     const remotos = (await r2Listar(BUCKET, 'granaevo-')).filter((k) => k.endsWith('.dump.gpg'));
     const sobrando = remotos.slice(0, -RETENCAO);
-    for (const k of sobrando) await r2Apagar(BUCKET, k);
+    for (const k of sobrando) {
+        await r2Apagar(BUCKET, k);
+        // O par de privilégios cai junto. Deixá-lo para trás acumularia órfãos
+        // e, pior, daria a impressão de haver backup onde só há metade dele.
+        await r2Apagar(BUCKET, k.replace(/\.dump\.gpg$/, '.privilegios.sql.gpg'));
+    }
     if (sobrando.length) console.log(`  R2 retenção .. ${sobrando.length} antigo(s) removido(s)`);
     console.log(`  R2 total ..... ${remotos.length - sobrando.length} backup(s) remoto(s)`);
 }
 
 // ── 6. retenção local ───────────────────────────────────────────────────────
+// Retenção conta pelos .dump.gpg; o .privilegios.sql.gpg do mesmo carimbo cai junto.
 const antigos = readdirSync(DESTINO)
     .filter((f) => /^granaevo-.*\.dump\.gpg$/.test(f))
     .sort()
     .slice(0, -RETENCAO);
-for (const f of antigos) rmSync(join(DESTINO, f));
+for (const f of antigos) {
+    rmSync(join(DESTINO, f));
+    const par = join(DESTINO, f.replace(/.dump.gpg$/, ".privilegios.sql.gpg"));
+    if (existsSync(par)) rmSync(par);
+}
 if (antigos.length) console.log(`  local retenção ${antigos.length} antigo(s) removido(s)`);
 
 const mantidos = readdirSync(DESTINO).filter((f) => /\.dump\.gpg$/.test(f)).length;
