@@ -773,7 +773,19 @@
                     </div>
 
                     <h2 class="form-title">Senha alterada!</h2>
-                    <p class="form-subtitle">Sua senha foi alterada com sucesso</p>
+                    <!--
+                      A segunda linha não é enfeite. Medido em 2026-08-12: o reset
+                      encerra TODAS as sessões do usuário (SEC-008), inclusive a de
+                      quem pediu o reset. É o comportamento correto — quem troca a
+                      senha depois de uma invasão precisa expulsar o invasor —, mas
+                      sem avisar, a pessoa reabre o app noutro aparelho, cai no
+                      login e acha que a troca falhou.
+                    -->
+                    <p class="form-subtitle">
+                        Sua senha foi alterada com sucesso.<br>
+                        Por segurança, encerramos todas as sessões abertas — inclusive
+                        em outros aparelhos. Faça login novamente para continuar.
+                    </p>
 
                     <button type="button" class="btn-submit" id="backToLoginFinal">
                         <span class="btn-text">Fazer login</span>

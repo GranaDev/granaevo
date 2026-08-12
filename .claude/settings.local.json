@@ -156,7 +156,28 @@
       "Bash(grep -oPn \"gotrue\\\\\\(\\\\`?[^,\\)]*\" api/auth-session.js)",
       "Bash(grep -rnoE \"\\(location\\\\.\\(href|replace|assign\\)\\\\s*=?\\\\s*\\\\\\(?|window\\\\.open\\\\\\(\\)[^;\\)]{0,60}\" src/scripts --include=\"*.js\")",
       "Bash(grep -viE \"location.href\\\\s*$|=== *'|\\\\.href\\\\\\)\")",
-      "Bash(node --check src/scripts/pages/convidados.js)"
+      "Bash(node --check src/scripts/pages/convidados.js)",
+      "Bash(printenv SUPABASE_PROJECT_REF)",
+      "Bash(curl -s --max-time 25 -X POST https://api.supabase.com/v1/projects/__CMDSUB_OUTPUT__/database/query -H 'Authorization: Bearer __CMDSUB_OUTPUT__' -H 'Content-Type: application/json' -d '{\"query\":\"SELECT public.revogar_sessoes_usuario\\('\\\\''00000000-0000-0000-0000-000000000000'\\\\''::uuid\\) AS sessoes_encerradas;\"}')",
+      "PowerShell($w = Get-Command winget -ErrorAction SilentlyContinue; if \\($w\\) { \"winget: $\\($w.Source\\)\"; winget --version } else { \"winget AUSENTE\" }; \"--- pacotes PostgreSQL disponiveis ---\"; winget search --id PostgreSQL --exact --source winget 2>&1 | Select-Object -First 10)",
+      "PowerShell(winget search postgresql --source winget 2>&1)",
+      "PowerShell(winget install --id PostgreSQL.PostgreSQL.17 --exact --source winget --accept-package-agreements --accept-source-agreements --custom \"--disable-components server,pgAdmin,stackbuilder --unattendedmodeui none\" 2>&1)",
+      "Bash(curl -s --max-time 30 \"https://api.supabase.com/api/v1-json\")",
+      "Bash(cd \"c:/Users/SnaKito/Desktop/Apps/Aleatórios Gerais/GranaEvo Oficial\" && echo \"=== estrutura do arquivo de segredos \\(valores mascarados\\) ===\" && sed -E 's/^\\(SENHA|CHAVE\\): .*/\\\\1: <valor de 43 chars — nao mostro aqui>/' \"C:/Users/SnaKito/Desktop/Apps/granaevo-backups/LEIA-E-APAGUE-senha-db.txt\")",
+      "WebFetch(domain:developers.cloudflare.com)",
+      "WebFetch(domain:www.backblaze.com)",
+      "Bash(node scripts/backup-db.mjs --dry-run)",
+      "Bash(node scripts/backup-db.mjs)",
+      "Bash(sed -i 's|^const antigos = readdirSync\\(DESTINO\\)$|// Retenção conta pelos .dump.gpg; o .privilegios.sql.gpg do mesmo carimbo cai junto.\\\\nconst antigos = readdirSync\\(DESTINO\\)|' scripts/backup-db.mjs)",
+      "Bash(sed -i 's|for \\(const f of antigos\\) rmSync\\(join\\(DESTINO, f\\)\\);|for \\(const f of antigos\\) {\\\\n    rmSync\\(join\\(DESTINO, f\\)\\);\\\\n    const par = join\\(DESTINO, f.replace\\(/\\\\\\\\.dump\\\\\\\\.gpg$/, \".privilegios.sql.gpg\"\\)\\);\\\\n    if \\(existsSync\\(par\\)\\) rmSync\\(par\\);\\\\n}|' scripts/backup-db.mjs)",
+      "Bash(sed -i 's|const sobrando = remotos.slice\\(0, -RETENCAO\\);\\\\n    for \\(const k of sobrando\\) await r2Apagar\\(BUCKET, k\\);|X|' scripts/backup-db.mjs)",
+      "Bash(node --input-type=module -e \"import\\('./scripts/backup-db.mjs'\\).catch\\(e=>console.log\\('import err \\(esperado sem env\\):', e.message.slice\\(0,60\\)\\)\\)\")",
+      "Bash(GRANAEVO_BACKUP_KEEP=1 node scripts/backup-db.mjs)",
+      "Bash(node -e *)",
+      "Bash(node --test tests/unit/backup-resiliencia.test.js)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\SnaKito\\Desktop\\Apps\\granaevo-backups"
     ]
   }
 }
