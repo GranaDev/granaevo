@@ -174,7 +174,10 @@
       "Bash(node --input-type=module -e \"import\\('./scripts/backup-db.mjs'\\).catch\\(e=>console.log\\('import err \\(esperado sem env\\):', e.message.slice\\(0,60\\)\\)\\)\")",
       "Bash(GRANAEVO_BACKUP_KEEP=1 node scripts/backup-db.mjs)",
       "Bash(node -e *)",
-      "Bash(node --test tests/unit/backup-resiliencia.test.js)"
+      "Bash(node --test tests/unit/backup-resiliencia.test.js)",
+      "Bash(powershell -NoProfile -Command '$t=Get-ScheduledTask -TaskName '\\\\''GranaEvo - Backup diario do Postgres'\\\\'' -EA SilentlyContinue; $i=Get-ScheduledTaskInfo -TaskName '\\\\''GranaEvo - Backup diario do Postgres'\\\\'' -EA SilentlyContinue; if\\($t\\){\"  estado=$\\($t.State\\) proxima=$\\($i.NextRunTime\\) ultimo=$\\($i.LastTaskResult\\)\"}else{'\\\\''  NAO EXISTE'\\\\''}')",
+      "Bash(GPG_BIN=\"/caminho/inexistente/gpg.exe\" node scripts/backup-db.mjs)",
+      "Bash(grep -E \"\\\\.dump$|\\\\.sql$\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\SnaKito\\Desktop\\Apps\\granaevo-backups"

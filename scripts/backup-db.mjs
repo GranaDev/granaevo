@@ -67,7 +67,31 @@ const RETENCAO  = Number(process.env.GRANAEVO_BACKUP_KEEP ?? 14);
 const SCHEMAS   = ['public', 'auth', 'storage'];
 const BUCKET    = process.env.GRANAEVO_R2_BUCKET ?? 'granaevo-backups';
 
-const falhar = (msg) => { console.error(`\n[backup-db] FALHOU: ${msg}`); process.exit(1); };
+// Arquivos em TEXTO CLARO criados no meio do caminho. Precisam sumir em
+// QUALQUER desfecho — inclusive na falha.
+//
+// ⚠️ Descoberto em 2026-08-12, ao tirar o retrato final: três dumps sem cifra
+// tinham ficado no disco, sobras das execuções que morreram entre o pg_dump e o
+// gpg (o ENOENT do gpg no Agendador foi uma delas). O `rmSync` só rodava DEPOIS
+// da cifragem bem-sucedida, então toda falha nesse intervalo deixava e-mails,
+// log de auditoria e dados de assinatura em claro, indefinidamente.
+//
+// O caminho de erro é justamente o que ninguém observa. Ele precisa limpar
+// sozinho.
+const efemeros = new Set();
+function limparEfemeros() {
+    for (const f of efemeros) {
+        try { if (existsSync(f)) rmSync(f); } catch { /* melhor esforço */ }
+    }
+    efemeros.clear();
+}
+process.on('exit', limparEfemeros);
+
+const falhar = (msg) => {
+    limparEfemeros();
+    console.error(`\n[backup-db] FALHOU: ${msg}`);
+    process.exit(1);
+};
 const exigir = (v) => process.env[v] || falhar(`variável de ambiente ${v} ausente`);
 
 const REF = exigir('SUPABASE_PROJECT_REF');
@@ -156,6 +180,7 @@ mkdirSync(DESTINO, { recursive: true });
 const stamp   = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const bruto   = join(DESTINO, `granaevo-${stamp}.dump`);
 const cifrado = `${bruto}.gpg`;
+efemeros.add(bruto);
 
 console.log(`  host ......... ${host}:5432`);
 console.log(`  schemas ...... ${SCHEMAS.join(', ')}`);
@@ -212,6 +237,7 @@ console.log(`  integridade .. ${entradas} entradas, ${acl} ACL`);
 const privLinhas = (await consultar(CONSULTA_PRIVILEGIOS)).map((r) => r.linha);
 if (privLinhas.length < 50) falhar(`script de privilégios suspeito: só ${privLinhas.length} statements`);
 const privBruto = join(DESTINO, `granaevo-${stamp}.privilegios.sql`);
+efemeros.add(privBruto);
 writeFileSync(privBruto, montarScript(privLinhas, { origem: REF }), 'utf8');
 console.log(`  privilégios .. ${privLinhas.length} statements`);
 

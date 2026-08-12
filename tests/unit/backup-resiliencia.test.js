@@ -118,6 +118,23 @@ describe('backup — o monitoramento não pode mentir', () => {
         assert.match(WRAP, /exit \/b %CODIGO%/)
     })
 
+    test('o texto claro é apagado MESMO quando o backup falha', () => {
+        // Achado em 2026-08-12, tirando o retrato final: três dumps SEM CIFRA
+        // tinham ficado no disco — sobras de execuções que morreram entre o
+        // pg_dump e o gpg. O rmSync só rodava depois da cifragem bem-sucedida,
+        // então toda falha nesse intervalo deixava e-mails, log de auditoria e
+        // dados de assinatura em claro, indefinidamente.
+        //
+        // O caminho de erro é justamente o que ninguém observa.
+        assert.match(LIMPO, /const efemeros = new Set\(\)/)
+        assert.match(LIMPO, /process\.on\('exit', limparEfemeros\)/)
+        assert.match(LIMPO, /efemeros\.add\(bruto\)/)
+        assert.match(LIMPO, /efemeros\.add\(privBruto\)/)
+        // e o caminho de falha limpa antes de sair
+        const f = LIMPO.slice(LIMPO.indexOf('const falhar ='), LIMPO.indexOf('const exigir ='))
+        assert.match(f, /limparEfemeros\(\)/, 'falhar() precisa limpar antes do exit')
+    })
+
     test('o gpg é resolvido por caminho absoluto, não pelo PATH', () => {
         // Pelo Git Bash o `gpg` resolve; pelo Agendador de Tarefas, NÃO — e o
         // script morria com ENOENT depois de já ter gerado o dump. Todo backup
