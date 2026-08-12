@@ -81,6 +81,26 @@ const bin = (n) => {
     return p;
 };
 
+/**
+ * Caminho absoluto do gpg.
+ *
+ * ⚠️ NÃO confiar no PATH. Rodando à mão pelo Git Bash o `gpg` resolve; rodando
+ * pelo Agendador de Tarefas do Windows, NÃO — o PATH ali é outro, e o script
+ * morria com "spawnSync gpg ENOENT" DEPOIS de já ter gerado o dump. Descoberto
+ * em 2026-08-12 ao disparar a tarefa agendada para conferir, em vez de assumir
+ * que ela rodaria igual ao terminal. Teria falhado toda noite.
+ */
+const GPG = (() => {
+    if (process.env.GPG_BIN) return process.env.GPG_BIN;
+    const candidatos = [
+        'C:\\Program Files\\Git\\usr\\bin\\gpg.exe',   // Git for Windows
+        'C:\\Program Files\\GnuPG\\bin\\gpg.exe',
+        'C:\\Program Files (x86)\\GnuPG\\bin\\gpg.exe',
+    ];
+    for (const c of candidatos) if (existsSync(c)) return c;
+    return 'gpg';   // último recurso: tenta o PATH e falha com mensagem clara
+})();
+
 const mb = (b) => (b / 1024 / 1024).toFixed(2) + ' MB';
 
 async function poolerHost() {
@@ -104,7 +124,7 @@ async function consultar(query) {
 
 /** gpg simétrico, passphrase por stdin (argv é visível na lista de processos). */
 function cifrar(entrada, saida) {
-    execFileSync('gpg', [
+    execFileSync(GPG, [
         '--batch', '--yes', '--quiet', '--symmetric', '--cipher-algo', 'AES256',
         '--passphrase-fd', '0', '--pinentry-mode', 'loopback',
         '--output', saida, entrada,
@@ -211,7 +231,7 @@ console.log(`  cifrado ...... ${mb(statSync(cifrado).size)}  (AES-256)`);
 // Sem este passo, "backup cifrado" é uma promessa. Decifra para memória e
 // confere que o pg_restore ainda lê o índice.
 try {
-    const claro = execFileSync('gpg', [
+    const claro = execFileSync(GPG, [
         '--batch', '--quiet', '--decrypt',
         '--passphrase-fd', '0', '--pinentry-mode', 'loopback', cifrado,
     ], { input: KEY, maxBuffer: 512e6, stdio: ['pipe', 'pipe', 'pipe'], timeout: 300_000 });
