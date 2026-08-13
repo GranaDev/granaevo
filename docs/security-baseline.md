@@ -4,7 +4,7 @@
 > falsa: some a diferença entre "nenhum achado" e "não procurei". Aqui cada
 > controle carrega o seu próprio estado e a **data da última validação**.
 
-**Última atualização:** 2026-08-13 (re-validação pós-freeze)
+**Última atualização:** 2026-08-13 (re-validação pós-freeze + deploy do backstop durável de lockout — ACHADO-02 — em produção)
 
 ---
 
@@ -84,6 +84,17 @@ falsa. Não é pré-requisito para nada do que já está fechado.
 ---
 
 ## Lockout de login — tabela de estados (decisão arquitetural explícita)
+
+> **Estado: EM PRODUÇÃO desde 2026-08-13.** A cadeia do ACHADO-02 saiu de
+> "código escrito" para "vivo", na ordem obrigatória: migration `20260812000000`
+> aplicada (Management API, não `db push`), edge `login-lockout` deployada, e o
+> proxy (`api/auth-session.js`) chamando-a a cada falha de senha — commits
+> `1859c23`/`bfde51e` no `main`. **Provado:** `record_failed_login` em prod com
+> janela de 24 h, `ON CONFLICT` e `email_sha256` no CHECK; `EXECUTE` só a
+> `service_role`; edge responde 403 sem `x-proxy-secret`; deploy Vercel READY;
+> smoke 200 em `/ /login /dashboard /planos`; `verificar-vercel.mjs` 8/8.
+> O que segue `NOT VERIFIED` é só o comportamental (uma falha real gravando a
+> linha) — classe FASE B, bloqueada por falta de ambiente isolado.
 
 Uma camada **não pode mascarar silenciosamente a falha da outra**. Os três
 estados são decididos, não emergentes:
