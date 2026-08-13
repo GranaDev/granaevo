@@ -11,6 +11,7 @@
 // Reduz dashboard.css removendo ~1800 regras de glifo não usadas.
 // ─────────────────────────────────────────────────────────────────────────────
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, copyFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join, extname } from 'node:path';
 import subsetFont from 'subset-font';
@@ -75,19 +76,7 @@ css = css.replace(/((?:\.fa-[a-z0-9-]+,)*\.fa-[a-z0-9-]+)\{--fa:"([^"]*)"\}/g, (
   dropped++; return '';
 });
 
-// ── 3. @font-face único (solid-900); font-display:block evita "tofu" no 1º paint
-const fontFace =
-  '@font-face{font-family:"Font Awesome 7 Free";font-style:normal;font-weight:900;' +
-  `font-display:block;src:url('${FONT_URL}') format("woff2")}`;
-
-const header =
-  '/* GERADO por scripts/build-fa-subset.mjs — NÃO editar à mão. */\n' +
-  `/* ${kept} ícones usados | ${dropped} podados | peso: solid */\n`;
-
-mkdirSync(dirname(OUT_CSS), { recursive: true });
-writeFileSync(OUT_CSS, header + fontFace + css, 'utf8');
-
-// ── 4. Subseta a FONTE (woff2) para conter só os glifos usados ─────────────────
+// ── 3. Subseta a FONTE (woff2) para conter só os glifos usados ─────────────────
 // O passo 2 já podou o CSS, mas a fonte original (fa-solid-900.woff2) carrega
 // ~2000 glifos (~114 KB). Aqui geramos um woff2 contendo APENAS os codepoints
 // das regras mantidas — mesmo conjunto que o CSS já referencia, então NÃO há
@@ -125,5 +114,29 @@ try {
   copyFileSync(FA_WOFF2, OUT_WOFF2);
   console.warn(`[fa-subset] ⚠️ subset do woff2 falhou (${err.message}) — usando fonte completa (fallback seguro)`);
 }
+
+// ── 4. @font-face único (solid-900); font-display:block evita "tofu" no 1º paint
+//
+// ⚠️ ESTE BLOCO PRECISA VIR DEPOIS DO PASSO 3. O `?h=` é o hash do woff2 que
+// acabou de ser escrito — escrever o CSS antes carimbaria o hash da fonte do
+// build ANTERIOR, e o endereço deixaria de acompanhar o conteúdo.
+//
+// Por que o hash existe: esta fonte é REGERADA a cada build e muda de conteúdo
+// toda vez que um ícone entra ou sai do app, sempre com o mesmo nome de arquivo.
+// É exatamente o caso em que `Cache-Control: immutable` estragaria a vida do
+// usuário — ícone velho, ou nenhum ícone, por um ano. Com o hash na query, o
+// endereço muda junto com o conteúdo e o cache longo passa a ser seguro.
+const fontHash = createHash('sha256').update(readFileSync(OUT_WOFF2)).digest('hex').slice(0, 8);
+
+const fontFace =
+  '@font-face{font-family:"Font Awesome 7 Free";font-style:normal;font-weight:900;' +
+  `font-display:block;src:url('${FONT_URL}?h=${fontHash}') format("woff2")}`;
+
+const header =
+  '/* GERADO por scripts/build-fa-subset.mjs — NÃO editar à mão. */\n' +
+  `/* ${kept} ícones usados | ${dropped} podados | peso: solid */\n`;
+
+mkdirSync(dirname(OUT_CSS), { recursive: true });
+writeFileSync(OUT_CSS, header + fontFace + css, 'utf8');
 
 console.log(`[fa-subset] ${kept} ícones mantidos, ${dropped} podados → ${OUT_CSS}`);

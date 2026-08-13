@@ -13,6 +13,7 @@
 // Depois: tudo self-hosted, woff2-only, latin(+ext) → fração do peso, zero CDN externo.
 // ─────────────────────────────────────────────────────────────────────────────
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join, basename } from 'node:path';
 
@@ -48,6 +49,26 @@ const RANGE_RE     = /unicode-range:\s*([^;]+);/;
 
 mkdirSync(OUT_FONTS, { recursive: true });
 mkdirSync(dirname(OUT_CSS), { recursive: true });
+
+// ── Hash de conteúdo na URL da fonte ────────────────────────────────────────
+// Os woff2 são copiados com NOME FIXO (`inter-latin-400-normal.woff2`), então o
+// Vite não os versiona como faz com JS/CSS. Sem versão no endereço, `immutable`
+// no cache seria uma aposta: trocar a versão do @fontsource mudaria o conteúdo
+// sem mudar o endereço, e quem já tivesse o arquivo ficaria com o antigo por um
+// ano.
+//
+// O hash entra como QUERY, não no nome do arquivo, de propósito: o caminho
+// continua `/assets/fonts/*.woff2`, então a regra de cabeçalho da Vercel (que
+// casa por caminho, ignorando query) segue valendo sem nenhuma mudança de rota.
+// Conteúdo novo = endereço novo = o browser busca de novo. Conteúdo igual =
+// endereço igual = zero requisição.
+const _hashCache = new Map();
+function hashDoArquivo(caminho) {
+  if (!_hashCache.has(caminho)) {
+    _hashCache.set(caminho, createHash('sha256').update(readFileSync(caminho)).digest('hex').slice(0, 8));
+  }
+  return _hashCache.get(caminho);
+}
 
 let copied = 0;
 const seenFiles = new Set();
@@ -93,7 +114,7 @@ function buildFamilies(families) {
           `font-style:${fstyle};` +
           'font-display:swap;' +
           `font-weight:${fweight};` +
-          `src:url('${FONT_URL_BASE}/${file}') format('woff2')` +
+          `src:url('${FONT_URL_BASE}/${file}?h=${hashDoArquivo(join(OUT_FONTS, file))}') format('woff2')` +
           (range ? `;unicode-range:${range}` : '') +
           '}\n';
         kept++;
