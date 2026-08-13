@@ -772,9 +772,47 @@ class DataManager {
                 return true;
             }
 
+            // ── DELTA SAVE: mandar a MUDANÇA, não o mundo ───────────────────
+            //
+            // Medido em produção (financial_audit_log, 60 dias, 6.265 saves):
+            //   blob gravado ...... média 38.208 B · p50 32.399 B · p95 82.343 B
+            //   variação de tamanho média 293 B · p50 0 B · p95 1.156 B
+            // Ou seja: o payload que sobe é ~130× maior que a mudança que ele
+            // carrega. Todo save reenviava o extrato inteiro do usuário para
+            // dizer "editei uma transação" — e reenviava três vezes, porque o
+            // corpo atravessa browser → Vercel → Edge antes de virar UPDATE.
+            //
+            // A máquina para evitar isso JÁ EXISTIA e já roda em produção: é o
+            // `ops_somente` que a fila de reenvio (37.4) usa. O contrato do
+            // servidor é "aplique as operações ou RECUSE, nunca caia no caminho
+            // de estado inteiro". Só o caminho feliz não a usava.
+            //
+            // ⚠️ A CONDIÇÃO DO CONJUNTO É OBRIGATÓRIA. Com `ops_somente`, o
+            // servidor PULA a checagem de "o conjunto de perfis mudou?" (ela não
+            // se aplica a um reenvio, que não traz `profiles` para comparar).
+            // Operações não sabem criar nem apagar perfil: mandar só operações
+            // num save que criou ou removeu um perfil perderia essa mudança em
+            // silêncio. Por isso quem confere aqui é o cliente, que tem o
+            // retrato do último load/save e sabe exatamente se o conjunto mudou.
+            const idsAgora = new Set(safeProfiles.map((p) => String(p?.id)));
+            const conjuntoIntacto =
+                this.#retrato.size === idsAgora.size &&
+                [...this.#retrato.keys()].every((id) => idsAgora.has(id));
+
+            // `#retrato.size > 0` exclui o primeiro save da sessão sem load bom:
+            // sem retrato não há base contra a qual as operações façam sentido.
+            const soOps = sombra.completo &&
+                          sombra.ops.length > 0 &&
+                          this.#retrato.size > 0 &&
+                          conjuntoIntacto;
+
             const dataToSave = {
                 version:  '1.0',
-                profiles: safeProfiles,
+                // Com `soOps`, o estado inteiro NÃO viaja. O servidor recusa
+                // (409) em vez de interpretar `[]` como "apaguei tudo" — é o que
+                // `ops_somente` garante, e é por isso que ele é obrigatório aqui.
+                profiles: soOps ? [] : safeProfiles,
+                ...(soOps ? { ops_somente: true } : {}),
                 touched_profile_ids: tocados,
                 profile_ops:  sombra.ops,
                 ops_completo: sombra.completo,
@@ -813,11 +851,22 @@ class DataManager {
             // milhares de transações, o primeiro save da sessão descreve todas
             // elas — e o payload passa a carregar o estado E as operações. Se
             // isso estourar o teto, a sombra sai e o save segue como sempre foi.
+            //
+            // ⚠️ Com `ops_somente`, descartar a sombra NÃO é uma saída: sobraria
+            // `profiles: []` sem operação nenhuma, e o servidor recusaria (409) —
+            // corretamente, mas o save do usuário se perderia. Aqui a saída é a
+            // oposta: devolver o estado inteiro e desligar o `ops_somente`.
             if (serialized.length > MAX_PAYLOAD_BYTES && dataToSave.profile_ops.length > 0) {
-                delete dataToSave.profile_ops;
-                dataToSave.ops_completo = false;
+                if (dataToSave.ops_somente) {
+                    dataToSave.profiles = safeProfiles;
+                    delete dataToSave.ops_somente;
+                    if (IS_DEV) console.warn('🔬 [DATA-MANAGER] delta grande demais: voltando ao estado inteiro');
+                } else {
+                    delete dataToSave.profile_ops;
+                    dataToSave.ops_completo = false;
+                    if (IS_DEV) console.warn('🔬 [DATA-MANAGER] sombra descartada: payload no limite');
+                }
                 serialized = JSON.stringify(dataToSave);
-                if (IS_DEV) console.warn('🔬 [DATA-MANAGER] sombra descartada: payload no limite');
             }
 
             if (serialized.length > MAX_PAYLOAD_BYTES) {
@@ -877,13 +926,66 @@ class DataManager {
             // A troca é consciente: perder o último segundo de edição DESTE
             // cliente é melhor que apagar em silêncio o que a outra pessoa já
             // tinha salvo. Sem a trava, o segundo caso é o que acontecia.
-            if (saveResp.status === 409) {
-                const corpo = await saveResp.clone().json().catch(() => null);
+            //
+            // Está numa função porque o delta save pode gerar uma SEGUNDA
+            // resposta (o reenvio com estado inteiro), e essa segunda é
+            // justamente a que pode trombar com a trava de versão — o caminho por
+            // operações não a consulta. Sem checar as duas, um conflito real
+            // voltaria como erro genérico e a tela não recarregaria.
+            const versaoConflitou = async (resp) => {
+                if (resp.status !== 409) return false;
+                const corpo = await resp.clone().json().catch(() => null);
                 if (corpo?.code === 'VERSAO_DESATUALIZADA') {
+                    // Adota a versão boa que veio na recusa. Sem isto o cliente
+                    // insistiria com a versão velha e levaria 409 de novo.
                     if (typeof corpo.versao === 'string') this.#versao = corpo.versao;
                     console.warn('⚠️ [DATA-MANAGER] save recusado: outra pessoa gravou antes. Recarregando.');
                     document.dispatchEvent(new CustomEvent('ge:versao-conflito'));
-                    return false;
+                    return true;
+                }
+                return false;
+            };
+
+            if (await versaoConflitou(saveResp)) return false;
+
+            if (saveResp.status === 409) {
+                const corpo = await saveResp.clone().json().catch(() => null);
+
+                // ── REDE DE SEGURANÇA DO DELTA SAVE ──────────────────────────
+                // `ops_somente` manda o servidor aplicar as operações ou RECUSAR.
+                // Recusar é o comportamento certo — nunca deixar um payload sem
+                // estado ser lido como "apaguei tudo" —, mas do ponto de vista do
+                // usuário uma recusa sem mais nada é uma edição perdida.
+                //
+                // Antes deste passo, uma operação que não aplicasse caía sozinha
+                // no caminho de estado inteiro e o save passava. Mandar só o
+                // delta não pode reduzir essa garantia: aqui a mesma queda é
+                // feita explicitamente, uma vez, com o estado inteiro na mão.
+                //
+                // Uma tentativa só, e com o MESMO `safeProfiles` já validado
+                // pelas guardas anti-reset e anti-wipe lá em cima.
+                if (corpo?.code === 'OPS_NAO_APLICADAS' && dataToSave.ops_somente) {
+                    console.warn('⚠️ [DATA-MANAGER] operações recusadas:', corpo?.motivo ?? '?',
+                                 '— reenviando com o estado inteiro.');
+                    dataToSave.profiles = safeProfiles;
+                    delete dataToSave.ops_somente;
+                    const corpoInteiro = JSON.stringify(dataToSave);
+                    if (corpoInteiro.length <= MAX_PAYLOAD_BYTES) {
+                        const tk = await this.#getAuthToken();
+                        const { signal: sig3, cleanup: cl3 } = this.#makeAbortSignal(RPC_TIMEOUT_MS);
+                        try {
+                            saveResp = await fetch('/api/user-data', {
+                                method:  'POST',
+                                headers: {
+                                    'Content-Type':  'application/json',
+                                    'Authorization': tk ? `Bearer ${tk}` : '',
+                                },
+                                body:   corpoInteiro,
+                                signal: sig3,
+                            });
+                        } finally { cl3(); }
+                        if (await versaoConflitou(saveResp)) return false;
+                    }
                 }
             }
 

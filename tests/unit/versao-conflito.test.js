@@ -99,8 +99,18 @@ describe('o que o cliente faz com o 409', () => {
 
   test('adota a versão boa que veio na recusa', () => {
     // Sem isto o cliente insistiria com a versão velha e levaria 409 de novo.
-    const bloco = DM.match(/if \(saveResp\.status === 409\) \{[\s\S]*?\n {12}\}/)[0]
-    assert.match(bloco, /this\.#versao = corpo\.versao/)
+    //
+    // O trecho é delimitado pelo RECONHECIMENTO do código de recusa, não pelo
+    // bloco do `if (status === 409)`: desde o delta save existem DUAS respostas
+    // possíveis (o envio e o reenvio com estado inteiro), e a adoção da versão
+    // mudou de lugar para uma função que atende as duas. Amarrar o teste ao
+    // bloco antigo o faria reprovar por refatoração, não por defeito.
+    const i = DM.indexOf("corpo?.code === 'VERSAO_DESATUALIZADA'")
+    assert.ok(i > 0, 'o cliente parou de reconhecer VERSAO_DESATUALIZADA')
+    const j = DM.indexOf('return true', i)
+    assert.ok(j > i, 'não achei o fim do tratamento do conflito de versão')
+    assert.match(DM.slice(i, j), /this\.#versao = corpo\.versao/,
+      'o cliente não adota mais a versão que veio na recusa — o próximo save levaria 409 de novo')
   })
 
   test('a tela busca o estado bom, pelo MESMO caminho do tempo real', () => {
