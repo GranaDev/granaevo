@@ -25,8 +25,9 @@ const SUPABASE_ANON_KEY    = process.env.SUPABASE_ANON_KEY;
 const ALLOWED_ORIGIN       = process.env.ALLOWED_ORIGIN;
 const SUPABASE_PROJECT_REF = process.env.SUPABASE_PROJECT_REF;
 const PROXY_SECRET         = process.env.PROXY_SECRET;
-const REDIS_URL            = process.env.UPSTASH_REDIS_REST_URL;
-const REDIS_TOKEN          = process.env.UPSTASH_REDIS_REST_TOKEN;
+// UPSTASH_REDIS_* NÃO é lido aqui de propósito: o rate limit fala com o Upstash
+// pelo api/_rate-limit.js, que tem a sua própria configuração. As duas constantes
+// que existiam neste arquivo serviam só à invalidação de um cache inexistente.
 
 const ALLOWED_ORIGINS = [
     process.env.ALLOWED_ORIGIN,
@@ -423,14 +424,6 @@ export default async function handler(req, res) {
             return res.status(code).json({ error: code === 504 ? 'Gateway Timeout' : 'Bad Gateway' });
         }
 
-        if (edgeRes.status === 200 && userId && REDIS_URL && REDIS_TOKEN) {
-            fetch(`${REDIS_URL}/del/gd:${encodeURIComponent(userId)}`, {
-                method:  'POST',
-                headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
-                signal:  AbortSignal.timeout(2_000),
-            }).catch(() => {});
-        }
-
         return res.status(edgeRes.status)
                   .setHeader('Content-Type', 'application/json')
                   .send(await edgeRes.text());
@@ -594,15 +587,6 @@ export default async function handler(req, res) {
             return res.status(code).json({ error: code === 504 ? 'Gateway Timeout' : 'Bad Gateway' });
         }
 
-        // Invalida cache Redis do usuário após exclusão
-        if (daRes.status === 200 && userId && REDIS_URL && REDIS_TOKEN) {
-            fetch(`${REDIS_URL}/del/gd:${encodeURIComponent(userId)}`, {
-                method:  'POST',
-                headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
-                signal:  AbortSignal.timeout(2_000),
-            }).catch(() => {});
-        }
-
         return res.status(daRes.status)
                   .setHeader('Content-Type', 'application/json')
                   .send(await daRes.text());
@@ -744,14 +728,15 @@ export default async function handler(req, res) {
 
     const edgeBody = await edgeRes.text();
 
-    // Invalida cache Redis após save bem-sucedido
-    if (edgeRes.status === 200 && userId && REDIS_URL && REDIS_TOKEN) {
-        fetch(`${REDIS_URL}/del/gd:${encodeURIComponent(userId)}`, {
-            method:  'POST',
-            headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
-            signal:  AbortSignal.timeout(2_000),
-        }).catch(() => {});
-    }
+    // ⚠️ NÃO reintroduzir aqui uma invalidação de cache `gd:<userId>` no Upstash.
+    // Existiam três (restore, delete-account e este) e as três apagavam uma chave
+    // que NINGUÉM escrevia e NINGUÉM lia: sobrou de um cache de leitura removido
+    // há tempos. Varredura de 2026-08-13: `gd:` só aparecia em `/del/`, nunca em
+    // `/set` nem `/get`. Era uma chamada HTTP externa por save — 1 comando Upstash
+    // desperdiçado em cada gravação de dado do usuário.
+    //
+    // Se um cache de leitura voltar um dia, a invalidação volta JUNTO com ele, no
+    // mesmo commit. Invalidação sem cache é só latência e cota queimada.
 
     return res.status(edgeRes.status)
               .setHeader('Content-Type', 'application/json')
