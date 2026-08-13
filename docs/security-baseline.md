@@ -44,7 +44,42 @@ INFO       documentados abaixo
 | IA / prompt injection | VERIFIED | 2026-08-13 | Tool-use forçado com enum travado; nenhum texto do modelo chega ao usuário; injeção indireta por rótulo neutralizada |
 | Upload | VERIFIED | 2026-08-13 | MIME allowlist + magic bytes + EXIF stripping + limite nos dois níveis; GIF excluído (polyglot) |
 | Dependências | VERIFIED | 2026-08-13 | `npm audit --omit=dev` → 0 vulnerabilidades |
-| Testes | VERIFIED | 2026-08-13 | **1571/1571 testes executados passaram**; 3 skipped documentados (sinal — só POSIX). Nunca escrever "1574/1574 PASS": skip não é pass |
+| Testes | VERIFIED | 2026-08-13 | **1575/1575 testes executados passaram**; 3 skipped documentados (sinal — só POSIX). Nunca escrever "1578/1578 PASS": skip não é pass |
+
+---
+
+## FASE B — testes de lacuna (não é uma segunda suíte)
+
+A suíte de segurança já tem **138 casos** contra `BASE_URL` cobrindo auth, rate
+limit, XSS, headers, CORS, upload e validação. A FASE B escreve **só o que falta**.
+
+Três estados possíveis, e o do meio é o que costuma ser falsificado:
+
+| Item | Estado | Prova |
+|---|---|---|
+| **B1 · JWT forjado não consome cota alheia** | ✅ **VERIFIED** 2026-08-13 | `tests/unit/rate-limit-envenenamento.test.js` — positivo, negativo, `alg:none` e inconclusivo; mutação reprova o negativo |
+| **B2a · Lockout: 3 estados do fallback** | ✅ **VERIFIED** 2026-08-13 | `tests/unit/lockout-camadas.test.js`; mutação reprova o estado 3 |
+| **B2b · Limpeza por sinal (POSIX)** | ✅ **VERIFIED** na CI | `tests/unit/efemeros-sinal.test.js` — processo real + sinal real |
+| B1b · Rate limit real (4ª tentativa barrada) | 🚧 **BLOQUEADO POR INFRAESTRUTURA — NÃO EXECUTADO** | Requer alvo isolado |
+| B1c · Contadores independentes entre endpoints | 🚧 **BLOQUEADO POR INFRAESTRUTURA — NÃO EXECUTADO** | Requer alvo isolado |
+| B2c · Anti-bot comportamental (Turnstile real) | 🚧 **BLOQUEADO POR INFRAESTRUTURA — NÃO EXECUTADO** | Requer ambiente com secret próprio |
+| B3 · `x-real-ip` spoof | 🚧 **BLOQUEADO POR INFRAESTRUTURA — NÃO EXECUTADO** | Propriedade de runtime da plataforma |
+| B4 · Auth positivo + isolamento A→B | 🚧 **BLOQUEADO POR INFRAESTRUTURA — NÃO EXECUTADO** | Requer contas de teste |
+
+> **"Bloqueado" não é "falhou" nem "verified".** São propriedades de
+> infraestrutura: nenhuma leitura de código prova que a Vercel sobrescreve
+> `x-real-ip`, que o Redis barra a 4ª tentativa, ou que a Cloudflare responde
+> como esperado.
+
+**Não existe ambiente dedicado hoje.** A API da Vercel lista um único projeto
+(`granaevo`, produção). O `security-suite.yml` já aponta para
+`SECURITY_TEST_BASE_URL`, um secret sem alvo.
+
+Se um dia B1b/B1c/B2c/B3/B4 forem fechar, o alvo precisa ser **isolado de verdade**:
+projeto e deployment separados, banco Supabase separado, credenciais próprias,
+contas de teste, dados fictícios, **zero dado de produção**. Um "staging"
+improvisado sobre o banco de produção seria pior que não ter — daria evidência
+falsa. Não é pré-requisito para nada do que já está fechado.
 
 ---
 
