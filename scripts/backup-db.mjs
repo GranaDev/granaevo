@@ -56,6 +56,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { join } from 'node:path';
 import { r2Configurado, r2Put, r2Tamanho, r2Listar, r2Apagar } from './_r2.mjs';
 import { CONSULTA_PRIVILEGIOS, montarScript } from './_privilegios.mjs';
+import { registrarEfemero, limparEfemeros, instalarLimpezaAutomatica } from './_efemeros.mjs';
 
 const DRY = process.argv.includes('--dry-run');
 
@@ -67,25 +68,21 @@ const RETENCAO  = Number(process.env.GRANAEVO_BACKUP_KEEP ?? 14);
 const SCHEMAS   = ['public', 'auth', 'storage'];
 const BUCKET    = process.env.GRANAEVO_R2_BUCKET ?? 'granaevo-backups';
 
-// Arquivos em TEXTO CLARO criados no meio do caminho. Precisam sumir em
-// QUALQUER desfecho — inclusive na falha.
+// Arquivos em TEXTO CLARO criados no meio do caminho (o dump e o script de
+// privilégios). Precisam sumir em QUALQUER desfecho — inclusive na falha e na
+// interrupção. O caminho de erro é justamente o que ninguém observa.
 //
-// ⚠️ Descoberto em 2026-08-12, ao tirar o retrato final: três dumps sem cifra
-// tinham ficado no disco, sobras das execuções que morreram entre o pg_dump e o
-// gpg (o ENOENT do gpg no Agendador foi uma delas). O `rmSync` só rodava DEPOIS
-// da cifragem bem-sucedida, então toda falha nesse intervalo deixava e-mails,
-// log de auditoria e dados de assinatura em claro, indefinidamente.
+// O mecanismo mora em scripts/_efemeros.mjs. Não é organização por gosto: de lá
+// ele pode ser IMPORTADO por um teste que mata um processo de verdade e confere
+// que o arquivo sumiu. Dentro deste script, que precisa de senha do banco,
+// pg_dump e gpg para chegar a qualquer lugar, a única asserção possível seria
+// "o handler aparece no fonte" — e é justamente isso que não prova nada.
 //
-// O caminho de erro é justamente o que ninguém observa. Ele precisa limpar
-// sozinho.
-const efemeros = new Set();
-function limparEfemeros() {
-    for (const f of efemeros) {
-        try { if (existsSync(f)) rmSync(f); } catch { /* melhor esforço */ }
-    }
-    efemeros.clear();
-}
-process.on('exit', limparEfemeros);
+// A re-auditoria de 2026-08-13 achou o buraco que sobrou da correção anterior:
+// `process.on('exit')` não roda em terminação por SINAL, então Ctrl+C ainda
+// deixava o dump em claro no disco. Ver o cabeçalho de _efemeros.mjs para o que
+// é coberto em cada sistema — e para o que o Windows não deixa cobrir.
+instalarLimpezaAutomatica();
 
 const falhar = (msg) => {
     limparEfemeros();
@@ -180,7 +177,7 @@ mkdirSync(DESTINO, { recursive: true });
 const stamp   = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const bruto   = join(DESTINO, `granaevo-${stamp}.dump`);
 const cifrado = `${bruto}.gpg`;
-efemeros.add(bruto);
+registrarEfemero(bruto);
 
 console.log(`  host ......... ${host}:5432`);
 console.log(`  schemas ...... ${SCHEMAS.join(', ')}`);
@@ -237,7 +234,7 @@ console.log(`  integridade .. ${entradas} entradas, ${acl} ACL`);
 const privLinhas = (await consultar(CONSULTA_PRIVILEGIOS)).map((r) => r.linha);
 if (privLinhas.length < 50) falhar(`script de privilégios suspeito: só ${privLinhas.length} statements`);
 const privBruto = join(DESTINO, `granaevo-${stamp}.privilegios.sql`);
-efemeros.add(privBruto);
+registrarEfemero(privBruto);
 writeFileSync(privBruto, montarScript(privLinhas, { origem: REF }), 'utf8');
 console.log(`  privilégios .. ${privLinhas.length} statements`);
 

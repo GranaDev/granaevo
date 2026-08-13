@@ -11,6 +11,7 @@
 //   POST { action:"push-unsubscribe", endpoint }
 
 import { checkRate, checkRateWindow, isIPBlocked } from './_rate-limit.js'
+import { verificarJWT } from './_jwt.js'
 import { logger, requestIdDe } from './_logger.js'
 import { timingSafeEqual } from 'node:crypto'
 
@@ -297,7 +298,20 @@ export default async function handler(req, res) {
     if (!token) token = extractToken(req.headers['cookie'] ?? '', SUPABASE_PROJECT_REF);
     if (!token) return res.status(401).json({ error: 'Não autenticado' });
 
-    const userId = extractUserId(token);
+    // ── ACHADO-01: identidade só DEPOIS da verificação criptográfica ─────────
+    // Antes daqui o `sub` saía de um base64 decode sem verificar assinatura, e
+    // virava chave de rate limit (`uid:`, `chatparse:uid:`). Como contador é
+    // recurso da VÍTIMA, um `sub` forjado queimava a cota alheia. Ver api/_jwt.js.
+    //
+    // Conclusivamente inválido → 401 aqui mesmo (a edge daria 401 de qualquer
+    // forma; adiantar poupa o salto). Inconclusivo → segue SEM identidade: valem
+    // só os limites por IP, e a edge continua sendo a autoridade de autenticação.
+    const veredito = await verificarJWT(token);
+    if (!veredito.ok && veredito.conclusivo) {
+        logger.warn('jwt_invalido', PATH, { ip, motivo: veredito.motivo });
+        return res.status(401).json({ error: 'Não autenticado' });
+    }
+    const userId = veredito.ok ? veredito.sub : null;
 
     // ── GET ?backup=1: lista snapshots (metadados) ───────────────
     if (req.method === 'GET' && req.query?.backup === '1') {
@@ -767,16 +781,9 @@ function extractToken(cookieHeader, projectRef) {
     return null;
 }
 
-// Decodifica JWT sem verificar assinatura — APENAS para rate limiting por userId.
-// Nunca usar para autenticação/autorização. Auth real: Edge Function via auth.getUser(token).
-function extractUserId(token) {
-    try {
-        const parts = token.split('.');
-        if (parts.length !== 3) return null;
-        const p = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-        return typeof p?.sub === 'string' ? p.sub : null;
-    } catch { return null; }
-}
+// ACHADO-01 (2026-08-12): aqui existia `extractUserId`, que decodificava o JWT
+// sem verificar assinatura. A identidade agora vem de `verificarJWT` (api/_jwt.js),
+// que confere a assinatura ES256 contra o JWKS antes de qualquer uso do `sub`.
 
 function analyzeJson(root) {
     if (root === null || typeof root !== 'object') return { depth: 0, maxKeys: 0 };

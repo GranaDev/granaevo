@@ -23,6 +23,7 @@ export const config = {
 }
 
 import { checkRateWindow }    from './_rate-limit.js'
+import { verificarJWT }       from './_jwt.js'
 import { trackSecurityEvent } from './_alert.js'
 import { logger }             from './_logger.js'
 
@@ -46,16 +47,8 @@ const RATE_MAX_USER = 10          // uploads por hora por conta
 const RATE_WINDOW   = 3_600       // 1 hora em segundos
 const MAX_BYTES     = 6 * 1024 * 1024
 
-// Decodifica JWT sem verificar assinatura — APENAS para rate limiting por userId.
-// Nunca usar para autenticação/autorização. Auth real: Edge Function via auth.getUser(token).
-function _extractUserId(token) {
-  try {
-    const parts = token.split('.')
-    if (parts.length !== 3) return null
-    const p = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'))
-    return typeof p?.sub === 'string' ? p.sub : null
-  } catch { return null }
-}
+// ACHADO-01 (2026-08-12): aqui existia `_extractUserId`, que decodificava o JWT
+// sem verificar assinatura. A identidade agora vem de `verificarJWT` (api/_jwt.js).
 
 export default async function handler(req, res) {
   const origin  = req.headers['origin'] ?? ''
@@ -110,7 +103,14 @@ export default async function handler(req, res) {
   // ── 4. Rate limit distribuído por IP + userId (Redis) ────────────────────────
   // Limites distintos: mais restritivo por conta (10) do que por IP (20)
   // para cobrir IPs compartilhados (redes corporativas, CGNAT)
-  const userId = _extractUserId(authHeader.slice(7).trim())
+  // ACHADO-01: identidade só depois da verificação criptográfica. Conclusivamente
+  // inválido → 401; inconclusivo → sem identidade, valendo só o teto por IP.
+  const veredito = await verificarJWT(authHeader.slice(7).trim())
+  if (!veredito.ok && veredito.conclusivo) {
+    logger.warn('jwt_invalido', PATH, { ip, motivo: veredito.motivo })
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+  const userId = veredito.ok ? veredito.sub : null
   const [ipOk, userOk] = await Promise.all([
     checkRateWindow(`upload:ip:${ip}`,               RATE_MAX_IP,   RATE_WINDOW),
     userId

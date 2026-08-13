@@ -45,7 +45,8 @@
 //   dos três eventos: sucesso, 5 erros, ou expiração.
 
 import { checkRate, checkRateWindow, isIPBlocked,
-         bumpCounter, readCounter, isKeyBlocked, blockKey, clearKeys } from './_rate-limit.js'
+         bumpCounter, readCounter, isKeyBlocked, blockKey, clearKeys,
+         redisDegradado } from './_rate-limit.js'
 import { logger } from './_logger.js'
 import { turnstileOk } from './_turnstile.js'
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
@@ -105,6 +106,49 @@ const LOCK_JANELA = 86_400       // o contador de falhas expira em 24 h
 // PII espalhada nas chaves do Redis (e resolve encoding de acento e '+' de uma vez).
 const chaveConta = (email) =>
   createHash('sha256').update(email).digest('hex').slice(0, 32)
+
+// ── ACHADO-02: backstop durável do lockout, no banco ─────────────────────────
+//
+// O lockout acima é do Redis, e o Redis é volátil. Quando ele cai, `isKeyBlocked`
+// e `readCounter` respondem a partir de um Map POR INSTÂNCIA serverless — o
+// lockout por conta e o gate de captcha (que lê o MESMO contador) param de valer
+// juntos, com uma única indisponibilidade.
+//
+// A tabela `login_lockouts` existia desde sempre, com índice, RLS e cron. O que
+// faltava era um chamador: em produção ela tinha 0 linhas e
+// `max(last_attempt_at) = NULL`. Um controle que nunca registrou nada.
+//
+// COMO AS DUAS CAMADAS CONVIVEM (e por que a ordem é esta):
+//   • ESCRITA — sempre nas duas. Registrar a falha no banco só quando o Redis
+//     já caiu seria tarde demais: o backstop precisa CHEGAR na queda com o
+//     histórico pronto, não começar a contar do zero no pior momento.
+//   • LEITURA — o Redis decide. O banco só é consultado quando `redisDegradado()`
+//     diz que a resposta do Redis não vale como decisão de segurança. Assim o
+//     caminho feliz não paga nenhum salto de rede extra.
+//
+// Nunca derruba o login: qualquer erro aqui é engolido e a decisão do Redis
+// prevalece. O backstop é rede de segurança, não um novo ponto único de falha.
+const PROXY_SECRET = process.env.PROXY_SECRET ?? ''
+
+async function lockoutDuravel(acao, id, { esperar = true } = {}) {
+  if (!SUPABASE_URL || !PROXY_SECRET || !ANON_KEY) return null
+  const p = fetch(`${SUPABASE_URL}/functions/v1/login-lockout`, {
+    method:  'POST',
+    headers: {
+      'Content-Type':   'application/json',
+      'apikey':         ANON_KEY,
+      'x-proxy-secret': PROXY_SECRET,
+    },
+    body:   JSON.stringify({ acao, id }),
+    signal: AbortSignal.timeout(2_500),
+  })
+  if (!esperar) { p.catch(() => {}); return null }
+  try {
+    const r = await p
+    if (!r.ok) return null
+    return await r.json()
+  } catch { return null }
+}
 
 // ── B-2: captcha EXIGIDO PELO SERVIDOR ───────────────────────────────────────
 // O captcha desta aplicação sempre existiu, mas quem decidia mostrá-lo era um
@@ -441,13 +485,64 @@ export default async function handler(req, res) {
       return res.status(429).json({ error: 'account_locked' })
     }
 
+    // ACHADO-02: o "não bloqueado" acima só vale se veio do Redis de verdade.
+    // Se ele está degradado, a resposta saiu de um Map local que um atacante
+    // contorna trocando de instância — aí quem decide é o banco.
+    //
+    // TERCEIRO ESTADO, DECIDIDO EXPLICITAMENTE:
+    //   Redis ok                    → proteção do Redis
+    //   Redis fora, banco responde  → proteção do banco
+    //   OS DOIS mudos               → NENHUMA camada de lockout de pé
+    //
+    // O terceiro caso não pode passar batido. Deixar o login seguir normalmente
+    // ali seria uma camada mascarando silenciosamente a falha da outra — a
+    // mesma classe de defeito que esta correção veio consertar.
+    //
+    // A resposta é degradar para uma defesa de PROVEDOR INDEPENDENTE, não
+    // remover defesa: exige-se o captcha incondicionalmente. Cloudflare não
+    // compartilha destino com Upstash nem com Supabase, então a chance de as
+    // três estarem fora ao mesmo tempo é o resíduo declarado no baseline.
+    //
+    // POR QUE NÃO BLOQUEAR O LOGIN DE VEZ: uma indisponibilidade do Upstash
+    // somada a uma da edge trancaria TODOS os clientes pagantes para fora da
+    // própria conta. O custo de recusar todo mundo é maior que o de exigir um
+    // desafio de bot durante a janela — o mesmo raciocínio já registrado em
+    // api/_turnstile.js. Se um dia o captcha for a única camada restante, esta
+    // decisão tem de ser revista junto.
+    let semNenhumaCamada = false
+    if (redisDegradado()) {
+      const d = await lockoutDuravel('check', kConta)
+      if (d?.is_locked) {
+        logger.warn('login_locked_duravel', PATH, { ip })
+        res.setHeader('Retry-After', '900')
+        return res.status(429).json({ error: 'account_locked' })
+      }
+      // `null` = a edge não respondeu (ou falta config). Com o Redis já
+      // degradado, isto significa que NINGUÉM está contando falhas.
+      if (d === null) semNenhumaCamada = true
+    }
+
     // ── B-2: o servidor exige o captcha, não o navegador ────────────────────
     // Lê o contador SEM incrementar (readCounter) — quem incrementa é só o
     // caminho de falha, mais abaixo. Incrementar aqui puniria quem acerta.
     let precisaCaptcha = false
     try {
       precisaCaptcha = (await readCounter(kFail)) >= CAPTCHA_APOS_FALHAS
-    } catch { /* sem Redis: segue sem captcha, o lockout ainda protege */ }
+    } catch { /* sem Redis: o degrau abaixo assume */ }
+
+    if (semNenhumaCamada) {
+      precisaCaptcha = true
+
+      // ALARME OBRIGATÓRIO — e de propósito NÃO é `trackSecurityEvent`.
+      //
+      // Aquele caminho começa com `if (!REDIS_URL || !REDIS_TOKEN) return` e
+      // conta as ocorrências no próprio Redis. Usá-lo para avisar que o Redis
+      // caiu seria criar mais um controle incapaz de disparar exatamente no
+      // momento em que ele importa — o defeito que esta auditoria encontrou
+      // três vezes. `logger.error` vai para o stdout da função e chega ao
+      // Vercel Logs sem depender de nada que possa estar fora do ar junto.
+      logger.error('lockout_sem_camada', PATH, { ip })
+    }
 
     if (precisaCaptcha) {
       const tok = typeof body?.captchaToken === 'string' ? body.captchaToken.trim() : ''
@@ -495,6 +590,17 @@ export default async function handler(req, res) {
         }
       } catch { /* o limite por IP segue valendo; nunca derruba o login por isto */ }
 
+      // ACHADO-02: registra a MESMA falha na camada durável. Aguardado de
+      // propósito — é o caminho de senha errada, onde alguns milissegundos a
+      // mais não incomodam ninguém legítimo e atrapalham quem está martelando.
+      // O `catch` interno de `lockoutDuravel` garante que um banco fora do ar
+      // não transforme "senha errada" em erro 500.
+      //
+      // O resultado NÃO muda esta resposta: quem acabou de errar a senha recebe
+      // 401 de qualquer forma, e o bloqueio entra na PRÓXIMA tentativa, pelo
+      // check do topo. Menos um lugar onde as duas camadas podem discordar.
+      await lockoutDuravel('record', kConta)
+
       // Não vaza se o email existe — sempre mensagem genérica
       logger.warn('login_failed', PATH, { ip })
       return res.status(401).json({ error: 'invalid_credentials' })
@@ -503,6 +609,10 @@ export default async function handler(req, res) {
     // Acertou a senha: zera o histórico. Sem isto, falhas legítimas espalhadas
     // ao longo de um dia se somariam até travar quem nunca foi atacado.
     clearKeys(kFail, kLock).catch(() => {})
+    // Idem na camada durável. Aqui NÃO se espera: é o caminho feliz, e a janela
+    // de 24 h de `record_failed_login` cura sozinha um clear perdido — o contador
+    // do banco reinicia na primeira falha posterior à janela.
+    lockoutDuravel('clear', kConta, { esperar: false })
 
     const grant = await grantRes.json()
     if (!grant?.access_token || !grant?.refresh_token)

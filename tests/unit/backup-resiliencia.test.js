@@ -126,10 +126,25 @@ describe('backup — o monitoramento não pode mentir', () => {
         // dados de assinatura em claro, indefinidamente.
         //
         // O caminho de erro é justamente o que ninguém observa.
-        assert.match(LIMPO, /const efemeros = new Set\(\)/)
-        assert.match(LIMPO, /process\.on\('exit', limparEfemeros\)/)
-        assert.match(LIMPO, /efemeros\.add\(bruto\)/)
-        assert.match(LIMPO, /efemeros\.add\(privBruto\)/)
+        //
+        // ATUALIZADO na re-auditoria de 2026-08-13. Estas asserções checavam a
+        // FORMA do código (`const efemeros = new Set()`, `process.on('exit',…)`),
+        // e a forma mudou: o mecanismo virou scripts/_efemeros.mjs justamente
+        // para poder ser testado matando um processo de verdade.
+        //
+        // A intenção do teste não mudou, e a prova ficou MAIS FORTE, não menos:
+        // quem garante o comportamento agora é tests/unit/efemeros-sinal.test.js,
+        // que nasce um processo, manda SIGTERM/SIGINT e confere no disco que o
+        // arquivo sumiu. O que sobra aqui é o que aquele teste não cobre — que
+        // ESTE script está de fato ligado ao mecanismo.
+        //
+        // (A correção original também estava incompleta: `process.on('exit')` não
+        // roda em terminação por sinal, então Ctrl+C ainda deixava o dump em
+        // claro. Era o ACHADO-03.)
+        assert.match(LIMPO, /from '\.\/_efemeros\.mjs'/)
+        assert.match(LIMPO, /instalarLimpezaAutomatica\(\)/)
+        assert.match(LIMPO, /registrarEfemero\(bruto\)/)
+        assert.match(LIMPO, /registrarEfemero\(privBruto\)/)
         // e o caminho de falha limpa antes de sair
         const f = LIMPO.slice(LIMPO.indexOf('const falhar ='), LIMPO.indexOf('const exigir ='))
         assert.match(f, /limparEfemeros\(\)/, 'falhar() precisa limpar antes do exit')

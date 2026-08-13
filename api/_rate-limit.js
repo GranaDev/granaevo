@@ -42,6 +42,33 @@ if (IS_PRODUCTION && !USE_REDIS) {
   }
 }
 
+// ── Sinal de degradação do Redis (ACHADO-02, auditoria 2026-08-12) ───────────
+//
+// O fallback in-memory abaixo é honesto sobre disponibilidade, mas MENTE sobre
+// segurança: cada instância serverless tem o seu próprio Map, então "5 falhas"
+// vira "5 falhas POR INSTÂNCIA". Na prática o lockout por conta e o gate de
+// captcha — que lê `readCounter(kFail)` — deixam de valer juntos, porque os dois
+// dependem da mesma leitura do Redis.
+//
+// Quem precisa saber disso é o caminho de login, para acionar o backstop durável
+// no banco. Um probe dedicado custaria um round-trip a cada request; marcar o
+// instante da última falha custa zero e responde exatamente à pergunta certa:
+// "a leitura em que eu acabei de me basear era confiável?".
+let _ultimaFalhaRedis = 0
+const DEGRADADO_MS = 60_000
+
+function _marcarFalhaRedis() { _ultimaFalhaRedis = Date.now() }
+
+/**
+ * true se o Redis falhou recentemente (ou nem está configurado) — ou seja, se as
+ * respostas de `isKeyBlocked`/`readCounter` podem estar vindo do Map local e não
+ * valem como decisão de segurança.
+ */
+export function redisDegradado() {
+  if (!USE_REDIS) return true
+  return Date.now() - _ultimaFalhaRedis < DEGRADADO_MS
+}
+
 // ── Fallback in-memory ────────────────────────────────────────────────────────
 const _store          = new Map()
 const _DEFAULT_WINDOW = 60_000  // janela padrão para checkRate()
@@ -86,7 +113,7 @@ setInterval(() => {
   for (const [k, v] of _store) {
     if (now - v.t > (v.w ?? _DEFAULT_WINDOW) * 2) _store.delete(k)
   }
-}, 30_000)
+}, 30_000).unref()
 
 // ── Upstash Redis (sliding window INCR + EXPIRE) ──────────────────────────────
 async function _checkRedis(key, max, windowSecs = 60) {
@@ -103,11 +130,12 @@ async function _checkRedis(key, max, windowSecs = 60) {
       body:    JSON.stringify(pipeline),
       signal:  AbortSignal.timeout(3_000), // evita hang se Redis for lento
     })
-    if (!res.ok) return _checkMemory(key, max, windowMs)
+    if (!res.ok) { _marcarFalhaRedis(); return _checkMemory(key, max, windowMs) }
     const data = await res.json()
     const count = data?.[0]?.result ?? 1
     return count <= max
   } catch {
+    _marcarFalhaRedis()
     return _checkMemory(key, max, windowMs)
   }
 }
@@ -186,7 +214,7 @@ setInterval(() => {
   for (const [ip, expiry] of _blockedIPs) {
     if (now > expiry) _blockedIPs.delete(ip)
   }
-}, 60_000)
+}, 60_000).unref()
 
 /**
  * Verifica se um IP está na blocklist persistente.
@@ -213,13 +241,16 @@ setInterval(() => {
 // errada. O pipeline elimina a pergunta: a chave viaja no corpo, exatamente como
 // nas escritas, e simetria entre leitura e escrita deixa de ser suposição.
 async function _redisCmd(...comando) {
-  const res = await fetch(`${REDIS_URL}/pipeline`, {
-    method:  'POST',
-    headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
-    body:    JSON.stringify([comando]),
-    signal:  AbortSignal.timeout(2_000),
-  })
-  if (!res.ok) throw new Error('redis_http_' + res.status)
+  let res
+  try {
+    res = await fetch(`${REDIS_URL}/pipeline`, {
+      method:  'POST',
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+      body:    JSON.stringify([comando]),
+      signal:  AbortSignal.timeout(2_000),
+    })
+  } catch (e) { _marcarFalhaRedis(); throw e }
+  if (!res.ok) { _marcarFalhaRedis(); throw new Error('redis_http_' + res.status) }
   return (await res.json())?.[0]?.result
 }
 
@@ -270,7 +301,7 @@ setInterval(() => {
   const now = Date.now()
   for (const [k, exp] of _blockedKeys) if (now > exp) _blockedKeys.delete(k)
   for (const [k, v] of _counters) if (now - v.t > v.w) _counters.delete(k)
-}, 60_000)
+}, 60_000).unref()
 
 /**
  * Incrementa um contador e devolve o valor atual. Diferente de checkRateWindow,
@@ -291,7 +322,8 @@ export async function bumpCounter(key, windowSecs) {
         const data = await res.json()
         return Number(data?.[0]?.result ?? 1)
       }
-    } catch { /* cai no fallback */ }
+      _marcarFalhaRedis()
+    } catch { _marcarFalhaRedis() }
   }
   const now = Date.now(), w = windowSecs * 1_000
   const r = _counters.get(key)
@@ -347,7 +379,7 @@ export async function blockKey(key, ttlSecs) {
       body:    JSON.stringify([['SET', key, '1'], ['EXPIRE', key, ttlSecs]]),
       signal:  AbortSignal.timeout(2_000),
     })
-  } catch { /* in-memory já cobre */ }
+  } catch { _marcarFalhaRedis() /* in-memory cobre a disponibilidade, não a segurança */ }
 }
 
 /** Apaga chaves (usado no login bem-sucedido para zerar o histórico de falhas). */

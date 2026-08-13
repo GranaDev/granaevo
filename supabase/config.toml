@@ -415,6 +415,14 @@ verify_jwt = false
 [functions.notify-login]
 verify_jwt = false
 
+# login-lockout: backstop durável do lockout (ACHADO-02). verify_jwt PRECISA ser
+# false, e aqui o motivo é diferente do das outras: esta função é chamada quando
+# a SENHA ACABOU DE FALHAR — não existe usuário autenticado nem JWT para o
+# gateway conferir. A autenticação é o x-proxy-secret, e o identificador é um
+# formato fechado (32 hex do SHA-256 do e-mail).
+[functions.login-lockout]
+verify_jwt = false
+
 # mfa-recovery: códigos de recuperação do 2FA (Passo 31 · B-1). Auth própria
 # (x-proxy-secret + auth.getUser ES256). PRECISA ser false: o verify_jwt do
 # gateway valida o secret HS256 LEGADO e devolveria 401 antes do código —
