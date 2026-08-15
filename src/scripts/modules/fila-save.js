@@ -108,7 +108,36 @@ export async function drenar(userId, enviar) {
     return { enviados, restantes: restantes.length };
 }
 
-/** Espera antes da tentativa `n` (0-based). Cresce até 5 minutos e para de crescer. */
+// Dispersão do recuo: metade a uma vez e meia da base.
+//
+// POR QUE ISTO EXISTE. O recuo nasceu para aliviar o servidor, mas um recuo
+// DETERMINÍSTICO faz o contrário quando muita gente falha junto: N clientes que
+// levam a mesma recusa no mesmo instante reagendam todos para exatamente 2s,
+// depois exatamente 5s — em fase. O recuo, que deveria espalhar a carga, a
+// concentra em picos cada vez mais altos. É o thundering herd, e ele não tem
+// atacante: 10 mil pessoas saindo do metrô ao mesmo tempo é estatística.
+//
+// Ficou urgente em 2026-08-15, junto com o teto de escritas/hora: a partir dele
+// o servidor passou a devolver 429, e o cliente passou a ENFILEIRAR em 429.
+// Sem jitter, a proteção contra abuso viraria um metrônomo — ela própria
+// sincronizando os clientes que acabou de recusar.
+//
+// 0,5–1,5× (e não 0–1×, o "full jitter" clássico) porque aqui o recuo também
+// protege o usuário de martelar o próprio servidor: cortar a espera a quase
+// zero na primeira tentativa é o oposto do que se quer sob recusa por volume.
+const JITTER_MIN = 0.5;
+const JITTER_AMPLITUDE = 1;
+
+/**
+ * Espera antes da tentativa `n` (0-based). Cresce até 5 minutos, para de
+ * crescer, e nunca devolve o mesmo valor para dois clientes ao mesmo tempo.
+ */
 export function recuoMs(n) {
+    const base = RECUO_MS[Math.min(Math.max(0, n | 0), RECUO_MS.length - 1)];
+    return Math.round(base * (JITTER_MIN + Math.random() * JITTER_AMPLITUDE));
+}
+
+/** A base sem dispersão — existe para o teste falar dos degraus sem sortear. */
+export function recuoBaseMs(n) {
     return RECUO_MS[Math.min(Math.max(0, n | 0), RECUO_MS.length - 1)];
 }

@@ -30,7 +30,7 @@ globalThis.localStorage = {
   removeItem: (k) => _mem.delete(k),
 }
 
-const { enfileirar, pendentes, quantos, limpar, drenar, recuoMs } =
+const { enfileirar, pendentes, quantos, limpar, drenar, recuoMs, recuoBaseMs } =
   await import('../../src/scripts/modules/fila-save.js')
 
 const U = 'user-1'
@@ -124,9 +124,43 @@ describe('⭐ a drenagem respeita a ORDEM, e para no primeiro erro', () => {
   })
 
   test('o recuo cresce e para de crescer', () => {
-    assert.equal(recuoMs(0), 2_000)
-    assert.ok(recuoMs(3) > recuoMs(1))
-    assert.equal(recuoMs(99), recuoMs(4), 'teto: não vira espera infinita')
+    // Fala dos DEGRAUS, sem sortear: com jitter, comparar valores sorteados
+    // daria um teste que reprova sozinho de vez em quando.
+    assert.equal(recuoBaseMs(0), 2_000)
+    assert.ok(recuoBaseMs(3) > recuoBaseMs(1))
+    assert.equal(recuoBaseMs(99), recuoBaseMs(4), 'teto: não vira espera infinita')
+  })
+
+  // ── JITTER (2026-08-15) ───────────────────────────────────────────────────
+  // Recuo determinístico faz N clientes que falharam juntos voltarem juntos, em
+  // fase, para sempre. Ficou urgente quando o teto de escritas/hora entrou e o
+  // 429 passou a enfileirar: sem dispersão, a proteção contra abuso vira o
+  // metrônomo que sincroniza os clientes que ela mesma recusou.
+  test('o recuo dispersa — dois clientes no mesmo instante não voltam juntos', () => {
+    const amostras = new Set(Array.from({ length: 200 }, () => recuoMs(0)))
+    // Determinístico daria 1 valor. Exigir >50 distintos em 200 sorteios de um
+    // intervalo de 2001 inteiros: a chance de falso negativo é desprezível.
+    assert.ok(
+      amostras.size > 50,
+      `o recuo voltou a ser determinístico (${amostras.size} valor(es) distinto(s) em 200)`,
+    )
+  })
+
+  test('a dispersão respeita o degrau — nunca abaixo de 0,5× nem acima de 1,5×', () => {
+    for (const n of [0, 1, 2, 3, 4, 99]) {
+      const base = recuoBaseMs(n)
+      for (let i = 0; i < 300; i++) {
+        const v = recuoMs(n)
+        assert.ok(
+          v >= base * 0.5 && v <= base * 1.5,
+          `recuoMs(${n}) devolveu ${v}, fora de [${base * 0.5}, ${base * 1.5}]`,
+        )
+      }
+    }
+  })
+
+  test('nunca devolve zero nem negativo — reenvio imediato em rajada é o defeito', () => {
+    for (let i = 0; i < 200; i++) assert.ok(recuoMs(0) >= 1_000)
   })
 })
 
