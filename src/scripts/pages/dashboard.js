@@ -1457,21 +1457,47 @@ async function salvarDados() {
     // mount elas concordam e a guarda sai do caminho sozinha — sem estado, sem
     // trava para alguém esquecer de soltar.
     //
-    // Granular POR COLEÇÃO de propósito: o defeito também aparece parcial (uma
-    // coleção carrega e outra não), e foi assim que ele comeu 232 bytes — uma
-    // transação — no smoke test.
+    // Granular POR CAMPO de propósito: o defeito aparece parcial — um campo
+    // carrega e outro não.
+    //
+    // ⚠️ A 1ª VERSÃO DESTA GUARDA COBRIA SÓ AS 5 COLEÇÕES FINANCEIRAS E NÃO
+    // RESOLVEU. Reteste em produção (5 recarregamentos, 2026-08-15) manteve a
+    // oscilação de ±500 B. O motivo: `dadosPerfil` grava DEZ campos, e os cinco
+    // que faltavam nascem vazios do mesmo jeito —
+    //   let orcamentos = {}; let tiposPersonalizados = []; let conquistasPerfil = {};
+    //   let configPerfil = {}; let desafiosPerfil = { ativos: [], historico: [] };
+    // O mapa de conquistas (ids + datas ISO) sozinho fica na ordem dos 500 B.
+    // A guarda olhava para o lugar errado; o save prematuro passava por ela.
+    //
+    // A lição, para quem mexer aqui depois: a guarda tem de cobrir TODO campo que
+    // venha de variável de módulo. Um campo esquecido é uma porta aberta, e a
+    // porta é silenciosa — o dado some sem erro.
     {
         const _noCache = _allProfilesData.find(p => String(p?.id) === String(perfilAtivo.id));
         if (_noCache) {
+            // chave no blob → valor vivo em memória
             const _vivas = {
                 transacoes, metas, contasFixas, cartoesCredito, assinaturas,
+                orcamentos,
+                tiposPersonalizados,
+                conquistas: conquistasPerfil,
+                config:     configPerfil,
+                desafios:   desafiosPerfil,
             };
-            for (const [_col, _memoria] of Object.entries(_vivas)) {
-                const _doCache = _noCache[_col];
-                if (Array.isArray(_doCache) && _doCache.length > 0 &&
-                    (!Array.isArray(_memoria) || _memoria.length === 0)) {
+            // "Tem conteúdo?" para array e para objeto — `desafios` é objeto de
+            // arrays, então conta o conteúdo de dentro.
+            const _cheio = (v) => {
+                if (Array.isArray(v)) return v.length > 0;
+                if (v && typeof v === 'object') {
+                    return Object.values(v).some(x => Array.isArray(x) ? x.length > 0 : x != null)
+                        || Object.keys(v).length > 0;
+                }
+                return false;
+            };
+            for (const [_campo, _memoria] of Object.entries(_vivas)) {
+                if (_cheio(_noCache[_campo]) && !_cheio(_memoria)) {
                     _log.error('SAVE_MOUNT_001',
-                        `ignorado — "${_col}" está vazia na memória mas tem ${_doCache.length} ` +
+                        `ignorado — "${_campo}" está vazio na memória mas tem conteúdo ` +
                         'no cache do servidor: montagem incompleta, gravar apagaria o dado');
                     return false;
                 }

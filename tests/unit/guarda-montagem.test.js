@@ -39,18 +39,36 @@ describe('guarda de montagem incompleta', () => {
   test('compara a memória viva contra _allProfilesData (não é flag de pronto)', () => {
     const g = bloco(DASH, 'const _noCache = _allProfilesData.find', 'const dadosPerfil = {')
     assert.match(g, /_allProfilesData\.find/, 'parou de consultar o cache do servidor')
-    assert.match(g, /_doCache\.length > 0/, 'parou de exigir que o cache tenha dado')
-    assert.match(g, /_memoria\.length === 0/, 'parou de detectar a memória vazia')
+    // A condição é: cheio no cache E vazio na memória. As duas metades importam —
+    // só a primeira bloquearia todo save; só a segunda não bloquearia nenhum.
+    assert.match(g, /_cheio\(_noCache\[_campo\]\)\s*&&\s*!_cheio\(_memoria\)/,
+      'a condição da guarda mudou de forma: ela precisa exigir cache COM conteúdo ' +
+      'E memória SEM conteúdo, nessa conjunção')
     assert.doesNotMatch(g, /_perfilPronto|_montagemConcluida/,
       'virou flag de "pronto": fail-closed, e um caminho que esqueça de soltá-la ' +
       'para o save do usuário para sempre')
   })
 
-  test('cobre as CINCO coleções, não só transações', () => {
-    const g = bloco(DASH, 'const _vivas = {', 'for (const [_col')
-    for (const col of ['transacoes', 'metas', 'contasFixas', 'cartoesCredito', 'assinaturas'])
-      assert.ok(g.includes(col),
-        `"${col}" ficou de fora: o defeito tambem aparece parcial, uma coleção por vez`)
+  test('cobre TODO campo que vem de variável de módulo, não só as coleções', () => {
+    // A 1ª versão desta guarda cobria só as 5 coleções financeiras e NÃO resolveu:
+    // o reteste em produção manteve a oscilação de ±500 B. `dadosPerfil` grava dez
+    // campos, e os cinco que faltavam (`orcamentos`, `tiposPersonalizados`,
+    // `conquistas`, `config`, `desafios`) nascem vazios do mesmo jeito. Um campo
+    // esquecido aqui é uma porta silenciosa: o dado some sem erro.
+    const g = bloco(DASH, 'const _vivas = {', 'const _cheio =')
+    for (const campo of [
+      'transacoes', 'metas', 'contasFixas', 'cartoesCredito', 'assinaturas',
+      'orcamentos', 'tiposPersonalizados', 'conquistas', 'config', 'desafios',
+    ]) assert.ok(g.includes(campo), `"${campo}" ficou de fora da guarda`)
+  })
+
+  test('sabe medir "vazio" em objeto, não só em array', () => {
+    // `orcamentos`, `conquistas` e `config` são objetos; `desafios` é objeto de
+    // arrays. Checar só `.length` os trataria como sempre-vazios e a guarda
+    // bloquearia todo save — ou como sempre-cheios e não bloquearia nenhum.
+    const f = bloco(DASH, 'const _cheio = (v) =>', 'for (const [_campo')
+    assert.match(f, /Array\.isArray\(v\)/, 'perdeu o caso do array')
+    assert.match(f, /Object\.(values|keys)\(v\)/, 'perdeu o caso do objeto')
   })
 
   test('recusa o save (return false), não apenas loga', () => {
