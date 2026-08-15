@@ -24,6 +24,16 @@
 --      Medido: 11 ms com cache quente; 577 ms de média em produção via PostgREST
 --      (45 chamadas, pg_stat_statements) — 1,6% de todo o tempo de banco.
 --
+-- ✅ APLICADA EM PRODUÇÃO EM 2026-08-15, com decisão explícita do dono pelos
+-- 30 dias. A poda inicial removeu 33.120 linhas (37.785 → 4.667) e o VACUUM
+-- devolveu o espaço. Job  (jobid 32) ativo.
+--
+-- Registro do que a decisão pesou: só  lê esta tabela,
+-- com janela de 24 h — 30 dias é 30× a necessidade e ainda deixa um mês para
+-- investigar um job intermitente. As 15.908 falhas apagadas eram todas de dois
+-- jobs mortos desde 2026-06-26.
+--
+-- (Texto original do aviso, mantido pelo histórico:)
 -- ⚠️ ESTA MIGRATION NÃO FOI APLICADA EM PRODUÇÃO PELO AGENTE.
 -- Apagar linha em produção é irreversível, e o próprio briefing manda verificar
 -- a política de dados antes de mexer em retenção. Estes registros não são dado
