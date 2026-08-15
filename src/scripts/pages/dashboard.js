@@ -4633,6 +4633,20 @@ document.addEventListener('ge:versao-conflito', () => {
     _recarregarDoServidor(null).catch(() => {});
 });
 
+// A fila de reenvio esvaziou: o que foi lançado offline JÁ ESTÁ no servidor.
+//
+// O evento existia desde o Passo 37.4 e ninguém o escutava — o mesmo padrão que
+// esta auditoria encontrou o dia inteiro: o mecanismo está lá, e nada o consome.
+// O efeito era pior que cosmético. Medido em 15/08: a fila drenou às 13:22:37
+// (o audit log registra o blob crescendo 232 bytes), e a transação NÃO apareceu
+// na tela — porque a página seguia mostrando o estado carregado no boot, de
+// antes da drenagem. Da cadeira do usuário isso é indistinguível de dado
+// perdido, e a reação natural — lançar de novo — cria a duplicata de verdade.
+document.addEventListener('ge:fila-vazia', () => {
+    mostrarNotificacao('Lançamentos feitos offline foram enviados.', 'success');
+    _recarregarDoServidor(null).catch(() => {});
+});
+
 // Quem da conta está com o app aberto agora.
 //
 // A presença chega como IDS DE PERFIL — o nome nunca trafega pelo canal, porque

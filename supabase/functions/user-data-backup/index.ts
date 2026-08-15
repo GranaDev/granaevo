@@ -202,6 +202,36 @@ Deno.serve(async (req: Request) => {
     return json({ error: 'Body JSON inválido' }, 400, cors)
   }
 
+  // ── POST { action: "snapshot" } — fotografa AGORA, antes de destruir ───────
+  //
+  // Existe por um achado de 2026-08-15: a tela de "Resetar Perfil" prometia
+  // ("Backup automático será criado", "⏳ Salvando backup…") um backup que nunca
+  // era criado. O cliente gravava um RÓTULO no localStorage e chamava
+  // `salvarDados()` — que não gera snapshot. Quem gera é `take_daily_snapshot()`,
+  // uma vez por dia, às 03:15 UTC. Quem resetasse às 13:30 e depois restaurasse
+  // "antes do reset" recebia o estado de dez horas antes.
+  //
+  // Sem `snapshot_date` no corpo de propósito: a foto é sempre de HOJE e sempre
+  // do estado ATUAL. Deixar o cliente escolher a data seria deixá-lo escolher
+  // qual backup sobrescrever — e o cliente não decide nada aqui.
+  if (body.action === 'snapshot') {
+    const { data: ok, error: snapErr } = await admin
+      .rpc('snapshot_sob_demanda', { p_user_id: userId })
+
+    if (snapErr || ok !== true) {
+      // FALHA FECHADA, e é o ponto todo desta ação: quem chama está prestes a
+      // apagar dados e depende desta foto. Devolver erro faz o cliente ABORTAR
+      // a operação destrutiva. Um "ok" otimista aqui reproduziria exatamente o
+      // defeito original — a promessa sem a coisa.
+      console.error('[user-data-backup] snapshot sob demanda falhou:',
+                    snapErr?.message ?? 'RPC devolveu false', '| user:', userId.slice(0, 8))
+      return json({ error: 'Não foi possível criar o backup' }, 500, cors)
+    }
+
+    console.log('[user-data-backup] snapshot sob demanda criado. user:', userId.slice(0, 8))
+    return json({ success: true, snapshot_date: new Date().toISOString().slice(0, 10) }, 200, cors)
+  }
+
   if (body.action !== 'restore') {
     return json({ error: 'Ação inválida' }, 400, cors)
   }

@@ -378,6 +378,57 @@ export default async function handler(req, res) {
     try { parsed = JSON.parse(raw); }
     catch { return res.status(400).json({ error: 'Body deve ser JSON válido' }); }
 
+    // ── POST { action:"snapshot" }: fotografa AGORA, antes de destruir ──────
+    //
+    // Achado de 2026-08-15: a tela de reset PROMETIA um backup ("Backup
+    // automático será criado", "⏳ Salvando backup…") que nunca era criado —
+    // o cliente gravava um rótulo no localStorage e chamava salvarDados(), que
+    // não gera snapshot. Quem gera é o cron, uma vez por dia às 03:15 UTC.
+    //
+    // Rate limit próprio, mais folgado que o do restore: isto roda ANTES de uma
+    // operação destrutiva e recusá-lo cancela a operação. Apertado demais, o
+    // usuário fica sem conseguir resetar; frouxo demais, vira escrita livre em
+    // `user_data_snapshots`. 10/hora cobre qualquer uso legítimo — reset é ação
+    // rara e cada uma consome exatamente um.
+    if (parsed?.action === 'snapshot') {
+        if (!BACKUP_EDGE_URL) return res.status(503).json({ error: 'Serviço indisponível' });
+
+        if (!await checkRL(`ip:${ip}:snapshot`, 10, RL_RESTORE_WIN_SECS)) {
+            res.setHeader('Retry-After', '3600');
+            return res.status(429).json({ error: 'Limite de backups atingido. Aguarde 1 hora.' });
+        }
+        if (userId && !await checkRL(`uid:${userId}:snapshot`, 10, RL_RESTORE_WIN_SECS)) {
+            res.setHeader('Retry-After', '3600');
+            return res.status(429).json({ error: 'Limite de backups atingido. Aguarde 1 hora.' });
+        }
+
+        let edgeRes;
+        try {
+            edgeRes = await fetch(BACKUP_EDGE_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type':    'application/json',
+                    'Authorization':   `Bearer ${token}`,
+                    'apikey':          SUPABASE_ANON_KEY,
+                    'x-forwarded-for': ip,
+                    'x-proxy-secret':  PROXY_SECRET,
+                    'x-request-id':   _rid,
+                },
+                // Nada do corpo do cliente é repassado: a ação não tem parâmetro.
+                // A foto é sempre de HOJE e sempre do estado atual do dono.
+                body: JSON.stringify({ action: 'snapshot' }),
+                signal: AbortSignal.timeout(15_000),
+            });
+        } catch (e) {
+            const code = e.name === 'TimeoutError' || e.name === 'AbortError' ? 504 : 502;
+            return res.status(code).json({ error: code === 504 ? 'Gateway Timeout' : 'Bad Gateway' });
+        }
+
+        return res.status(edgeRes.status)
+                  .setHeader('Content-Type', 'application/json')
+                  .send(await edgeRes.text());
+    }
+
     // ── POST { action:"restore" }: restaura snapshot ──────────
     if (parsed?.action === 'restore') {
         if (!BACKUP_EDGE_URL) return res.status(503).json({ error: 'Serviço indisponível' });

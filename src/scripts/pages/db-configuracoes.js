@@ -1326,10 +1326,42 @@ async function resetarPerfil() {
 
             try {
                 // 1. Salva safety backup com nome descritivo
+                //
+                // ⚠️ ESTA PARTE MENTIA (achado do dono, 2026-08-15). O código era
+                // `_setBackupNome(...)` + `await _ctx.salvarDados()`, e o
+                // comentário do helper dizia que salvar "gera um snapshot no
+                // servidor". Não gera: quem cria snapshot é `take_daily_snapshot()`,
+                // pelo cron, UMA VEZ POR DIA às 03:15 UTC. O rótulo "Antes do
+                // reset" era gravado no localStorage apontando para a data de
+                // hoje — cujo snapshot era o da madrugada. Quem resetasse às
+                // 13:30 e restaurasse recebia o estado de dez horas antes, com a
+                // tela tendo garantido que estava tudo salvo.
+                //
+                // A ordem aqui importa: primeiro o blob mais recente vai ao
+                // servidor, DEPOIS a foto — fotografar antes de salvar deixaria
+                // de fora as edições dos últimos segundos.
                 const nomeBackup = 'Antes do reset — ' + nomePerfil + ' — ' + new Date().toLocaleDateString('pt-BR');
                 const hoje = new Date().toISOString().slice(0, 10);
-                _setBackupNome(hoje, nomeBackup);
                 await _ctx.salvarDados();
+
+                const { supabase } = await import('../services/supabase-client.js?v=2');
+                const { data: { session } } = await supabase.auth.getSession();
+                const token = session?.access_token;
+                if (!token) throw new Error('SNAPSHOT_FALHOU:sem_sessao');
+
+                const snapResp = await fetch('/api/user-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ action: 'snapshot' }),
+                });
+
+                // FALHA FECHADA: sem a foto, o reset NÃO acontece. Apagar dados
+                // depois de prometer um backup que não existe é o defeito que
+                // este bloco corrige — seguir em frente aqui seria recriá-lo.
+                if (!snapResp.ok) {
+                    throw new Error('SNAPSHOT_FALHOU:' + snapResp.status);
+                }
+                _setBackupNome(hoje, nomeBackup);
 
                 btnConfirmar.textContent = '⏳ Resetando…';
 
@@ -1356,7 +1388,18 @@ async function resetarPerfil() {
                 btnConfirmar.disabled = false;
                 btnCancelar.disabled  = false;
                 btnConfirmar.innerHTML = '<i class="fas fa-trash-alt" aria-hidden="true"></i> Resetar perfil';
-                _ctx.mostrarNotificacao('Erro ao resetar o perfil. Tente novamente.', 'error');
+
+                // A falha do BACKUP tem mensagem própria, e ela precisa dizer a
+                // única coisa que o usuário quer saber neste segundo: os dados
+                // continuam lá. "Erro ao resetar, tente novamente" deixaria a
+                // dúvida de se o reset foi feito pela metade.
+                const semBackup = String(e?.message ?? '').startsWith('SNAPSHOT_FALHOU');
+                _ctx.mostrarNotificacao(
+                    semBackup
+                        ? 'Não foi possível criar o backup — nada foi apagado. Tente de novo em instantes.'
+                        : 'Erro ao resetar o perfil. Tente novamente.',
+                    'error',
+                );
             }
         });
 
