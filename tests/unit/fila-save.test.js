@@ -286,7 +286,10 @@ describe('fila órfã — o que o Gate 6.1 pegou em produção', () => {
 
   test('a retomada lê o localStorage CRU, sem carregar o módulo da fila', () => {
     const fn = bloco(DM, '#retomarFilaPendente() {', '#agendarReenvio() {')
-    assert.match(fn, /localStorage\.getItem\(`ge_fila_save_/,
+    // A chave saiu do literal e foi para `#chaveFila()` em 2026-08-15, quando a
+    // ESCRITA crua passou a existir e os dois lados precisaram casar exatamente.
+    // O que este teste protege continua sendo o mesmo: leitura crua, sem módulo.
+    assert.match(fn, /localStorage\.getItem\(this\.#chaveFila\(\)\)/,
       'a checagem tem de ser leitura crua — importar fila-save.js aqui pesa em TODO boot')
     assert.doesNotMatch(fn, /await this\.#fila\(\)/,
       'importou o módulo da fila no caminho comum: o lazy do Passo 37.4 foi desfeito')
@@ -302,5 +305,75 @@ describe('fila órfã — o que o Gate 6.1 pegou em produção', () => {
     assert.doesNotMatch(ramo, /#agendarReenvio\(\)/,
       'o ramo offline voltou a chamar #agendarReenvio — como `tentar` zera a trava na ' +
       'primeira linha, isso gira tentar→agendar→tentar a ~4 ms, queimando CPU sem rede')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('🔴 gravar mesmo quando o MÓDULO da fila não carrega', () => {
+  // O paradoxo, medido em produção em 2026-08-15: `fila-save.js` é import() sob
+  // demanda e o save só falha SEM REDE — o módulo é inalcançável exatamente
+  // quando existe para servir. O Service Worker normalmente tem o chunk em
+  // cache, mas depois de todo deploy há uma janela em que não tem: o HTML novo
+  // entra em vigor na hora e passa a pedir o hash novo, enquanto o precache
+  // leva ~1 min para alcançá-lo. Medido no navegador do dono: >54 s com o hash
+  // novo ausente de TODOS os caches, SW ainda em `activating`.
+  //
+  // Cair nessa janela offline significava localStorage vazio e, no reload,
+  // lançamento perdido sem aviso nenhum.
+  const DM = soCodigo(readFileSync(join(RAIZ, 'src/scripts/modules/data-manager.js'), 'utf8'))
+  const bloco = (src, ini, fim) => {
+    const i = src.indexOf(ini); assert.ok(i !== -1, `não achei o início: ${ini}`)
+    const j = src.indexOf(fim, i); assert.ok(j > i, `não achei o fim: ${fim}`)
+    return src.slice(i, j)
+  }
+
+  test('⭐ CONTRATO: o que a escrita crua grava, a drenagem lê', () => {
+    // O risco desta correção é ter DUAS escritas que divergem em silêncio: o
+    // lote iria para um formato que `_ler` descarta, e sumiria sem erro. Este
+    // teste fixa o contrato entre as duas — é o que impede a divergência.
+    _mem.clear()
+    _mem.set('ge_fila_save_user-1', JSON.stringify([
+      { em: Date.now(), ops: [{ p: 'p1', c: 'transacoes', op: 'add', r: { id: 't1' } }], tocados: ['p1'] },
+    ]))
+    const f = pendentes('user-1')
+    assert.equal(f.length, 1, 'a drenagem não enxerga o que a escrita crua gravou')
+    assert.equal(f[0].ops.length, 1)
+    assert.deepEqual(f[0].tocados, ['p1'])
+  })
+
+  test('⭐ #enfileirar cai para a escrita crua quando o import falha', () => {
+    const fn = bloco(DM, 'async #enfileirar(sombra, tocados) {', '#chaveFila() {')
+    assert.match(fn, /await this\.#fila\(\)/, 'o caminho normal some')
+    assert.match(
+      fn,
+      /\} catch \{[\s\S]*?this\.#gravarLoteCru\(sombra\.ops, tocados\)/,
+      'o import voltou a ser o único caminho: offline na janela pós-deploy = dado perdido',
+    )
+  })
+
+  test('a chave é a MESMA dos dois lados, `|| anon` incluído', () => {
+    // Sem o `|| 'anon'`, um userId ausente vira a string "null" aqui e "anon"
+    // no módulo: grava num lugar, procura em outro, e o lote fica invisível.
+    const fn = bloco(DM, '#chaveFila() {', '#gravarLoteCru(')
+    assert.match(fn, /ge_fila_save_\$\{this\.#userId \|\| 'anon'\}/)
+    const modulo = readFileSync(join(RAIZ, 'src/scripts/modules/fila-save.js'), 'utf8')
+    assert.match(modulo, /ge_fila_save_\$\{userId \|\| 'anon'\}/, 'o módulo mudou a chave sozinho')
+  })
+
+  test('a escrita crua respeita o teto de 10 lotes', () => {
+    // Sem o corte, a fila crua cresceria até estourar a cota do localStorage —
+    // e aí NADA mais é gravado, que é o oposto do que esta correção existe para
+    // garantir.
+    const fn = bloco(DM, '#gravarLoteCru(ops, tocados) {', '#retomarFilaPendente() {')
+    assert.match(fn, /fila\.slice\(-10\)/)
+    assert.match(fn, /em: Date\.now\(\)/, 'sem o carimbo, a validade de 24h descarta o lote na leitura')
+  })
+
+  test('o import da drenagem não vira unhandled rejection', () => {
+    // `navigator.onLine` diz "há interface de rede", não "há internet". Quando
+    // ele mente, este import falha DENTRO de um setTimeout — sem catch, a
+    // rejeição não tem quem a pegue e a fila para de ser tentada na sessão.
+    const fn = bloco(DM, 'const tentar = async () => {', 'setTimeout(tentar, 0)')
+    assert.match(fn, /try \{\s*mod = await this\.#fila\(\);\s*\} catch \{\s*return;\s*\}/)
   })
 })

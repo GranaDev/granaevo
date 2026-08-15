@@ -333,9 +333,76 @@ class DataManager {
      */
     async #enfileirar(sombra, tocados) {
         if (!sombra || sombra.completo !== true || !sombra.ops?.length) return;
-        const { enfileirar } = await this.#fila();
-        enfileirar(this.#userId, sombra.ops, tocados);
+        try {
+            const { enfileirar } = await this.#fila();
+            enfileirar(this.#userId, sombra.ops, tocados);
+        } catch {
+            // O módulo não veio. Grava direto — ver `#gravarLoteCru`: perder o
+            // lote aqui é perder o lançamento que a pessoa acabou de fazer.
+            this.#gravarLoteCru(sombra.ops, tocados);
+        }
         this.#agendarReenvio();
+    }
+
+    /**
+     * A chave da fila no localStorage, num lugar só.
+     *
+     * `fila-save.js` usa `ge_fila_save_${userId || 'anon'}` e este arquivo tem de
+     * casar com ela EXATAMENTE: a escrita crua abaixo e a leitura de
+     * `#retomarFilaPendente` gravariam e procurariam em lugares diferentes, e o
+     * lote ficaria invisível para sempre — sem erro nenhum. O `|| 'anon'` faz
+     * parte da chave: sem ele, um userId ausente vira a string `"null"` aqui e
+     * `"anon"` lá.
+     * MANTER EM SINCRONIA com `_chave` em fila-save.js.
+     */
+    #chaveFila() {
+        return `ge_fila_save_${this.#userId || 'anon'}`;
+    }
+
+    /**
+     * Grava um lote SEM importar `fila-save.js`.
+     *
+     * ── O DEFEITO QUE ISTO CONSERTA (medido em produção, 2026-08-15) ─────────
+     * `fila-save.js` é `import()` sob demanda, e o save só falha quando NÃO HÁ
+     * REDE. O módulo é inalcançável exatamente quando existe para servir:
+     *
+     *   offline → save falha → import() falha → localStorage VAZIO
+     *          → o dado só existe na memória da página
+     *          → recarregar = DADO PERDIDO
+     *
+     * O Service Worker precacheia os assets, então normalmente o chunk está lá e
+     * o import passa offline. Mas depois de TODO deploy existe uma janela em que
+     * não está: o HTML novo entra em vigor na hora e passa a pedir
+     * `fila-save-<hash novo>.js`, enquanto o precache leva ~1 minuto para
+     * alcançá-lo. Medido no navegador do dono: mais de 54 segundos com o hash
+     * novo ausente de todos os caches, com o SW ainda em `activating`.
+     *
+     * ⚠️ Levar a fila para o chunk de boot NÃO resolveria: esse chunk também
+     * ganha hash novo a cada deploy e cai na MESMA janela — só mudaria qual
+     * arquivo falta. A única saída é não depender de arquivo nenhum.
+     *
+     * O formato é o que `_ler` de fila-save.js espera (`{em, ops, tocados}`):
+     * quem drena continua sendo o módulo, que só é necessário quando há rede.
+     */
+    #gravarLoteCru(ops, tocados) {
+        try {
+            const chave = this.#chaveFila();
+            let fila = [];
+            try {
+                const bruto = JSON.parse(localStorage.getItem(chave) || '[]');
+                if (Array.isArray(bruto)) fila = bruto;
+            } catch { /* storage corrompido: recomeça em vez de perder o lote novo */ }
+
+            fila.push({ em: Date.now(), ops, tocados: Array.isArray(tocados) ? tocados : [] });
+            // 10 = MAX_LOTES de fila-save.js. Sem o corte a fila cresceria até
+            // estourar a cota do localStorage — e aí nada mais seria gravado.
+            localStorage.setItem(chave, JSON.stringify(fila.slice(-10)));
+            return true;
+        } catch {
+            // Cota cheia ou storage bloqueado. Perder a fila é ruim; derrubar o
+            // save é pior — a mesma escolha que `_gravar` faz no módulo.
+            return false;
+        }
     }
 
     /**
@@ -368,7 +435,7 @@ class DataManager {
     #retomarFilaPendente() {
         let pendente = false;
         try {
-            const bruto = localStorage.getItem(`ge_fila_save_${this.#userId}`);
+            const bruto = localStorage.getItem(this.#chaveFila());
             // `'[]'` é fila vazia gravada — não vale acordar o módulo por ela.
             pendente = !!bruto && bruto !== '[]';
         } catch { /* localStorage indisponível: degrada para o comportamento antigo */ }
@@ -400,7 +467,20 @@ class DataManager {
             if (typeof navigator !== 'undefined' && navigator.onLine === false) {
                 return;
             }
-            const { drenar, recuoMs, quantos } = await this.#fila();
+            // `navigator.onLine` é otimista: ele diz "há interface de rede", não
+            // "há internet". Numa rede de aeroporto sem autenticar, ou logo após
+            // um deploy com o chunk fora do precache, este import falha — e uma
+            // rejeição dentro de um `setTimeout` não tem quem a pegue: viraria
+            // unhandled rejection, e a fila pararia de ser tentada nesta sessão.
+            // O lote continua gravado; quem tentar de novo é o `online` ou o
+            // próximo carregamento, via `#retomarFilaPendente`.
+            let mod;
+            try {
+                mod = await this.#fila();
+            } catch {
+                return;
+            }
+            const { drenar, recuoMs, quantos } = mod;
             const { restantes } = await drenar(this.#userId, (lote) => this.#enviarLote(lote));
             if (restantes > 0) {
                 const espera = recuoMs(this.#tentativa++);
