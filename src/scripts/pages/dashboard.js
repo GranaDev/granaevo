@@ -1431,6 +1431,54 @@ async function salvarDados() {
         return false;
     }
 
+    // ── GUARDA DE MONTAGEM INCOMPLETA ───────────────────────────────────────
+    //
+    // O DEFEITO (medido 2026-08-15, aberto desde fev/2026): o blob encolhia e
+    // voltava ao tamanho exato em menos de 3 minutos — 245 vezes numa conta real,
+    // com swing de até 53 KB. `dadosPerfil` é montado a partir das variáveis de
+    // módulo vivas (`transacoes`, `metas`, …). Um save que dispare ANTES de elas
+    // serem populadas grava coleções vazias; o carregamento termina e o save
+    // seguinte restaura. É o A→B→A.
+    //
+    // Disparadores durante o carregamento: o `await salvarDados()` do fim do boot,
+    // `gerarCobrancasAssinaturas()` e o auto-reset mensal das contas fixas.
+    //
+    // POR QUE OS ANTI-WIPE NÃO PEGAVAM:
+    //   • cliente — `isDestructiveSave()` começa com `if (#lastLoadOk) return false`;
+    //     depois de um load bom, esvaziar é permitido (pode ser o usuário apagando);
+    //   • servidor — checa se ALGUM perfil do payload tem dado, então esvaziar UM passa.
+    //
+    // ⚠️ NÃO é uma flag de "pronto". Flag fail-closed tem risco de deadlock: um
+    // caminho de montagem que esqueça de setá-la faz o usuário parar de salvar
+    // para sempre — trocaria perda ocasional por perda total, no caminho que grava
+    // dinheiro. Aqui a guarda compara DUAS FONTES QUE TÊM DE CONCORDAR:
+    // `_allProfilesData` (o que veio do servidor) e a memória viva. Vazio na
+    // memória + cheio no cache só acontece com o mount pela metade. Terminado o
+    // mount elas concordam e a guarda sai do caminho sozinha — sem estado, sem
+    // trava para alguém esquecer de soltar.
+    //
+    // Granular POR COLEÇÃO de propósito: o defeito também aparece parcial (uma
+    // coleção carrega e outra não), e foi assim que ele comeu 232 bytes — uma
+    // transação — no smoke test.
+    {
+        const _noCache = _allProfilesData.find(p => String(p?.id) === String(perfilAtivo.id));
+        if (_noCache) {
+            const _vivas = {
+                transacoes, metas, contasFixas, cartoesCredito, assinaturas,
+            };
+            for (const [_col, _memoria] of Object.entries(_vivas)) {
+                const _doCache = _noCache[_col];
+                if (Array.isArray(_doCache) && _doCache.length > 0 &&
+                    (!Array.isArray(_memoria) || _memoria.length === 0)) {
+                    _log.error('SAVE_MOUNT_001',
+                        `ignorado — "${_col}" está vazia na memória mas tem ${_doCache.length} ` +
+                        'no cache do servidor: montagem incompleta, gravar apagaria o dado');
+                    return false;
+                }
+            }
+        }
+    }
+
     // ✅ CORREÇÃO: data-manager.js pode resetar userId ao rejeitar perfis com id inteiro
     //    durante loadUserData(). Antes de falhar definitivamente, tentamos re-inicializar
     //    usando _effectiveUserId e _effectiveEmail persistidos no verificarLogin().
