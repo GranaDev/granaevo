@@ -333,6 +333,26 @@ class DataManager {
      */
     async #enfileirar(sombra, tocados) {
         if (!sombra || sombra.completo !== true || !sombra.ops?.length) return;
+
+        // ── UMA INTENÇÃO, UM LOTE ───────────────────────────────────────────
+        // Medido em 2026-08-15: UMA transação lançada offline virou QUATRO
+        // lotes. O auto-save de 30 s continua rodando sem rede, e cada ciclo
+        // tenta salvar a mesma mudança, falha e enfileira as MESMAS operações.
+        //
+        // Não corrompia nada — as operações são idempotentes por construção
+        // (37.2b), e a drenagem confirmou: 4 POSTs, 4× HTTP 200, zero
+        // duplicatas. Mas são quatro requisições para uma intenção só, e é
+        // justamente a rajada que o thundering herd multiplica: 10 mil pessoas
+        // voltando do metrô com 4× mais lotes do que precisavam.
+        //
+        // Compara com o ÚLTIMO lote apenas. Operações carregam ids vindos de
+        // `crypto.randomUUID()`, então dois lançamentos diferentes nunca geram
+        // ops idênticas — só a repetição da mesma intenção gera.
+        if (this.#loteJaNaFila(sombra.ops)) {
+            this.#agendarReenvio();
+            return;
+        }
+
         try {
             const { enfileirar } = await this.#fila();
             enfileirar(this.#userId, sombra.ops, tocados);
@@ -384,6 +404,26 @@ class DataManager {
      * O formato é o que `_ler` de fila-save.js espera (`{em, ops, tocados}`):
      * quem drena continua sendo o módulo, que só é necessário quando há rede.
      */
+    /**
+     * O último lote da fila já descreve exatamente estas operações?
+     *
+     * Só o ÚLTIMO: a fila é uma sequência temporal, e é a retentativa imediata
+     * (o próximo ciclo de auto-save) que repete. Varrer a fila inteira poderia
+     * descartar uma intenção legítima que voltou depois de outras — e a ordem
+     * dos lotes é o que garante que `add` seguido de `rm` não se inverta.
+     */
+    #loteJaNaFila(ops) {
+        try {
+            const fila = JSON.parse(localStorage.getItem(this.#chaveFila()) || '[]');
+            if (!Array.isArray(fila) || fila.length === 0) return false;
+            return JSON.stringify(fila[fila.length - 1]?.ops) === JSON.stringify(ops);
+        } catch {
+            // Não deu para ler: enfileirar duas vezes é desperdício; não
+            // enfileirar é perder o lançamento. Na dúvida, enfileira.
+            return false;
+        }
+    }
+
     /**
      * Drena a fila SEM o módulo `fila-save.js`.
      *

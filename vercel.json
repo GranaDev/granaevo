@@ -162,8 +162,7 @@
     {
       "source": "/assistant-sw.js",
       "headers": [
-        { "key": "Cache-Control",         "value": "public, max-age=0, must-revalidate" },
-        { "key": "Service-Worker-Allowed", "value": "/assistente"                       }
+        { "key": "Service-Worker-Allowed", "value": "/assistente" }
       ]
     },
 
@@ -295,6 +294,15 @@
       "source": "/(.*)\\.js",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=3600, stale-while-revalidate=86400" }
+      ]
+    },
+
+    {
+      "source": "/(sw|assistant-sw|registerSW|sw-push-handler|pwa-init|css-boot|theme-init)\\.js",
+      "headers": [
+        { "key": "Cache-Control",                "value": "public, max-age=0, must-revalidate" },
+        { "key": "CDN-Cache-Control",            "value": "no-store"                           },
+        { "key": "Cloudflare-CDN-Cache-Control", "value": "no-store"                           }
       ]
     },
 

@@ -424,3 +424,44 @@ describe('🔴 drenar sem o módulo — o module map não devolve o que já falh
     assert.match(fn, /this\.#chaveFila\(\)/, 'chave própria = drena de um lugar e a escrita grava em outro')
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('uma intenção, um lote', () => {
+  // MEDIDO em 2026-08-15: UMA transação offline virou QUATRO lotes. O auto-save
+  // de 30s continua rodando sem rede e cada ciclo reenfileira as MESMAS
+  // operações. Não corrompe (idempotência do 37.2b — a drenagem devolveu 4×
+  // HTTP 200 e zero duplicatas), mas são 4 requisições para uma intenção só —
+  // e é a rajada que o thundering herd multiplica.
+  const DM = soCodigo(readFileSync(join(RAIZ, 'src/scripts/modules/data-manager.js'), 'utf8'))
+  const bloco = (src, ini, fim) => {
+    const i = src.indexOf(ini); assert.ok(i !== -1, `não achei: ${ini}`)
+    const j = src.indexOf(fim, i); assert.ok(j > i, `não achei o fim: ${fim}`)
+    return src.slice(i, j)
+  }
+
+  test('⭐ lote idêntico ao último não é enfileirado de novo', () => {
+    const fn = bloco(DM, 'async #enfileirar(sombra, tocados) {', '#chaveFila() {')
+    assert.match(fn, /if \(this\.#loteJaNaFila\(sombra\.ops\)\) \{/,
+      'voltou a acumular um lote por ciclo de auto-save')
+  })
+
+  test('mas ainda agenda o reenvio — senão a fila fica parada', () => {
+    const fn = bloco(DM, 'if (this.#loteJaNaFila(sombra.ops)) {', 'try {')
+    assert.match(fn, /this\.#agendarReenvio\(\);/,
+      'sem agendar, descartar o lote repetido deixaria a fila sem quem a drene')
+  })
+
+  test('compara só o ÚLTIMO lote, não a fila inteira', () => {
+    // Varrer tudo poderia descartar uma intenção legítima que voltou depois de
+    // outras — e a ordem dos lotes é o que impede `add`+`rm` de se inverterem.
+    const fn = bloco(DM, '#loteJaNaFila(ops) {', 'async #drenarCru()')
+    assert.match(fn, /fila\[fila\.length - 1\]\?\.ops/)
+    assert.doesNotMatch(fn, /\.some\(|\.find\(|for \(/, 'passou a varrer a fila inteira')
+  })
+
+  test('na dúvida, enfileira', () => {
+    const fn = bloco(DM, '#loteJaNaFila(ops) {', 'async #drenarCru()')
+    assert.match(fn, /catch \{[\s\S]*?return false;/,
+      'storage ilegível passou a descartar o lote — desperdício é melhor que perda')
+  })
+})
