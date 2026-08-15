@@ -489,3 +489,36 @@ describe('etapa 4: avisar quem ficou nas reservas', () => {
       'passou a criar notificação mesmo sem reserva envolvida')
   })
 })
+
+// ═════════════════════════════════════════════════════════════════════════════
+describe('⭐ conta de login único também recebe aviso de reserva', () => {
+  // ACHADO em 2026-08-15: a caixa do sino do dono tinha ZERO linhas desde
+  // sempre, de qualquer tipo.
+  //
+  // `radar_notifications` é por USER_ID; reserva compartilhada é por PERFIL.
+  // Numa conta família com 4 perfis e UM login — o caso mais comum — os "outros
+  // membros" não existem como user_id: são perfis do mesmo login. A edge fazia
+  // `alvos.delete(callerId)`, a lista zerava, e ela saía sem gravar nada.
+  const INV = soCodigo(readFileSync(join(RAIZ, 'supabase/functions/notify-reserve-invite/index.ts'), 'utf8'))
+
+  test('⭐ lista vazia não sai mais sem gravar', () => {
+    assert.match(INV, /const soEuNaConta = alvos\.size === 0/)
+    assert.match(INV, /if \(soEuNaConta\) alvos\.add\(callerId\)/,
+      'voltou a sair sem notificar ninguém em conta de login único')
+    assert.doesNotMatch(INV, /if \(alvos\.size === 0\) \{[\s\S]{0,200}?return json/,
+      'o early-return que engolia a notificação voltou')
+  })
+
+  test('o texto não mente para quem convidou', () => {
+    // "Você foi convidado" seria falso para o autor do convite.
+    assert.match(INV, /soEuNaConta[\s\S]{0,120}?Um perfil desta conta foi convidado/,
+      'o texto genérico voltaria a dizer "você foi convidado" para quem convidou')
+  })
+
+  test('a notificação de saída de reserva notifica o dono', () => {
+    // Mesmo problema, mesma solução: a RPC inclui o owner sem removê-lo.
+    const NOT = soCodigo(readFileSync(join(RAIZ, 'supabase/migrations/20260815250000_notificar_saida_de_reserva.sql'), 'utf8'))
+    assert.match(NOT, /SELECT p_owner_user_id AS u/,
+      'o dono saiu da lista de destinatários — em conta de login único ninguém receberia')
+  })
+})

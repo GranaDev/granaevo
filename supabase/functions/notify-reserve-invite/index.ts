@@ -122,11 +122,22 @@ Deno.serve(async (req: Request) => {
   for (const m of (membros ?? [])) if (m.member_user_id) alvos.add(String(m.member_user_id))
   alvos.delete(callerId) // quem convidou nao se notifica
 
-  if (alvos.size === 0) {
-    // Conta de um login so (perfis do mesmo usuario) -> ninguem a notificar.
-    // O convite continua aparecendo como banner ao entrar no perfil convidado.
-    return json({ ok: true, notified: 0 }, 200, h)
-  }
+  // ⚠️ CONTA DE LOGIN UNICO: aqui a lista zerava e NADA era gravado.
+  //
+  // Achado em 2026-08-15: `radar_notifications` e por USER_ID, mas reserva
+  // compartilhada e por PERFIL. Numa conta familia com 4 perfis e um login so —
+  // o caso mais comum — os "outros membros" nao existem como user_id: sao
+  // perfis do mesmo login. Resultado: o sino NUNCA mostrava nada de reserva
+  // nessas contas. A tabela do dono estava com zero linhas desde sempre.
+  //
+  // O convite continua sendo PARA um perfil, e quem vai abrir aquele perfil e a
+  // mesma pessoa. Ela precisa ver o aviso ao trocar de perfil — que e
+  // exatamente o que o sino serve para dizer.
+  //
+  // Entao: se so sobrou o proprio autor, ele recebe. O texto abaixo muda junto,
+  // porque "voce foi convidado" seria mentira para quem convidou.
+  const soEuNaConta = alvos.size === 0
+  if (soEuNaConta) alvos.add(callerId)
 
   const nowIso = new Date().toISOString()
   const linhas = [...alvos].map((uid) => ({
@@ -134,7 +145,12 @@ Deno.serve(async (req: Request) => {
     dedupe_key: `convite:${reservaId}:${uid}`.slice(0, 120),
     tipo:       'convite_reserva',
     title:      'Convite de reserva compartilhada',
-    body:       `Voce foi convidado para a reserva "${reservaNome}". Abra Reservas para aceitar ou recusar.`.slice(0, 200),
+    // "Voce foi convidado" seria mentira para quem convidou. Numa conta de
+    // login unico o aviso existe para lembrar a pessoa ao trocar de perfil.
+    body:       (soEuNaConta
+      ? `Um perfil desta conta foi convidado para a reserva "${reservaNome}". Troque de perfil e abra Reservas para aceitar.`
+      : `Voce foi convidado para a reserva "${reservaNome}". Abra Reservas para aceitar ou recusar.`
+    ).slice(0, 200),
     url:        '/dashboard#reservas',
     fire_at:    nowIso,
     status:     'pending',
