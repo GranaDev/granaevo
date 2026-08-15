@@ -366,3 +366,45 @@ describe('⭐ o plano gravado no backup respeita o CHECK da tabela', () => {
     assert.match(MIGR, /ELSE 1\s+-- fail-closed/)
   })
 })
+
+// ═════════════════════════════════════════════════════════════════════════════
+describe('⭐ excluir → restaurar → excluir de novo', () => {
+  // ACHADO no SEGUNDO teste real. O erro exato do Postgres:
+  //
+  //   duplicate key value violates unique constraint
+  //   "idx_profile_backups_active_per_member"
+  //
+  // O índice permite UM backup ativo por membro, e está certo. O que faltava era
+  // cobrir o ciclo: minha guarda de idempotência olhava só `is_active = false`.
+  // Um perfil ATIVO que já teve backup — porque foi restaurado — caía direto no
+  // INSERT e batia no índice.
+  //
+  // E como a restauração NÃO consome o backup (de propósito, para permitir nova
+  // tentativa se o blob falhar), TODO perfil restaurado carrega um backup ativo.
+  // O caso não era raro: era o segundo uso da feature.
+  const UP = soCodigo(readFileSync(join(RAIZ, 'supabase/migrations/20260815230000_backup_de_perfil_upsert.sql'), 'utf8'))
+
+  test('⭐ o INSERT do backup é UPSERT no índice parcial', () => {
+    assert.match(UP, /ON CONFLICT \(owner_user_id, original_member_id, source_table\)/,
+      'voltou a ser INSERT puro: excluir um perfil já restaurado dá 500')
+    assert.match(UP, /WHERE status IN \('pending', 'active'\)/,
+      'o alvo do ON CONFLICT precisa ser o mesmo predicado do índice parcial')
+    assert.match(UP, /DO UPDATE SET/)
+  })
+
+  test('substituir renova o prazo e o conteúdo', () => {
+    // Quem exclui hoje quer poder desfazer a exclusão de HOJE — não uma de
+    // dias atrás, com dados que já não existem.
+    assert.match(UP, /member_data\s*= EXCLUDED\.member_data/)
+    assert.match(UP, /backup_expires_at = EXCLUDED\.backup_expires_at/)
+    assert.match(UP, /status\s*= 'active'/)
+  })
+
+  test('mas perfil JÁ excluído continua saindo cedo, sem sobrescrever', () => {
+    // A idempotência do duplo clique não pode virar upsert: o 2º clique
+    // gravaria o estado já esvaziado por cima do backup bom.
+    const i = UP.indexOf('IF v_perfil.is_active = false THEN')
+    const j = UP.indexOf('INSERT INTO public.profile_backups')
+    assert.ok(i > 0 && i < j, 'a saída antecipada do perfil já excluído sumiu ou foi parar depois do INSERT')
+  })
+})
