@@ -1829,12 +1829,36 @@ function _sanitizeImgUrl(url) {
     }
 }
 
+// O bloco de restaurar perfil excluído virou chunk lazy (restaurar-perfil.js):
+// só roda na tela de seleção, e precisa de rede de qualquer forma — se o chunk
+// não vier, o usuário não vê um botão que também não funcionaria. Saiu daqui
+// porque o dashboard.js estava em 37,2/38 KB e o teto não é decorativo.
+
 function atualizarTelaPerfis() {
     const saudacaoNomeEl  = document.getElementById('saudacaoNome');
     const saudacaoPlanoEl = document.getElementById('saudacaoPlano');
     const lista           = document.getElementById('listaPerfis');
 
     if (!lista) return;
+
+    // Não bloqueia o desenho da lista: é uma consulta ao servidor, e a tela de
+    // perfis precisa aparecer na hora. Se o chunk não vier (offline, janela
+    // pós-deploy), o bloco simplesmente não aparece — e ele exigiria rede de
+    // qualquer forma.
+    if (!usuarioLogado?.isGuest) {
+        import('../modules/restaurar-perfil.js?v=1')
+            .then((m) => {
+                m.init({
+                    usuarioLogado,
+                    sanitizeText: _sanitizeText,
+                    criarPopupDOM,
+                    fecharPopup,
+                    mostrarNotificacao,
+                });
+                return m.montarRestauracaoDePerfis();
+            })
+            .catch(() => { /* extra da tela: nunca derruba a seleção de perfis */ });
+    }
 
     // ✅ textContent — nunca innerHTML com dados do usuário
     const nomeExibir = perfilAtivo ? perfilAtivo.nome : (usuarioLogado.nome || 'Usuário');

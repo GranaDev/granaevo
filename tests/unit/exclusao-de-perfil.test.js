@@ -225,3 +225,86 @@ describe('o blob: sair das reservas e guardar o slot', () => {
       'a restauração passou a mexer em reservas de outros perfis')
   })
 })
+
+// ═════════════════════════════════════════════════════════════════════════════
+describe('o cliente: duas confirmações e nenhum HTML do usuário', () => {
+  const CFG  = soCodigo(readFileSync(join(RAIZ, 'src/scripts/pages/db-configuracoes.js'), 'utf8'))
+  const REST = soCodigo(readFileSync(join(RAIZ, 'src/scripts/modules/restaurar-perfil.js'), 'utf8'))
+  const DASH = soCodigo(readFileSync(join(RAIZ, 'src/scripts/pages/dashboard.js'), 'utf8'))
+  const HTML = readFileSync(join(RAIZ, 'dashboard.html'), 'utf8')
+
+  test('o botão existe e chama a função certa', () => {
+    assert.match(HTML, /id="btnExcluirPerfil"/, 'o botão sumiu do HTML')
+    assert.match(CFG, /getElementById\('btnExcluirPerfil'\)/, 'o botão ficou sem binding')
+  })
+
+  test('⭐ o aviso diz que NÃO tem reversão, e mostra o prazo', () => {
+    const fn = bloco(CFG, 'async function excluirPerfil()', 'window.excluirPerfil')
+    assert.match(fn, /ESTA AÇÃO NÃO POSSUI REVERSÃO APÓS 7 DIAS/,
+      'o aviso de irreversibilidade sumiu do popup')
+    assert.match(fn, /restaurá-lo por 7 dias/)
+  })
+
+  test('⭐ o botão de confirmar diz exatamente o que faz', () => {
+    const fn = bloco(CFG, 'async function excluirPerfil()', 'window.excluirPerfil')
+    assert.match(fn, /Sim, eu desejo excluir este perfil/,
+      'voltou a ser um "Confirmar" genérico — é o que faz alguém apagar por reflexo')
+  })
+
+  test('lista o que será perdido com as contagens REAIS', () => {
+    assert.match(CFG, /function _inventarioDoPerfil/)
+    const inv = bloco(CFG, 'function _inventarioDoPerfil', 'async function excluirPerfil')
+    for (const campo of ['transacoes', 'metas', 'contasFixas', 'cartoesCredito', 'orcamentos']) {
+      assert.ok(inv.includes(campo), `${campo} saiu do inventário mostrado ao usuário`)
+    }
+    assert.match(inv, /filter\(\(\[, q\]\) => q > 0\)/, 'passou a listar categorias vazias')
+  })
+
+  test('⭐ XSS: nome do perfil nunca entra como HTML', () => {
+    const fn = bloco(CFG, 'async function excluirPerfil()', 'window.excluirPerfil')
+    // O nome é escrito pelo usuário. Todo lugar que o exibe usa textContent.
+    assert.match(fn, /alertaTexto\.textContent =/)
+    assert.doesNotMatch(fn, /innerHTML\s*=\s*[^;]*nomePerfil/,
+      'o nome do perfil voltou a entrar por innerHTML')
+    assert.doesNotMatch(REST, /innerHTML/,
+      'o chunk de restauração passou a montar HTML — o nome vem do usuário')
+  })
+
+  test('salva o blob ANTES de pedir a exclusão', () => {
+    // A edge tira o slot do blob guardado. Um blob velho guardaria menos do que
+    // o usuário tinha na tela.
+    const fn = bloco(CFG, 'async function excluirPerfil()', 'window.excluirPerfil')
+    const iSalva = fn.indexOf('await _ctx.salvarDados()')
+    const iFetch = fn.indexOf("action: 'delete-profile'")
+    assert.ok(iSalva > 0 && iSalva < iFetch,
+      'a exclusão passou a ser pedida antes de salvar: o backup perderia as últimas edições')
+  })
+
+  test('erro não deixa o usuário sem saber se perdeu tudo', () => {
+    const fn = bloco(CFG, 'async function excluirPerfil()', 'window.excluirPerfil')
+    assert.match(fn, /nada foi removido/i,
+      'a mensagem de erro voltou a ser genérica')
+  })
+
+  test('⭐ PROFILE_LIMIT_REACHED vira instrução, não erro cru', () => {
+    assert.match(REST, /PROFILE_LIMIT_REACHED/)
+    assert.match(REST, /Exclua um perfil antes de restaurar este/,
+      'o limite atingido voltou a ser um erro sem saída para o usuário')
+  })
+
+  test('a contagem regressiva aparece', () => {
+    assert.match(REST, /function _prazoRestante/)
+    assert.match(REST, /Removido definitivamente em/)
+  })
+
+  test('convidado não vê o bloco de restauração', () => {
+    assert.match(REST, /_ui\.usuarioLogado\?\.isGuest/, 'sumiu a guarda de convidado no chunk')
+    assert.match(DASH, /if \(!usuarioLogado\?\.isGuest\) \{/, 'o dashboard passou a carregar o chunk para convidado')
+  })
+
+  test('o chunk lazy não derruba a tela se não carregar', () => {
+    const t = bloco(DASH, "import('../modules/restaurar-perfil.js", 'const nomeExibir')
+    assert.match(t, /\.catch\(\(\) => \{/,
+      'sem o catch, o chunk faltando (offline, janela pós-deploy) quebraria a seleção de perfis')
+  })
+})

@@ -28,6 +28,7 @@ export function init(ctx) {
     window.gerenciarAssinatura = () => gerenciarAssinatura();
     window.abrirHistoricoBackup = () => abrirHistoricoBackup();
     window.resetarPerfil        = () => resetarPerfil();
+    window.excluirPerfil        = () => excluirPerfil();
     window.excluirConta         = () => excluirConta();
     window.abrirPerfilHub       = () => abrirPerfilHub();
     // Inicializa botão de instalação do PWA na seção de Configurações
@@ -157,6 +158,8 @@ function _bindBtnBackup() {
     if (btn) btn.addEventListener('click', abrirHistoricoBackup);
     const btnReset = document.getElementById('btnResetarPerfil');
     if (btnReset) btnReset.addEventListener('click', resetarPerfil);
+    const btnExcluirPerfil = document.getElementById('btnExcluirPerfil');
+    if (btnExcluirPerfil) btnExcluirPerfil.addEventListener('click', excluirPerfil);
     const btnDel = document.getElementById('btnExcluirConta');
     if (btnDel) btnDel.addEventListener('click', excluirConta);
 
@@ -1415,6 +1418,169 @@ async function resetarPerfil() {
     });
 }
 window.resetarPerfil = resetarPerfil;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXCLUIR PERFIL — ver docs/exclusao-de-perfil-desenho.md
+//
+// Duas telas de propósito. A primeira mostra o TAMANHO do que se perde, com as
+// contagens reais do perfil; a segunda exige um clique separado num botão que
+// diz exatamente o que vai acontecer. Uma tela só, com "Confirmar", é o padrão
+// que faz alguém apagar meses de lançamentos por reflexo.
+//
+// Nada aqui decide nada: quem autoriza (só o dono), valida e apaga é a edge.
+// Este arquivo informa, confirma e chama.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Conta o que existe no perfil ativo, para o aviso não ser genérico. */
+function _inventarioDoPerfil() {
+    const p = _ctx.perfilAtivo ?? {};
+    const n = (v) => (Array.isArray(v) ? v.length : 0);
+    const itens = [
+        ['transações',            n(_ctx.transacoes)],
+        ['metas e reservas',      n(_ctx.metas)],
+        ['contas fixas',          n(_ctx.contasFixas)],
+        ['cartões de crédito',    n(_ctx.cartoesCredito)],
+        ['tipos personalizados',  n(_ctx.tiposPersonalizados)],
+        ['orçamentos',            Object.keys(_ctx.orcamentos ?? {}).length],
+        ['conquistas',            Object.keys(p.conquistas ?? {}).length],
+    ];
+    return itens.filter(([, q]) => q > 0);
+}
+
+async function excluirPerfil() {
+    if (!_ctx.perfilAtivo) {
+        _ctx.mostrarNotificacao('Nenhum perfil ativo.', 'error');
+        return;
+    }
+    // Convidado não exclui — a edge recusa de qualquer forma, mas avisar aqui
+    // evita um 403 seco depois de duas confirmações.
+    if (_ctx?.usuarioLogado?.isGuest) {
+        _ctx.mostrarNotificacao('Apenas o titular da conta pode excluir perfis.', 'error');
+        return;
+    }
+
+    const nomePerfil = _ctx._sanitizeText(_ctx.perfilAtivo.nome || 'Perfil');
+    const perfilId   = String(_ctx.perfilAtivo.id ?? '');
+    const inventario = _inventarioDoPerfil();
+
+    _ctx.criarPopupDOM((box) => {
+        box.style.maxWidth = '460px';
+
+        const h3 = document.createElement('h3');
+        h3.innerHTML = '<i class="fas fa-user-slash" style="color:#ef4444" aria-hidden="true"></i> Excluir perfil';
+        h3.style.marginBottom = '14px';
+
+        const alerta = document.createElement('div');
+        alerta.style.cssText = 'background:rgba(239,68,68,0.10); border:1px solid rgba(239,68,68,0.3); border-radius:12px; padding:13px 15px; margin-bottom:14px;';
+        const alertaTitulo = document.createElement('div');
+        alertaTitulo.style.cssText = 'font-size:0.8rem; font-weight:700; color:#f87171; margin-bottom:6px; letter-spacing:0.02em;';
+        alertaTitulo.textContent = 'ESTA AÇÃO NÃO POSSUI REVERSÃO APÓS 7 DIAS';
+        const alertaTexto = document.createElement('div');
+        alertaTexto.style.cssText = 'font-size:0.85rem; color:rgba(255,255,255,0.7); line-height:1.55;';
+        // textContent, nunca innerHTML: o nome do perfil é escrito pelo usuário.
+        alertaTexto.textContent =
+            `Todos os dados do perfil "${nomePerfil}" serão removidos. ` +
+            'Você poderá restaurá-lo por 7 dias; depois disso, a remoção é definitiva.';
+        alerta.append(alertaTitulo, alertaTexto);
+
+        const listaBox = document.createElement('div');
+        listaBox.style.cssText = 'background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px 15px; margin-bottom:16px;';
+        const listaTitulo = document.createElement('div');
+        listaTitulo.style.cssText = 'font-size:0.78rem; font-weight:700; color:rgba(255,255,255,0.75); margin-bottom:8px;';
+        listaTitulo.textContent = inventario.length ? 'O que será removido:' : 'Este perfil não tem dados financeiros.';
+        listaBox.appendChild(listaTitulo);
+
+        if (inventario.length) {
+            const ul = document.createElement('ul');
+            ul.style.cssText = 'font-size:0.85rem; color:rgba(255,255,255,0.65); line-height:1.75; padding-left:18px; margin:0;';
+            for (const [rotulo, qtd] of inventario) {
+                const li = document.createElement('li');
+                li.textContent = `${qtd} ${rotulo}`;   // número + rótulo fixo: sem conteúdo do usuário
+                ul.appendChild(li);
+            }
+            listaBox.appendChild(ul);
+        }
+
+        const nota = document.createElement('div');
+        nota.style.cssText = 'font-size:0.75rem; color:rgba(255,255,255,0.4); margin-top:9px;';
+        nota.textContent = 'Se este perfil participa de reservas compartilhadas, ele sairá delas. '
+                         + 'O valor já guardado permanece na reserva, e os demais participantes serão avisados.';
+        listaBox.appendChild(nota);
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex; gap:10px; margin-top:6px;';
+
+        const btnSim = document.createElement('button');
+        btnSim.className = 'btn-primary';
+        btnSim.type = 'button';
+        btnSim.style.cssText = 'flex:1; background:linear-gradient(135deg,#dc2626,#b91c1c);';
+        btnSim.textContent = 'Sim, eu desejo excluir este perfil';
+
+        const btnNao = document.createElement('button');
+        btnNao.className = 'btn-cancelar';
+        btnNao.type = 'button';
+        btnNao.style.flex = '0 0 auto';
+        btnNao.textContent = 'Cancelar';
+        btnNao.addEventListener('click', () => _ctx.fecharPopup());
+
+        btnSim.addEventListener('click', async () => {
+            btnSim.disabled = true;
+            btnNao.disabled = true;
+            btnSim.textContent = 'Excluindo…';
+
+            try {
+                // O blob mais recente precisa estar no servidor ANTES: é dele que
+                // a edge tira o slot para o backup. Fotografar um estado velho
+                // guardaria menos do que o usuário tinha.
+                await _ctx.salvarDados();
+
+                const { supabase } = await import('../services/supabase-client.js?v=2');
+                const { data: { session } } = await supabase.auth.getSession();
+                const token = session?.access_token;
+                if (!token) throw new Error('SEM_SESSAO');
+
+                const resp = await fetch('/api/user-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ action: 'delete-profile', profile_id: perfilId }),
+                });
+
+                if (!resp.ok) {
+                    const corpo = await resp.json().catch(() => null);
+                    throw new Error(corpo?.error || `HTTP_${resp.status}`);
+                }
+
+                const dados = await resp.json().catch(() => ({}));
+                try { sessionStorage.removeItem('ge_perfis_cache'); } catch { /* ignore */ }
+                try { sessionStorage.removeItem('ge_perfil_id'); } catch { /* ignore */ }
+
+                _ctx.fecharPopup();
+                _ctx.mostrarNotificacao(
+                    `Perfil "${nomePerfil}" excluído. Você pode restaurá-lo por 7 dias.`, 'success');
+
+                // Sai para a seleção de perfis: o perfil onde a pessoa estava
+                // deixou de existir, e é lá que fica o botão de restaurar.
+                setTimeout(() => { window.location.reload(); }, 900);
+
+            } catch (e) {
+                _ctx._log?.error?.('EXCLUIR_PERFIL_001', e);
+                btnSim.disabled = false;
+                btnNao.disabled = false;
+                btnSim.textContent = 'Sim, eu desejo excluir este perfil';
+                const msg = String(e?.message ?? '');
+                _ctx.mostrarNotificacao(
+                    msg.includes('titular')  ? 'Apenas o titular da conta pode excluir perfis.'
+                  : msg === 'SEM_SESSAO'     ? 'Sessão expirada. Faça login novamente.'
+                  : 'Não foi possível excluir o perfil — nada foi removido. Tente novamente.',
+                    'error');
+            }
+        });
+
+        btnRow.append(btnSim, btnNao);
+        box.append(h3, alerta, listaBox, btnRow);
+    });
+}
+window.excluirPerfil = excluirPerfil;
 
 // ========== EXCLUIR CONTA (LGPD art. 18, VI — direito à eliminação) ==========
 // Exclusão permanente e irreversível da conta de login + TODOS os dados (cascata no
