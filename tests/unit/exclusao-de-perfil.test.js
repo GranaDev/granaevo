@@ -412,3 +412,37 @@ describe('⭐ excluir → restaurar → excluir de novo', () => {
     assert.ok(i > 0 && i < j, 'a saída antecipada do perfil já excluído sumiu ou foi parar depois do INSERT')
   })
 })
+
+// ═════════════════════════════════════════════════════════════════════════════
+describe('⭐ TODOS os lugares que contam perfis filtram is_active', () => {
+  // ACHADO no teste 4: criar perfil depois de excluir dava 403 do PostgREST.
+  // Era RLS — a policy `profiles_insert_own` chama `can_create_profile()`, que
+  // contava TODAS as linhas.
+  //
+  // Era o TERCEIRO lugar que conta perfis. Eu conhecia dois. É a mesma falha
+  // que cometi três vezes hoje: mudei o SIGNIFICADO de `is_active` e auditei
+  // quem escreve, não quem CONTA.
+  const CCP = soCodigo(readFileSync(join(RAIZ, 'supabase/migrations/20260815240000_can_create_profile_conta_ativos.sql'), 'utf8'))
+
+  test('⭐ can_create_profile (a policy de INSERT) conta só ativos', () => {
+    assert.match(CCP, /WHERE user_id = v_user_id AND is_active = true/,
+      'a policy voltou a contar perfis excluídos: criar depois de excluir dá 403')
+  })
+
+  test('e usa a MESMA fonte de limite das outras duas', () => {
+    // Três cópias da tabela de planos divergiriam, e é ela que decide se alguém
+    // passa do teto pago.
+    assert.match(CCP, /public\.limite_de_perfis\(v_user_id\)/,
+      'a policy voltou a ter a própria cópia da tabela de planos')
+    assert.doesNotMatch(CCP, /WHEN 'familia'\s+THEN 4/,
+      'a tabela de planos foi duplicada de volta para dentro da função')
+  })
+
+  test('as três contagens continuam existindo, e cada uma no seu lugar', () => {
+    // criar (trigger) · criar (policy) · restaurar. As duas primeiras contam só
+    // ativos; a terceira soma o que está voltando. A assimetria é o desenho.
+    assert.match(MIGR, /WHERE user_id = NEW\.user_id AND is_active = true/)   // trigger
+    assert.match(CCP,  /AND is_active = true/)                                 // policy
+    assert.match(MIGR, /v_ativos \+ 1 > v_limite/)                             // restaurar
+  })
+})
