@@ -1,14 +1,16 @@
 /**
- * GUARDA DE MONTAGEM INCOMPLETA — o save que apagava dado no boot.
+ * GUARDA DO MONTE-QUE-NÃO-CARREGOU — o save que apagava dado no boot.
  *
- * MEDIDO em produção (2026-08-15): o blob encolhia e voltava ao tamanho exato em
- * menos de 3 minutos — 245 vezes numa conta real, swing de até 53 KB, desde
- * fevereiro/2026. `salvarDados()` monta o perfil a partir das variáveis de módulo
- * vivas; um save disparado antes de elas serem populadas grava coleção vazia.
+ * MEDIDO em produção: o blob encolhia e voltava ao tamanho exato (A→B→A) em menos
+ * de 3 minutos — 245 vezes numa conta real desde fevereiro/2026, swing até 53 KB.
+ * `salvarDados()` monta o perfil a partir de variáveis de módulo que nascem
+ * vazias; um save disparado antes de elas carregarem grava o perfil mutilado.
  *
- * A guarda NÃO é uma flag de "pronto" — flag fail-closed que alguém esqueça de
- * soltar faz o usuário parar de salvar para sempre. Ela compara duas fontes que
- * têm de concordar: `_allProfilesData` (do servidor) e a memória viva.
+ * ⚠️ DUAS TENTATIVAS ANTERIORES FALHARAM (bf20dd3, 4b052c0). As duas puseram a
+ * guarda em `dashboard.js` comparando com `_allProfilesData` — e as duas foram
+ * NO-OP, porque durante o boot esse cache também está vazio: a guarda comparava
+ * duas fontes ambas vazias e se pulava sozinha. Estes testes existem para que a
+ * terceira não repita o erro.
  */
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
@@ -21,6 +23,7 @@ const semComentarios = (t) => t.split('\n')
   .filter((l) => { const s = l.trim(); return !(s.startsWith('//') || s.startsWith('*') || s.startsWith('/*')) })
   .join('\n')
 
+const DM   = semComentarios(readFileSync(join(RAIZ, 'src/scripts/modules/data-manager.js'), 'utf8'))
 const DASH = semComentarios(readFileSync(join(RAIZ, 'src/scripts/pages/dashboard.js'), 'utf8'))
 
 const bloco = (src, ini, fim) => {
@@ -29,57 +32,56 @@ const bloco = (src, ini, fim) => {
   return src.slice(i, j)
 }
 
-describe('guarda de montagem incompleta', () => {
-  test('roda DENTRO de salvarDados, antes de montar dadosPerfil', () => {
-    const fn = bloco(DASH, 'async function salvarDados()', 'const dadosPerfil = {')
-    assert.match(fn, /SAVE_MOUNT_001/,
-      'a guarda saiu do caminho do save — o boot volta a poder gravar coleção vazia')
+describe('guarda do monte-que-não-carregou', () => {
+  test('mede contra o #retrato, não contra _allProfilesData', () => {
+    // O #retrato é tirado dentro do loadUserData(), então já está populado antes
+    // de qualquer save poder disparar. Foi essa a diferença entre funcionar e ser
+    // no-op nas duas tentativas anteriores.
+    const g = bloco(DM, 'const CAMPOS_QUE_NAO_ESVAZIAM', 'const sombra = await this.#derivarOperacoes')
+    assert.match(g, /this\.#retrato\.get\(/,
+      'a guarda parou de medir contra o retrato — volta a ser no-op no boot')
+    assert.doesNotMatch(g, /_allProfilesData/,
+      'voltou a usar o cache do dashboard, que está VAZIO durante o boot')
   })
 
-  test('compara a memória viva contra _allProfilesData (não é flag de pronto)', () => {
-    const g = bloco(DASH, 'const _noCache = _allProfilesData.find', 'const dadosPerfil = {')
-    assert.match(g, /_allProfilesData\.find/, 'parou de consultar o cache do servidor')
-    // A condição é: cheio no cache E vazio na memória. As duas metades importam —
-    // só a primeira bloquearia todo save; só a segunda não bloquearia nenhum.
-    assert.match(g, /_cheio\(_noCache\[_campo\]\)\s*&&\s*!_cheio\(_memoria\)/,
-      'a condição da guarda mudou de forma: ela precisa exigir cache COM conteúdo ' +
-      'E memória SEM conteúdo, nessa conjunção')
-    assert.doesNotMatch(g, /_perfilPronto|_montagemConcluida/,
-      'virou flag de "pronto": fail-closed, e um caminho que esqueça de soltá-la ' +
-      'para o save do usuário para sempre')
+  test('a guarda NÃO mora mais no dashboard.js', () => {
+    assert.ok(!DASH.includes('SAVE_MOUNT_001'),
+      'a guarda no-op voltou para o dashboard: lá ela se pula sozinha no boot')
   })
 
-  test('cobre TODO campo que vem de variável de módulo, não só as coleções', () => {
-    // A 1ª versão desta guarda cobria só as 5 coleções financeiras e NÃO resolveu:
-    // o reteste em produção manteve a oscilação de ±500 B. `dadosPerfil` grava dez
-    // campos, e os cinco que faltavam (`orcamentos`, `tiposPersonalizados`,
-    // `conquistas`, `config`, `desafios`) nascem vazios do mesmo jeito. Um campo
-    // esquecido aqui é uma porta silenciosa: o dado some sem erro.
-    const g = bloco(DASH, 'const _vivas = {', 'const _cheio =')
-    for (const campo of [
-      'transacoes', 'metas', 'contasFixas', 'cartoesCredito', 'assinaturas',
-      'orcamentos', 'tiposPersonalizados', 'conquistas', 'config', 'desafios',
-    ]) assert.ok(g.includes(campo), `"${campo}" ficou de fora da guarda`)
+  test('cobre os cinco campos que nunca esvaziam de verdade', () => {
+    const g = bloco(DM, 'const CAMPOS_QUE_NAO_ESVAZIAM', 'const _temConteudo')
+    for (const campo of ['orcamentos', 'tiposPersonalizados', 'conquistas', 'config', 'desafios'])
+      assert.ok(g.includes(campo), `"${campo}" ficou de fora — foi um dos que oscilaram`)
   })
 
-  test('sabe medir "vazio" em objeto, não só em array', () => {
-    // `orcamentos`, `conquistas` e `config` são objetos; `desafios` é objeto de
-    // arrays. Checar só `.length` os trataria como sempre-vazios e a guarda
-    // bloquearia todo save — ou como sempre-cheios e não bloquearia nenhum.
-    const f = bloco(DASH, 'const _cheio = (v) =>', 'for (const [_campo')
+  test('NÃO guarda as coleções financeiras (elas podem esvaziar de verdade)', () => {
+    // O usuário pode apagar a última transação. Guardar `transacoes` aqui
+    // bloquearia exclusão legítima — trocaria perda por impossibilidade de apagar.
+    const g = bloco(DM, 'const CAMPOS_QUE_NAO_ESVAZIAM', 'const _temConteudo')
+    for (const col of ['transacoes', 'metas', 'contasFixas', 'cartoesCredito', 'assinaturas'])
+      assert.ok(!g.includes(col),
+        `"${col}" entrou na lista: o usuário não conseguiria mais apagar o último item`)
+  })
+
+  test('sabe medir vazio em objeto, não só em array', () => {
+    const f = bloco(DM, 'const _temConteudo = (v) =>', 'for (const p of safeProfiles)')
     assert.match(f, /Array\.isArray\(v\)/, 'perdeu o caso do array')
-    assert.match(f, /Object\.(values|keys)\(v\)/, 'perdeu o caso do objeto')
+    assert.match(f, /Object\.keys\(v\)/,   'perdeu o caso do objeto')
   })
 
-  test('recusa o save (return false), não apenas loga', () => {
-    // ⚠️ Recorte APERTADO de propósito. A primeira versão deste teste ia de
-    // SAVE_MOUNT_001 até `const dadosPerfil = {` — e capturava os `return false`
-    // das validações de limite que vêm depois. Passava com a guarda mutilada.
-    // Provado por mutação: agora reprova quando o `return false` sai.
-    const i = DASH.indexOf('gravar apagaria o dado')
+  test('recusa o save de verdade, não apenas loga', () => {
+    // Recorte apertado: a 1ª versão deste teste capturava `return false` de outras
+    // validações e passava com a guarda mutilada.
+    const i = DM.indexOf('Montagem incompleta')
     assert.ok(i > 0, 'a mensagem da guarda mudou — reveja este teste junto')
-    const logo_apos = DASH.slice(i, i + 120)
-    assert.match(logo_apos, /return false/,
-      'só logar deixa o save seguir e apagar o dado — o log não é a guarda')
+    assert.match(DM.slice(i, i + 220), /return false/,
+      'só logar deixa o save seguir e apagar o dado')
+  })
+
+  test('perfil novo (sem retrato) não é bloqueado', () => {
+    const g = bloco(DM, 'for (const p of safeProfiles)', 'const sombra = await')
+    assert.match(g, /if \(bruto === undefined\) continue/,
+      'sem esta linha, o primeiro save de um perfil novo seria recusado para sempre')
   })
 })

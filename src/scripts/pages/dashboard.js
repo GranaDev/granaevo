@@ -1431,79 +1431,19 @@ async function salvarDados() {
         return false;
     }
 
-    // ── GUARDA DE MONTAGEM INCOMPLETA ───────────────────────────────────────
+    // ── GUARDA DE MONTAGEM: mora no data-manager, não aqui ──────────────────
     //
-    // O DEFEITO (medido 2026-08-15, aberto desde fev/2026): o blob encolhia e
-    // voltava ao tamanho exato em menos de 3 minutos — 245 vezes numa conta real,
-    // com swing de até 53 KB. `dadosPerfil` é montado a partir das variáveis de
-    // módulo vivas (`transacoes`, `metas`, …). Um save que dispare ANTES de elas
-    // serem populadas grava coleções vazias; o carregamento termina e o save
-    // seguinte restaura. É o A→B→A.
+    // Duas tentativas puseram uma guarda NESTE ponto, comparando a memória viva
+    // com `_allProfilesData`. As duas foram NO-OP e a oscilação continuou: durante
+    // o boot esse cache ainda está VAZIO, então a guarda comparava duas fontes
+    // ambas vazias e se pulava sozinha — exatamente na janela que existia para
+    // cobrir. Medido em produção nas duas vezes (bf20dd3 e 4b052c0).
     //
-    // Disparadores durante o carregamento: o `await salvarDados()` do fim do boot,
-    // `gerarCobrancasAssinaturas()` e o auto-reset mensal das contas fixas.
+    // A guarda que funciona mede contra o `#retrato` do data-manager, que é
+    // tirado dentro do `loadUserData()` e portanto já está populado antes de
+    // qualquer save poder disparar. Ver `CAMPOS_QUE_NAO_ESVAZIAM` lá.
     //
-    // POR QUE OS ANTI-WIPE NÃO PEGAVAM:
-    //   • cliente — `isDestructiveSave()` começa com `if (#lastLoadOk) return false`;
-    //     depois de um load bom, esvaziar é permitido (pode ser o usuário apagando);
-    //   • servidor — checa se ALGUM perfil do payload tem dado, então esvaziar UM passa.
-    //
-    // ⚠️ NÃO é uma flag de "pronto". Flag fail-closed tem risco de deadlock: um
-    // caminho de montagem que esqueça de setá-la faz o usuário parar de salvar
-    // para sempre — trocaria perda ocasional por perda total, no caminho que grava
-    // dinheiro. Aqui a guarda compara DUAS FONTES QUE TÊM DE CONCORDAR:
-    // `_allProfilesData` (o que veio do servidor) e a memória viva. Vazio na
-    // memória + cheio no cache só acontece com o mount pela metade. Terminado o
-    // mount elas concordam e a guarda sai do caminho sozinha — sem estado, sem
-    // trava para alguém esquecer de soltar.
-    //
-    // Granular POR CAMPO de propósito: o defeito aparece parcial — um campo
-    // carrega e outro não.
-    //
-    // ⚠️ A 1ª VERSÃO DESTA GUARDA COBRIA SÓ AS 5 COLEÇÕES FINANCEIRAS E NÃO
-    // RESOLVEU. Reteste em produção (5 recarregamentos, 2026-08-15) manteve a
-    // oscilação de ±500 B. O motivo: `dadosPerfil` grava DEZ campos, e os cinco
-    // que faltavam nascem vazios do mesmo jeito —
-    //   let orcamentos = {}; let tiposPersonalizados = []; let conquistasPerfil = {};
-    //   let configPerfil = {}; let desafiosPerfil = { ativos: [], historico: [] };
-    // O mapa de conquistas (ids + datas ISO) sozinho fica na ordem dos 500 B.
-    // A guarda olhava para o lugar errado; o save prematuro passava por ela.
-    //
-    // A lição, para quem mexer aqui depois: a guarda tem de cobrir TODO campo que
-    // venha de variável de módulo. Um campo esquecido é uma porta aberta, e a
-    // porta é silenciosa — o dado some sem erro.
-    {
-        const _noCache = _allProfilesData.find(p => String(p?.id) === String(perfilAtivo.id));
-        if (_noCache) {
-            // chave no blob → valor vivo em memória
-            const _vivas = {
-                transacoes, metas, contasFixas, cartoesCredito, assinaturas,
-                orcamentos,
-                tiposPersonalizados,
-                conquistas: conquistasPerfil,
-                config:     configPerfil,
-                desafios:   desafiosPerfil,
-            };
-            // "Tem conteúdo?" para array e para objeto — `desafios` é objeto de
-            // arrays, então conta o conteúdo de dentro.
-            const _cheio = (v) => {
-                if (Array.isArray(v)) return v.length > 0;
-                if (v && typeof v === 'object') {
-                    return Object.values(v).some(x => Array.isArray(x) ? x.length > 0 : x != null)
-                        || Object.keys(v).length > 0;
-                }
-                return false;
-            };
-            for (const [_campo, _memoria] of Object.entries(_vivas)) {
-                if (_cheio(_noCache[_campo]) && !_cheio(_memoria)) {
-                    _log.error('SAVE_MOUNT_001',
-                        `ignorado — "${_campo}" está vazio na memória mas tem conteúdo ` +
-                        'no cache do servidor: montagem incompleta, gravar apagaria o dado');
-                    return false;
-                }
-            }
-        }
-    }
+    // NÃO reintroduza a checagem aqui sem resolver esse problema de ordem.
 
     // ✅ CORREÇÃO: data-manager.js pode resetar userId ao rejeitar perfis com id inteiro
     //    durante loadUserData(). Antes de falhar definitivamente, tentamos re-inicializar

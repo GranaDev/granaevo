@@ -788,6 +788,57 @@ class DataManager {
             // precisa declarar nada, e nenhuma pode esquecer de declarar.
             const tocados = this.#perfisTocados(safeProfiles);
 
+            // ── GUARDA DO MONTE-QUE-NÃO-CARREGOU ────────────────────────────
+            //
+            // Recusa o save que zera um campo que o SERVIDOR tinha cheio. Mede
+            // contra o `#retrato` — o estado como veio do último load/save.
+            //
+            // ⚠️ POR QUE AQUI, E NÃO NO dashboard.js. Duas tentativas anteriores
+            // (bf20dd3, 4b052c0) puseram esta guarda em `salvarDados()` comparando
+            // com `_allProfilesData`, e as duas foram NO-OP: durante o boot esse
+            // cache ainda está VAZIO, então a guarda comparava duas fontes ambas
+            // vazias e se pulava sozinha — exatamente na janela que existia para
+            // cobrir. O `#retrato` não tem esse problema: ele é tirado dentro do
+            // `loadUserData()`, antes de qualquer save poder disparar.
+            //
+            // ⚠️ SÓ OS CAMPOS QUE NUNCA ESVAZIAM DE VERDADE. `transacoes`, `metas`
+            // e as outras coleções PODEM ir a zero legitimamente — o usuário apaga
+            // a última. Guardá-las aqui bloquearia exclusão real. Já `conquistas`
+            // só cresce, `orcamentos`/`config`/`desafios` são configuração e
+            // `tiposPersonalizados` é catálogo: nenhum deles some inteiro por ação
+            // do usuário. É a diferença entre "ficou vazio" e "não carregou".
+            //
+            // Foram exatamente estes cinco que oscilaram ±500 B em produção, 245
+            // vezes numa conta real, desde fevereiro de 2026.
+            const CAMPOS_QUE_NAO_ESVAZIAM = [
+                'orcamentos', 'tiposPersonalizados', 'conquistas', 'config', 'desafios',
+            ];
+            const _temConteudo = (v) => {
+                if (Array.isArray(v)) return v.length > 0;
+                if (v && typeof v === 'object') {
+                    return Object.keys(v).length > 0 &&
+                           Object.values(v).some(x => Array.isArray(x) ? x.length > 0 : x != null);
+                }
+                return false;
+            };
+            for (const p of safeProfiles) {
+                const bruto = this.#retrato.get(String(p?.id));
+                if (bruto === undefined) continue;          // perfil novo: nada a comparar
+                let antes = null;
+                try { antes = JSON.parse(bruto); } catch { continue; }
+                for (const campo of CAMPOS_QUE_NAO_ESVAZIAM) {
+                    if (_temConteudo(antes?.[campo]) && !_temConteudo(p?.[campo])) {
+                        console.error(
+                            `❌ [DATA-MANAGER] BLOQUEIO MONTAGEM: "${campo}" do perfil ` +
+                            `${String(p?.id)} está vazio, mas o servidor tinha conteúdo. ` +
+                            'Montagem incompleta — gravar apagaria o dado. Save recusado.',
+                        );
+                        document.dispatchEvent(new CustomEvent('ge:save-error'));
+                        return false;
+                    }
+                }
+            }
+
             const sombra = await this.#derivarOperacoes(safeProfiles, tocados);
             sombraDoLote = sombra;
 
