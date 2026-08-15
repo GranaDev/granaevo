@@ -1,0 +1,39 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- DROP das duas RPCs de save que nunca tiveram chamador
+--
+-- `salvar_dados_usuario(jsonb)` e `salvar_perfil_usuario(text, jsonb)` foram
+-- desenhadas para o CLIENTE chamar via PostgREST — ambas começam com
+-- `v_user_id := auth.uid()`. Essa arquitetura foi abandonada: hoje o cliente não
+-- escreve em `user_data` (migration 20260811020000 removeu INSERT/UPDATE/DELETE
+-- de `authenticated`), e todo save passa pela edge `save-user-data`.
+--
+-- ── POR QUE REMOVER, E NÃO SÓ DEIXAR QUIETO ─────────────────────────────────
+-- São `SECURITY DEFINER` e escrevem em `user_data`. Um `GRANT EXECUTE` a
+-- `authenticated` — por engano, por um restore, por um agente futuro "religando
+-- o que parecia desligado" — abriria um caminho de escrita que contorna TODAS as
+-- defesas construídas em cima da edge:
+--
+--   gate de MFA · merge por perfil · guarda anti-wipe · trava de versão
+--   · teto de tamanho do blob · rate limit de escritas/hora
+--
+-- Código morto que parece proteção é pior que código morto: foi exatamente
+-- assim que os três tetos de save passaram meses sem disparar (o achado de
+-- 2026-08-14). Uma função que ninguém chama não protege nada e ainda oferece
+-- superfície.
+--
+-- ── VERIFICADO ANTES DE DROPAR (2026-08-15) ─────────────────────────────────
+--   • nenhuma outra função do banco as referencia (varredura em pg_get_functiondef)
+--   • nenhum trigger, cron job, view ou policy
+--   • nenhuma chamada no repo — as 28 ocorrências são documentação, relatórios
+--     de auditoria, a migration que REVOGOU os grants e o próprio baseline
+--   • grants atuais: apenas `postgres` e `service_role`; anon/authenticated já
+--     estavam revogados desde 20260711120000
+--
+-- ⚠️ O BASELINE TAMBÉM PRECISA PERDER AS DUAS. `supabase/schema/public_baseline.sql`
+-- as recria com `CREATE OR REPLACE FUNCTION`; dropar só aqui faria elas voltarem
+-- no próximo restore — e voltarem como SECURITY DEFINER. Ver
+-- `docs/runbook-desastre.md` e o alerta de `scripts/_privilegios.mjs`.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+DROP FUNCTION IF EXISTS public.salvar_dados_usuario(jsonb);
+DROP FUNCTION IF EXISTS public.salvar_perfil_usuario(text, jsonb);
