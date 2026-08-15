@@ -212,3 +212,50 @@ describe('quando a fila entra em ação', () => {
     assert.ok(!/^import .* from '\.\/fila-save\.js/m.test(DM))
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACHADO 2026-08-15 — a fila sobrevivia à aba, mas ninguém a lia de volta.
+//
+// O Gate 6.1 do smoke test em produção pegou: lançar offline → recarregar →
+// voltar online → `total: 22, esperado 23`. A alteração ficava no localStorage
+// até a expiração de 24 h descartá-la, sem erro e sem aviso.
+//
+// Causa: `#agendarReenvio()` era a única porta de entrada da drenagem, e só
+// abria por um save que falhava NA MESMA sessão de página; o listener de
+// `online` era registrado dentro dela. Página nova = nada disso existe.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('fila órfã — o que o Gate 6.1 pegou em produção', () => {
+  const DM = soCodigo(readFileSync(join(RAIZ, 'src/scripts/modules/data-manager.js'), 'utf8'))
+
+  const bloco = (src, ini, fim) => {
+    const i = src.indexOf(ini); assert.ok(i !== -1, `não achei: ${ini}`)
+    const j = src.indexOf(fim, i); assert.ok(j > i, `não achei o fim: ${fim}`)
+    return src.slice(i, j)
+  }
+
+  test('o boot retoma a fila deixada por uma sessão anterior', () => {
+    const init = bloco(DM, 'async initialize(', 'async loadUserData()')
+    assert.match(init, /this\.#retomarFilaPendente\(\)/,
+      'o boot voltou a ignorar a fila: recarregar a página perde a alteração pendente')
+  })
+
+  test('a retomada lê o localStorage CRU, sem carregar o módulo da fila', () => {
+    const fn = bloco(DM, '#retomarFilaPendente() {', '#agendarReenvio() {')
+    assert.match(fn, /localStorage\.getItem\(`ge_fila_save_/,
+      'a checagem tem de ser leitura crua — importar fila-save.js aqui pesa em TODO boot')
+    assert.doesNotMatch(fn, /await this\.#fila\(\)/,
+      'importou o módulo da fila no caminho comum: o lazy do Passo 37.4 foi desfeito')
+    assert.match(fn, /this\.#agendarReenvio\(\)/,
+      'achou pendência e não agendou a drenagem')
+  })
+
+  test('offline NÃO reagenda em laço apertado', () => {
+    const fn = bloco(DM, 'const tentar = async () => {', 'setTimeout(tentar, 0)')
+    const i = fn.indexOf('navigator.onLine === false')
+    assert.ok(i > 0, 'sumiu a checagem de offline')
+    const ramo = fn.slice(i, fn.indexOf('}', i))
+    assert.doesNotMatch(ramo, /#agendarReenvio\(\)/,
+      'o ramo offline voltou a chamar #agendarReenvio — como `tentar` zera a trava na ' +
+      'primeira linha, isso gira tentar→agendar→tentar a ~4 ms, queimando CPU sem rede')
+  })
+})

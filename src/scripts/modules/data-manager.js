@@ -345,6 +345,36 @@ class DataManager {
      * falha somaria um timer, e uma rede instável viraria enxurrada de POSTs
      * exatamente quando ela menos aguenta.
      */
+    /**
+     * Retoma uma fila deixada por uma sessão ANTERIOR desta aba/browser.
+     *
+     * O DEFEITO QUE ISTO CONSERTA (medido em produção, 2026-08-15): a única
+     * porta de entrada da drenagem era `#agendarReenvio()`, chamada por um save
+     * que falha — e o listener de `online` era registrado DENTRO dela. Numa
+     * página recém-carregada, nada disso existe. Então:
+     *
+     *   lança offline → vai para a fila → recarrega → NINGUÉM MAIS OLHA
+     *
+     * O lote ficava no localStorage até a expiração de 24 h descartá-lo. Sem
+     * erro, sem aviso: o usuário lança um gasto no elevador, fecha o app, e o
+     * lançamento simplesmente não existe depois. Foi o que o Gate 6.1 pegou —
+     * `total: 22, esperado 23`.
+     *
+     * ⚠️ LEITURA CRUA do localStorage, de propósito. Importar `fila-save.js`
+     * aqui faria todo carregamento pagar o módulo, e ele nasceu lazy exatamente
+     * para não pesar no boot (Passo 37.4). O caminho comum — nada pendente — é
+     * um `getItem` síncrono e acabou; o import só acontece quando há trabalho.
+     */
+    #retomarFilaPendente() {
+        let pendente = false;
+        try {
+            const bruto = localStorage.getItem(`ge_fila_save_${this.#userId}`);
+            // `'[]'` é fila vazia gravada — não vale acordar o módulo por ela.
+            pendente = !!bruto && bruto !== '[]';
+        } catch { /* localStorage indisponível: degrada para o comportamento antigo */ }
+        if (pendente) this.#agendarReenvio();
+    }
+
     #agendarReenvio() {
         if (this.#reenvioAgendado) return;
         this.#reenvioAgendado = true;
@@ -352,10 +382,22 @@ class DataManager {
         const tentar = async () => {
             this.#reenvioAgendado = false;
             if (!this.#userId) return;
-            // Offline declarado: não gasta tentativa. O evento 'online' abaixo
-            // acorda a fila no instante em que a rede volta.
+            // Offline declarado: não gasta tentativa. Quem acorda a fila é o
+            // evento 'online', registrado abaixo — e ele é melhor que qualquer
+            // recuo que a gente escolha.
+            //
+            // ⚠️ AQUI HAVIA UM LAÇO APERTADO. O código chamava `#agendarReenvio()`
+            // neste ponto, e ele reagenda com `setTimeout(tentar, 0)`. Como a
+            // primeira linha de `tentar` zera `#reenvioAgendado`, a trava não
+            // segurava nada: offline → tentar → agendar → tentar → … girando a
+            // ~4 ms (o piso do browser para timeout aninhado), sem rede, sem
+            // sintoma visível além de CPU queimando no celular do usuário.
+            //
+            // Só `return`: `#reenvioAgendado` já foi zerado no topo, então o
+            // `online` consegue reagendar quando a rede voltar. E se o evento
+            // não vier, o próximo save que falhar — ou o próximo carregamento da
+            // página, pelo `#retomarFilaPendente` — pega a fila de qualquer jeito.
             if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-                this.#agendarReenvio();
                 return;
             }
             const { drenar, recuoMs, quantos } = await this.#fila();
@@ -456,6 +498,11 @@ class DataManager {
         // Restaura a memória de "perfis que tinham dados" do último login neste
         // browser — arma o anti-wipe já no 1º save, mesmo se o 1º load falhar.
         this.#loadPersistedDataFlags();
+
+        // Trabalho que ficou pendente de uma sessão anterior. Sem esta linha,
+        // recarregar a página entre a falha e a reconexão perde a alteração
+        // para sempre — ver #retomarFilaPendente.
+        this.#retomarFilaPendente();
 
         if (IS_DEV) {
             console.log('📦 [DATA-MANAGER] Inicializado com sucesso.');
