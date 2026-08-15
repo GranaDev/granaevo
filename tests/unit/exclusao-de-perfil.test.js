@@ -164,8 +164,12 @@ describe('⭐ autorização e superfície de ataque', () => {
 
   test('rate limit nas três ações, mais folgado só na leitura', () => {
     const t = bloco(PROXY, "parsed?.action === 'delete-profile'", "parsed?.action === 'snapshot'")
-    assert.match(t, /const maxHora\s*=\s*soLeitura \? 60 : 5/,
-      'mexer em perfil precisa de teto apertado; listar roda a cada abertura da tela')
+    // 20, nao 5: o contador sobe ANTES da resposta, entao tentativa que falha
+    // consome cota igual — dois bugs meus queimaram a franquia do dono e o
+    // clique que ia funcionar levou 429. O abuso ja e limitado pela feature:
+    // no maximo 4 perfis por conta.
+    assert.match(t, /const maxHora\s*=\s*soLeitura \? 60 : 20/,
+      'o teto de mexer em perfil voltou a ser apertado demais para tolerar erro')
     assert.match(t, /checkRL\(`ip:\$\{ip\}:\$\{bucket\}`/)
     assert.match(t, /checkRL\(`uid:\$\{userId\}:\$\{bucket\}`/)
   })

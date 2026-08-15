@@ -394,8 +394,19 @@ export default async function handler(req, res) {
         || parsed?.action === 'list-deleted-profiles') {
         if (!BACKUP_EDGE_URL) return res.status(503).json({ error: 'Serviço indisponível' });
 
+        // 20/h para mexer, 60/h para listar.
+        //
+        // Começou em 5/h e isso estava errado: o contador sobe ANTES da resposta,
+        // então tentativa que falha (500 do servidor, 409 de limite, erro de
+        // rede) consome a cota igual. Em 2026-08-15 dois bugs meus queimaram a
+        // franquia do dono e o 3º clique — o que ia funcionar — levou 429.
+        //
+        // Um teto que pune quem recebeu erro do servidor não protege ninguém.
+        // O abuso real aqui é limitado pela própria feature: dá para excluir no
+        // máximo 4 perfis (o teto do maior plano) e restaurar os mesmos 4.
+        // 20/h cobre erro, retentativa e teste sem chegar perto disso.
         const soLeitura = parsed.action === 'list-deleted-profiles';
-        const maxHora   = soLeitura ? 60 : 5;
+        const maxHora   = soLeitura ? 60 : 20;
         const bucket    = soLeitura ? 'listperfis' : 'mexeperfil';
 
         if (!await checkRL(`ip:${ip}:${bucket}`, maxHora, RL_RESTORE_WIN_SECS)) {
