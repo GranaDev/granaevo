@@ -446,3 +446,46 @@ describe('⭐ TODOS os lugares que contam perfis filtram is_active', () => {
     assert.match(MIGR, /v_ativos \+ 1 > v_limite/)                             // restaurar
   })
 })
+
+// ═════════════════════════════════════════════════════════════════════════════
+describe('etapa 4: avisar quem ficou nas reservas', () => {
+  const NOT = soCodigo(readFileSync(join(RAIZ, 'supabase/migrations/20260815250000_notificar_saida_de_reserva.sql'), 'utf8'))
+  const E   = soCodigo(readFileSync(join(RAIZ, 'supabase/functions/user-data-backup/index.ts'), 'utf8'))
+
+  test('⭐ o tipo novo entrou no CHECK antes de ser usado', () => {
+    // `radar_notifications_tipo_check` tem lista fechada. Inserir tipo fora dela
+    // seria o mesmo erro que o CHECK de plano me custou nesta feature.
+    assert.match(NOT, /ADD CONSTRAINT radar_notifications_tipo_check[\s\S]*?'saida_reserva'/,
+      "o tipo 'saida_reserva' precisa estar no CHECK, senão o INSERT é rejeitado")
+  })
+
+  test('respeita os limites de tamanho da tabela', () => {
+    assert.match(NOT, /left\(.*, 80\)/, 'title pode passar de 80 chars e violar o CHECK')
+    // `,\s*200` e não `, 200`: o argumento fica em linha própria no SQL.
+    assert.match(NOT, /left\([\s\S]*?,\s*200\)/, 'body pode passar de 200 chars e violar o CHECK')
+    assert.match(NOT, /left\('saida_reserva:[\s\S]*?, 120\)/, 'dedupe_key pode passar de 120')
+  })
+
+  test('a url casa com o regex exigido pela tabela', () => {
+    const url = NOT.match(/'(\/[a-zA-Z0-9/_#?=&-]*)'\s*,\s*now\(\)/)?.[1]
+    assert.ok(url, 'não achei a url da notificação')
+    assert.match(url, /^\/[a-zA-Z0-9/_#?=&-]{0,199}$/, `url "${url}" viola radar_notifications_url_check`)
+  })
+
+  test('idempotente: excluir duas vezes não enche a caixa', () => {
+    assert.match(NOT, /ON CONFLICT \(user_id, dedupe_key\) DO NOTHING/)
+  })
+
+  test('⭐ o aviso NUNCA derruba a exclusão', () => {
+    // A exclusão já aconteceu quando isto roda. Falhar aqui custa um aviso que
+    // não sai — não um perfil num estado ruim.
+    const t = bloco(E, "if (blobNovo.afetadas.length > 0)", 'console.log(\'[user-data-backup] perfil excluído')
+    assert.match(t, /try \{[\s\S]*?\} catch \(e\) \{/,
+      'o aviso passou a poder derrubar a exclusão')
+  })
+
+  test('só notifica quando há reserva afetada', () => {
+    assert.match(E, /if \(blobNovo\.afetadas\.length > 0\) \{/,
+      'passou a criar notificação mesmo sem reserva envolvida')
+  })
+})

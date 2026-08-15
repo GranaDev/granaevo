@@ -338,6 +338,23 @@ Deno.serve(async (req: Request) => {
         console.error('[user-data-backup] desativar_perfil recusou · user:', userId.slice(0, 8))
       }
 
+      // ── Avisa quem ficou nas reservas (etapa 4) ─────────────────────────
+      // Nunca derruba a exclusão: ela já aconteceu quando isto roda. Falhar
+      // aqui custa um aviso que não sai — não um perfil num estado ruim.
+      if (blobNovo.afetadas.length > 0) {
+        try {
+          const { data: avisos } = await admin.rpc('notificar_saida_de_reserva', {
+            p_owner_user_id: userId,
+            p_nome_perfil: res.nome ?? '',
+            p_reservas: blobNovo.afetadas,
+          })
+          console.log('[user-data-backup] avisos de saída de reserva:', avisos ?? 0)
+        } catch (e) {
+          console.error('[user-data-backup] aviso de reserva falhou (exclusão OK):',
+                        (e as Error)?.message)
+        }
+      }
+
       console.log('[user-data-backup] perfil excluído:', profileId, '· user:', userId.slice(0, 8))
       return json({
         success: true, expira_em: res.expira_em, nome: res.nome,
