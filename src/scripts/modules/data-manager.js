@@ -384,6 +384,59 @@ class DataManager {
      * O formato é o que `_ler` de fila-save.js espera (`{em, ops, tocados}`):
      * quem drena continua sendo o módulo, que só é necessário quando há rede.
      */
+    /**
+     * Drena a fila SEM o módulo `fila-save.js`.
+     *
+     * Gêmea de `#gravarLoteCru`, e existe pelo mesmo motivo levado um passo
+     * adiante: não basta a ESCRITA sobreviver ao módulo ausente, a SAÍDA também
+     * precisa. Medido em 2026-08-15: depois que o `import()` falha uma vez, o
+     * module map do navegador guarda a falha por URL pelo tempo de vida do
+     * documento — com a rede de volta, `import()` rejeita sem tentar a rede. A
+     * fila só drenava depois de um F5, que zera o module map.
+     *
+     * Mantém as invariantes do `drenar` do módulo, e cada uma por um motivo:
+     *   • ORDEM preservada — um `add` seguido de `rm` do mesmo registro,
+     *     aplicados ao contrário, deixariam o registro vivo;
+     *   • PARA no primeiro erro, sem pular para o próximo — pular quebraria a
+     *     ordem acima;
+     *   • regrava só o que SOBROU, nunca a fila inteira.
+     *
+     * @returns {Promise<number|null>} lotes restantes, ou null se nem deu para ler
+     */
+    async #drenarCru() {
+        const chave = this.#chaveFila();
+        let fila = [];
+        try {
+            const bruto = JSON.parse(localStorage.getItem(chave) || '[]');
+            if (Array.isArray(bruto)) fila = bruto;
+        } catch {
+            return null;
+        }
+        if (!fila.length) return 0;
+
+        let enviados = 0;
+        for (const lote of fila) {
+            let ok = false;
+            try { ok = await this.#enviarLote(lote) === true; } catch { ok = false; }
+            if (!ok) break;
+            enviados++;
+        }
+
+        const restantes = fila.slice(enviados);
+        try {
+            if (!restantes.length) localStorage.removeItem(chave);
+            else localStorage.setItem(chave, JSON.stringify(restantes));
+        } catch { /* cota cheia: perder a fila é ruim, derrubar o app é pior */ }
+
+        if (restantes.length === 0) {
+            // Mesmo aviso do caminho com módulo: sem ele, a tela seguiria
+            // mostrando o estado de antes da drenagem e o lançamento pareceria
+            // perdido — que foi o defeito corrigido horas antes, neste mesmo dia.
+            document.dispatchEvent(new CustomEvent('ge:fila-vazia'));
+        }
+        return restantes.length;
+    }
+
     #gravarLoteCru(ops, tocados) {
         try {
             const chave = this.#chaveFila();
@@ -478,6 +531,24 @@ class DataManager {
             try {
                 mod = await this.#fila();
             } catch {
+                // ⚠️ O MÓDULO NÃO VOLTA MAIS NESTA PÁGINA. Medido em produção em
+                // 2026-08-15: depois que um `import()` dinâmico falha, o module
+                // map do navegador guarda a FALHA por URL pelo tempo de vida do
+                // documento. Com a rede de volta, `import()` rejeita na hora, sem
+                // sequer tentar a rede:
+                //
+                //   ❌ Failed to fetch dynamically imported module:
+                //      https://www.granaevo.com/assets/fila-save-DfS7l0RQ.js
+                //
+                // Era por isso que a fila só drenava DEPOIS de recarregar: o
+                // reload zera o module map. Ficar esperando o módulo aqui é
+                // esperar por algo que não chega — e a promessa do produto é que
+                // ao reconectar as transações SEJAM lançadas.
+                //
+                // Então drena sem ele. O envio (`#enviarLote`) já vive aqui; o
+                // que faltava era ler e regravar a fila sem depender de arquivo —
+                // a mesma saída que a ESCRITA teve em `#gravarLoteCru`.
+                await this.#drenarCru();
                 return;
             }
             const { drenar, recuoMs, quantos } = mod;

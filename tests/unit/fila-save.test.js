@@ -374,6 +374,53 @@ describe('🔴 gravar mesmo quando o MÓDULO da fila não carrega', () => {
     // ele mente, este import falha DENTRO de um setTimeout — sem catch, a
     // rejeição não tem quem a pegue e a fila para de ser tentada na sessão.
     const fn = bloco(DM, 'const tentar = async () => {', 'setTimeout(tentar, 0)')
-    assert.match(fn, /try \{\s*mod = await this\.#fila\(\);\s*\} catch \{\s*return;\s*\}/)
+    // O `catch` continua obrigatório (rejeição em setTimeout não tem quem pegue),
+    // mas desde 2026-08-15 ele não só engole: drena sem o módulo. Ver o describe
+    // do module map, abaixo.
+    assert.match(fn, /try \{\s*mod = await this\.#fila\(\);\s*\} catch \{/)
+    assert.match(fn, /await this\.#drenarCru\(\);/)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('🔴 drenar sem o módulo — o module map não devolve o que já falhou', () => {
+  // MEDIDO em produção (2026-08-15), com a rede de volta e na MESMA página:
+  //   ❌ Failed to fetch dynamically imported module: .../fila-save-DfS7l0RQ.js
+  // Depois que um import() dinâmico falha, o navegador guarda a FALHA por URL
+  // pelo tempo de vida do documento: import() rejeita na hora, sem tentar a
+  // rede. Era por isso que a fila só drenava depois de um F5 — o reload zera o
+  // module map. Esperar o módulo aqui é esperar por algo que não chega.
+  const DM = soCodigo(readFileSync(join(RAIZ, 'src/scripts/modules/data-manager.js'), 'utf8'))
+  const bloco = (src, ini, fim) => {
+    const i = src.indexOf(ini); assert.ok(i !== -1, `não achei o início: ${ini}`)
+    const j = src.indexOf(fim, i); assert.ok(j > i, `não achei o fim: ${fim}`)
+    return src.slice(i, j)
+  }
+
+  test('⭐ o import que falha cai na drenagem crua, não desiste', () => {
+    const fn = bloco(DM, 'const tentar = async () => {', 'setTimeout(tentar, 0)')
+    assert.match(
+      fn,
+      /\} catch \{[\s\S]*?await this\.#drenarCru\(\);\s*return;/,
+      'voltou a desistir quando o módulo não carrega: a fila só drenaria após F5',
+    )
+  })
+
+  test('a drenagem crua preserva a ORDEM e para no primeiro erro', () => {
+    const fn = bloco(DM, 'async #drenarCru() {', '#gravarLoteCru(ops, tocados) {')
+    assert.match(fn, /for \(const lote of fila\)/, 'perdeu a ordem: add+rm invertidos deixam o registro vivo')
+    assert.match(fn, /if \(!ok\) break;/, 'passou a pular lotes que falharam — quebra a ordem')
+    assert.match(fn, /fila\.slice\(enviados\)/, 'regrava a fila inteira em vez do que sobrou')
+  })
+
+  test('avisa a tela quando esvazia', () => {
+    const fn = bloco(DM, 'async #drenarCru() {', '#gravarLoteCru(ops, tocados) {')
+    assert.match(fn, /ge:fila-vazia/,
+      'sem o aviso, a tela segue mostrando o estado de antes e o lançamento parece perdido')
+  })
+
+  test('usa a MESMA chave dos outros dois caminhos', () => {
+    const fn = bloco(DM, 'async #drenarCru() {', '#gravarLoteCru(ops, tocados) {')
+    assert.match(fn, /this\.#chaveFila\(\)/, 'chave própria = drena de um lugar e a escrita grava em outro')
   })
 })
