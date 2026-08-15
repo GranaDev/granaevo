@@ -337,3 +337,32 @@ describe('⭐ quem LÊ perfis precisa filtrar is_active', () => {
       'o assistente passou a enxergar perfis excluídos ao interpretar comandos')
   })
 })
+
+// ═════════════════════════════════════════════════════════════════════════════
+describe('⭐ o plano gravado no backup respeita o CHECK da tabela', () => {
+  // ACHADO no primeiro teste real: a exclusão devolvia 500 e nada acontecia.
+  //
+  //   profile_backups_plan_check  CHECK (original_plan IN ('individual','casal','familia'))
+  //
+  // e `excluir_perfil` gravava COALESCE(plano, 'desconhecido'). A tabela nasceu
+  // para o downgrade, onde os dois campos sempre têm plano real; ao reaproveitá-la
+  // eu inventei um valor de preenchimento sem conferir o domínio da coluna.
+  //
+  // A FALHA FECHADA FUNCIONOU: o INSERT estourou ANTES de qualquer remoção, então
+  // o perfil ficou intacto. Backup primeiro não é slogan.
+  const FIX = soCodigo(readFileSync(join(RAIZ, 'supabase/migrations/20260815220000_fix_plano_no_backup_de_perfil.sql'), 'utf8'))
+
+  test('⭐ nunca grava um plano fora dos três aceitos', () => {
+    assert.match(FIX, /v_plano NOT IN \('individual', 'casal', 'familia'\)/,
+      'voltou a aceitar qualquer valor de plan_name — o CHECK derruba o INSERT e a exclusão vira 500')
+    assert.doesNotMatch(FIX, /'desconhecido'/,
+      "'desconhecido' não é um plano válido no CHECK da tabela")
+  })
+
+  test('o fallback é o mesmo de limite_de_perfis (fail-closed em 1 perfil)', () => {
+    // Os dois precisam contar a mesma história: sem assinatura legível, o
+    // usuário é tratado como individual.
+    assert.match(FIX, /v_plano := 'individual';/)
+    assert.match(MIGR, /ELSE 1\s+-- fail-closed/)
+  })
+})
