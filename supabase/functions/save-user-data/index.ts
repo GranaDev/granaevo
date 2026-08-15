@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 import { mergeProfiles } from '../_shared/merge-profiles.ts'
 import { validarOperacoes, aplicarOperacoes } from '../_shared/aplicar-operacoes.ts'
+import { decidirTeto, MAX_BLOB_BYTES } from '../_shared/teto-blob.ts'
 import { mfaBloqueia } from '../_shared/mfa-gate.ts'
 import { reportarEventoSeguranca } from '../_shared/sec-report.ts'
 
@@ -83,6 +84,26 @@ function profileHasData(p: any): boolean {
   const ne = (k: string) => Array.isArray(p[k]) && p[k].length > 0
   return ne('transacoes') || ne('metas') || ne('contasFixas') ||
          ne('cartoesCredito') || ne('assinaturas')
+}
+
+// Tamanho do PLAINTEXT já gravado, em bytes de JSON. Serve à válvula de escape
+// do teto (6.46): sem ele, um blob que passou do limite por qualquer motivo
+// trancaria o usuário para sempre — inclusive impedindo o save que APAGA coisas
+// para caber de volta. Um teto que barra a própria saída não é teto, é tijolo.
+//
+// Devolve null quando não dá para saber (não decifrou, formato inesperado). Só é
+// chamada quando o teto já estourou, então o custo da decifragem não pesa no
+// caminho normal — que é todos os saves reais.
+async function tamanhoArmazenado(stored: any, userId: string): Promise<number | null> {
+  try {
+    if (stored && typeof stored._enc === 'string') {
+      const plain = await decryptData(stored._enc, userId)
+      return plain === null ? null : plain.length
+    }
+    return stored ? JSON.stringify(stored).length : null
+  } catch {
+    return null
+  }
 }
 
 // Extrai o array de profiles do blob armazenado (decifrando se necessário).
@@ -264,6 +285,41 @@ Deno.serve(async (req: Request) => {
   if (await mfaBloqueia(supabaseAdmin, token, userId, 'save-user-data')) {
     console.warn('[save-user-data] 2FA exigido e sessão não elevada:', userId.slice(0, 8))
     return json({ success: false, error: 'Verificação em duas etapas necessária', mfa_required: true }, 403, corsHeaders)
+  }
+
+  // ── 3.6 TETO DE ESCRITAS POR HORA (achado de 2026-08-14) ─────────────────
+  //
+  // `verificar_rate_limit_escrita` existe no banco desde sempre e NUNCA foi
+  // chamada: `SELECT count(*) FROM rate_limit_writes` devolvia 0 linhas — a
+  // assinatura de caminho morto. Contador zerado em tabela de contador não é
+  // "ninguém abusou", é "ninguém contou". Aqui ela ganha um chamador.
+  //
+  // POR `userId`, NÃO POR `effectiveUserId`: a cota é da PESSOA autenticada, não
+  // da conta. Numa família de 4, contar pela conta faria quatro pessoas
+  // legítimas dividirem 120/h — e uma pessoa sozinha já mediu 33/h em uso
+  // pesado (financial_audit_log, 2026-08-15). O que protege o RECURSO da conta
+  // é o teto de tamanho (6.46); este aqui é anti-flood por identidade.
+  //
+  // A RPC incrementa, grava em `fraud_logs` ao estourar e devolve false. Janela
+  // fixa de hora: quem estourar espera a virada. Com pico real de 33/h, os 120
+  // dão 3,6× de folga.
+  //
+  // FALHA ABERTO DE PROPÓSITO: se a RPC der erro (banco tropeçando), derrubar o
+  // save do usuário por causa do CONTADOR troca uma proteção contra abuso por
+  // perda de dado real. As outras duas camadas seguem de pé — 8 POST/min por
+  // usuário no proxy e o teto de tamanho, que é o que barra a exaustão.
+  const { data: dentroDoLimite, error: rlErr } = await supabaseAdmin
+    .rpc('verificar_rate_limit_escrita', { p_user_id: userId })
+
+  if (rlErr) {
+    console.error('[save-user-data] rate limit indisponível (save segue):', rlErr.message)
+  } else if (dentroDoLimite === false) {
+    console.warn('[save-user-data] 429: teto de escritas/hora estourado. user:', userId.slice(0, 8))
+    return json({
+      success: false,
+      error: 'Muitas gravações em pouco tempo. Tente novamente em alguns minutos.',
+      code: 'MUITAS_ESCRITAS',
+    }, 429, corsHeaders)
   }
 
   // ── 4. Resolver ID efetivo — convidados salvam nos dados do dono ─────────
@@ -511,7 +567,51 @@ Deno.serve(async (req: Request) => {
       },
     }
 
-    const encrypted   = await encryptData(JSON.stringify(dataToSave), effectiveUserId)
+    // ── 6.46 TETO DE TAMANHO DO RESULTADO ───────────────────────────────────
+    //
+    // Achado de 2026-08-14, corrigido aqui: o banco TINHA três tetos de save
+    // (5 MB por blob, 200 perfis, 120 escritas/h) em RPCs que ninguém chamava —
+    // `rate_limit_writes` tinha zero linhas desde sempre. Esta função gravava
+    // direto, por fora de todos eles, e `user_data.data_json` não tem CHECK.
+    //
+    // POR QUE O TETO DO PROXY NÃO COBRIA: `api/user-data.js` mede o CORPO da
+    // requisição. O caminho por operações manda um delta pequeno que é APLICADO
+    // SOBRE o blob guardado — cada requisição é legítima, o que cresce é o
+    // destino. Uma op `{op:'set', k:'nota', v:'<4 MB>'}` atravessa
+    // `validarOperacoes` inteira: ela confere forma, chaves proibidas e MAX_OPS,
+    // nunca o tamanho do valor. 8 POST/min × 4 MB chegava a 1 GB (o limite do
+    // jsonb) em ~30 minutos, numa linha só — e o snapshot diário copiava tudo.
+    //
+    // Por isso a medida é do RESULTADO, aqui: é o único ponto por onde passam
+    // TANTO o estado inteiro QUANTO as operações. Medir a entrada deixaria o
+    // segundo caminho de fora — a lição de `auditar_caminhos_nao_controles`.
+    //
+    // O limite e a regra (inclusive a válvula de encolhimento) moram em
+    // `_shared/teto-blob.ts`, onde podem ser testados por comportamento.
+    const serializado = JSON.stringify(dataToSave)
+
+    if (serializado.length > MAX_BLOB_BYTES) {
+      // Só decifra o blob atual quando o teto já estourou — ou seja, nunca, no
+      // caminho de todos os saves reais.
+      const anterior = await tamanhoArmazenado(existing?.data_json, effectiveUserId)
+      const desfecho = decidirTeto(serializado.length, anterior)
+
+      if (desfecho === 'bloqueado') {
+        console.error('[save-user-data] BLOQUEIO DE TAMANHO:', serializado.length,
+                      'bytes >', MAX_BLOB_BYTES, '| anterior:', anterior ?? '?',
+                      '| user:', effectiveUserId.slice(0, 8))
+        return json({
+          success: false,
+          error: 'Os dados desta conta excederam o tamanho máximo permitido',
+          code: 'BLOB_MUITO_GRANDE',
+          limite: MAX_BLOB_BYTES,
+        }, 413, corsHeaders)
+      }
+      console.warn('[save-user-data] acima do teto, mas encolhendo — save permitido:',
+                   anterior, '→', serializado.length, '| user:', effectiveUserId.slice(0, 8))
+    }
+
+    const encrypted   = await encryptData(serializado, effectiveUserId)
     const dataToStore = encrypted ? { _enc: encrypted } : dataToSave
 
     const now = new Date().toISOString()

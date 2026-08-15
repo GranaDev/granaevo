@@ -179,10 +179,21 @@ describe('quando a fila entra em ação', () => {
     assert.ok(i > 0 && j > i)
   })
 
-  test('5xx enfileira; 4xx não', () => {
+  test('5xx e 429 enfileiram; os demais 4xx não', () => {
     // 5xx é o servidor tropeçando: vale reenviar. 4xx é payload recusado —
     // insistir só repetiria a recusa, para sempre.
-    assert.match(DM, /if \(saveResp\.status >= 500\) await this\.#enfileirar\(sombra, tocados\)/)
+    //
+    // 429 é a exceção, aberta em 2026-08-15 junto com o teto de escritas/hora, e
+    // a razão é o que ele significa: "agora não, tente depois". O payload está
+    // bom, só chegou cedo demais — é o único 4xx em que reenviar é a resposta
+    // certa. Sem isto, o teto cobraria do usuário legítimo o preço da proteção
+    // contra abuso. Ver tests/unit/teto-save.test.js.
+    assert.match(
+      DM,
+      /if \(saveResp\.status >= 500 \|\| saveResp\.status === 429\) \{\s*await this\.#enfileirar\(sombra, tocados\);/,
+    )
+    // A porta continua estreita: nada de enfileirar 4xx em bloco.
+    assert.doesNotMatch(DM, /saveResp\.status >= 400\) \{?\s*await this\.#enfileirar/)
   })
 
   test('só enfileira lote COMPLETO e com operações', () => {

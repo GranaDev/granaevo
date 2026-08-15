@@ -1093,7 +1093,19 @@ class DataManager {
                 // 5xx é o servidor tropeçando, não o cliente errando: vale
                 // reenviar. 4xx (fora do 409, tratado acima) é payload recusado —
                 // insistir só repetiria a recusa.
-                if (saveResp.status >= 500) await this.#enfileirar(sombra, tocados);
+                //
+                // 429 é a exceção, e a razão é o que ele SIGNIFICA: "agora não,
+                // tente depois". É o único 4xx em que reenviar é a resposta certa
+                // — o payload está bom, só chegou cedo demais. Sem esta linha, o
+                // teto de escritas/hora ligado em 2026-08-15 viraria perda de
+                // trabalho toda vez que disparasse: uma proteção contra abuso
+                // cobrando o preço do usuário legítimo.
+                //
+                // Reenviar não vira martelada porque a fila já recua sozinha
+                // (2s → 5min, `recuoMs` em fila-save.js).
+                if (saveResp.status >= 500 || saveResp.status === 429) {
+                    await this.#enfileirar(sombra, tocados);
+                }
                 document.dispatchEvent(new CustomEvent('ge:save-error'));
                 return false;
             }
