@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
-import { buildRestoredBlob } from './_restore-core.js'
+import { buildRestoredBlob, buildBlobSemPerfil, buildBlobComPerfil } from './_restore-core.js'
 import { mfaBloqueia } from '../_shared/mfa-gate.ts'
 
 // Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS).
@@ -230,6 +230,168 @@ Deno.serve(async (req: Request) => {
 
     console.log('[user-data-backup] snapshot sob demanda criado. user:', userId.slice(0, 8))
     return json({ success: true, snapshot_date: new Date().toISOString().slice(0, 10) }, 200, cors)
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EXCLUSÃO DE PERFIL — ver docs/exclusao-de-perfil-desenho.md
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // SÓ O DONO. `memberEntry` preenchido significa que quem pediu é CONVIDADO de
+  // outra conta — e convidado não exclui perfil nenhum, nem o próprio. Sem esta
+  // porta, um membro de uma conta família apagaria o perfil de outro membro.
+  //
+  // A checagem é aqui, no servidor, contra `account_members`. Nunca contra um
+  // `isOwner` vindo do cliente: o cliente é onde o atacante mora.
+  const ACOES_DE_PERFIL = ['delete-profile', 'restore-profile', 'list-deleted-profiles']
+  if (typeof body.action === 'string' && ACOES_DE_PERFIL.includes(body.action)) {
+    if (memberEntry?.owner_user_id) {
+      console.warn('[user-data-backup] convidado tentou', body.action, '· user:', user.id.slice(0, 8))
+      return json({ error: 'Apenas o titular da conta pode gerenciar perfis' }, 403, cors)
+    }
+
+    const chave = Deno.env.get('DATA_ENCRYPTION_KEY') ?? ''
+
+    // ── LISTAR os excluídos que ainda dá para restaurar ─────────────────────
+    if (body.action === 'list-deleted-profiles') {
+      const { data, error } = await admin.rpc('listar_perfis_excluidos', { p_user_id: userId })
+      if (error) {
+        console.error('[user-data-backup] listar_perfis_excluidos:', error.message)
+        return json({ error: 'Erro interno' }, 500, cors)
+      }
+      return json(data ?? { ok: true, perfis: [] }, 200, cors)
+    }
+
+    // `profile_id` é o único dado do cliente aqui, e ele nunca entra em SQL por
+    // concatenação: vai como parâmetro tipado para a RPC. A forma é validada
+    // antes de qualquer uso — id de perfil é numérico e curto.
+    const rawId = (body as Record<string, unknown>).profile_id
+    const profileId = typeof rawId === 'string' ? rawId.trim() : ''
+    if (!/^\d{1,12}$/.test(profileId)) {
+      return json({ error: 'profile_id inválido' }, 400, cors)
+    }
+
+    const { data: linha, error: erroLinha } = await admin
+      .from('user_data')
+      .select('data_json')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (erroLinha || !linha?.data_json) {
+      console.error('[user-data-backup] blob ausente para', userId.slice(0, 8))
+      return json({ error: 'Erro interno' }, 500, cors)
+    }
+
+    // ── EXCLUIR ─────────────────────────────────────────────────────────────
+    //
+    // ORDEM, e ela é a proteção inteira contra perda:
+    //   1. monta o blob sem o perfil (em memória — nada gravado ainda)
+    //   2. grava o BACKUP com o slot
+    //   3. só então regrava o blob
+    //   4. e por último desativa o perfil
+    //
+    // Falha em qualquer ponto deixa o perfil VIVO. O pior caso é um backup
+    // órfão, que expira sozinho em 7 dias e não custa nada a ninguém.
+    if (body.action === 'delete-profile') {
+      let blobNovo
+      try {
+        blobNovo = await buildBlobSemPerfil({
+          keyBase64: chave, currentDataJson: linha.data_json,
+          profileId, userId, now: new Date().toISOString(),
+        })
+      } catch (e) {
+        console.error('[user-data-backup] delete-profile, blob:', (e as Error)?.message)
+        return json({ error: 'Não foi possível preparar a exclusão' }, 409, cors)
+      }
+
+      const { data: res, error: erroRpc } = await admin.rpc('excluir_perfil', {
+        p_user_id: userId, p_profile_id: profileId, p_member_data: blobNovo.slot,
+      })
+      if (erroRpc || res?.ok !== true) {
+        console.error('[user-data-backup] excluir_perfil:', erroRpc?.message ?? res?.erro)
+        return json({ error: res?.erro === 'PERFIL_NAO_ENCONTRADO'
+          ? 'Perfil não encontrado' : 'Não foi possível excluir o perfil' },
+          res?.erro === 'PERFIL_NAO_ENCONTRADO' ? 404 : 500, cors)
+      }
+
+      // Idempotência: já estava excluído, o blob já não o tem. Não regrava.
+      if (res?.ja_excluido === true) {
+        return json({ success: true, ja_excluido: true, expira_em: res.expira_em }, 200, cors)
+      }
+
+      const { error: erroBlob } = await admin
+        .from('user_data')
+        .update({ data_json: blobNovo.dataToStore, last_modified: new Date().toISOString() })
+        .eq('user_id', userId)
+
+      if (erroBlob) {
+        // Backup gravado, blob intacto, perfil ainda ativo: estado consistente.
+        console.error('[user-data-backup] delete-profile, gravar blob:', erroBlob.message)
+        return json({ error: 'Não foi possível excluir o perfil' }, 500, cors)
+      }
+
+      const { data: desativou } = await admin.rpc('desativar_perfil', {
+        p_user_id: userId, p_profile_id: profileId,
+      })
+      if (desativou !== true) {
+        // Blob já sem o perfil e a linha ainda ativa: o perfil aparece vazio.
+        // Recuperável restaurando — e o backup está gravado, que é o que importa.
+        console.error('[user-data-backup] desativar_perfil recusou · user:', userId.slice(0, 8))
+      }
+
+      console.log('[user-data-backup] perfil excluído:', profileId, '· user:', userId.slice(0, 8))
+      return json({
+        success: true, expira_em: res.expira_em, nome: res.nome,
+        reservas_afetadas: blobNovo.afetadas,
+      }, 200, cors)
+    }
+
+    // ── RESTAURAR ───────────────────────────────────────────────────────────
+    //
+    // A RPC é quem decide se pode: ela confere a vaga (ativos + 1 <= limite) e
+    // reativa na MESMA transação, sob advisory lock. É o que impede burlar o
+    // limite do plano excluindo e recriando perfis.
+    //
+    // Ela NÃO consome o backup: se a escrita do blob falhar aqui embaixo, dá
+    // para tentar de novo. O backup expira sozinho em 7 dias de qualquer jeito.
+    if (body.action === 'restore-profile') {
+      const { data: res, error: erroRpc } = await admin.rpc('restaurar_perfil', {
+        p_user_id: userId, p_profile_id: profileId,
+      })
+      if (erroRpc) {
+        console.error('[user-data-backup] restaurar_perfil:', erroRpc.message)
+        return json({ error: 'Erro interno' }, 500, cors)
+      }
+      if (res?.ok !== true) {
+        if (res?.erro === 'PROFILE_LIMIT_REACHED') {
+          return json({
+            error: 'PROFILE_LIMIT_REACHED', code: 'PROFILE_LIMIT_REACHED',
+            ativos: res.ativos, limite: res.limite,
+          }, 409, cors)
+        }
+        return json({ error: 'Backup não encontrado ou expirado' }, 404, cors)
+      }
+
+      try {
+        const { dataToStore } = await buildBlobComPerfil({
+          keyBase64: chave, currentDataJson: linha.data_json,
+          slot: res.member_data, userId, now: new Date().toISOString(),
+        })
+        const { error: erroBlob } = await admin
+          .from('user_data')
+          .update({ data_json: dataToStore, last_modified: new Date().toISOString() })
+          .eq('user_id', userId)
+        if (erroBlob) throw new Error(erroBlob.message)
+      } catch (e) {
+        // O perfil já foi reativado pela RPC, mas o conteúdo não voltou ao blob.
+        // Ele aparece VAZIO — e o backup continua lá, então restaurar de novo
+        // conserta. Melhor que deixar o perfil sumido.
+        console.error('[user-data-backup] restore-profile, blob:', (e as Error)?.message)
+        return json({ error: 'Perfil reativado, mas os dados não voltaram. Tente novamente.' }, 500, cors)
+      }
+
+      console.log('[user-data-backup] perfil restaurado:', profileId, '· user:', userId.slice(0, 8))
+      return json({ success: true, nome: res.nome }, 200, cors)
+    }
   }
 
   if (body.action !== 'restore') {

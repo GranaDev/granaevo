@@ -121,7 +121,7 @@ describe('a ação snapshot, do proxy ao banco', () => {
   })
 
   test('a edge falha FECHADA quando a RPC não confirma', () => {
-    const t = bloco(EDGE, "if (body.action === 'snapshot')", "if (body.action !== 'restore')")
+    const t = bloco(EDGE, "if (body.action === 'snapshot')", 'const ACOES_DE_PERFIL')
     assert.match(t, /\.rpc\('snapshot_sob_demanda',\s*\{\s*p_user_id: userId\s*\}\)/)
     assert.match(t, /if \(snapErr \|\| ok !== true\)/,
       'passou a aceitar a RPC devolvendo false — "ok" otimista recria a promessa vazia')
@@ -131,7 +131,7 @@ describe('a ação snapshot, do proxy ao banco', () => {
   test('a edge fotografa o DONO, não quem clicou', () => {
     // Convidado de casal/família opera no registro do dono; fotografar o id de
     // quem clicou salvaria um blob que não existe.
-    const t = bloco(EDGE, "if (body.action === 'snapshot')", "if (body.action !== 'restore')")
+    const t = bloco(EDGE, "if (body.action === 'snapshot')", 'const ACOES_DE_PERFIL')
     assert.match(t, /p_user_id: userId/)
     assert.doesNotMatch(t, /user\.id/, 'passou a usar o id de quem clicou em vez do dono da conta')
   })

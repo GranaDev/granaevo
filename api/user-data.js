@@ -378,6 +378,71 @@ export default async function handler(req, res) {
     try { parsed = JSON.parse(raw); }
     catch { return res.status(400).json({ error: 'Body deve ser JSON válido' }); }
 
+    // ── POST { action:"delete-profile" | "restore-profile" | "list-deleted-profiles" }
+    //
+    // Exclusão de perfil com janela de 7 dias. Ver docs/exclusao-de-perfil-desenho.md
+    //
+    // O proxy NÃO decide nada aqui: quem confere se o requisitante é o DONO da
+    // conta é a edge, contra `account_members`. Este bloco valida a FORMA do
+    // profile_id, aplica rate limit e repassa — nada mais do corpo do cliente
+    // atravessa.
+    //
+    // Rate limit por ação: excluir e restaurar mexem em dados e merecem teto
+    // apertado (5/h); listar é leitura e roda a cada abertura da tela de
+    // perfis, então precisa de folga (60/h) para não travar o uso normal.
+    if (parsed?.action === 'delete-profile' || parsed?.action === 'restore-profile'
+        || parsed?.action === 'list-deleted-profiles') {
+        if (!BACKUP_EDGE_URL) return res.status(503).json({ error: 'Serviço indisponível' });
+
+        const soLeitura = parsed.action === 'list-deleted-profiles';
+        const maxHora   = soLeitura ? 60 : 5;
+        const bucket    = soLeitura ? 'listperfis' : 'mexeperfil';
+
+        if (!await checkRL(`ip:${ip}:${bucket}`, maxHora, RL_RESTORE_WIN_SECS)) {
+            res.setHeader('Retry-After', '3600');
+            return res.status(429).json({ error: 'Muitas tentativas. Aguarde 1 hora.' });
+        }
+        if (userId && !await checkRL(`uid:${userId}:${bucket}`, maxHora, RL_RESTORE_WIN_SECS)) {
+            res.setHeader('Retry-After', '3600');
+            return res.status(429).json({ error: 'Muitas tentativas. Aguarde 1 hora.' });
+        }
+
+        // `profile_id` é numérico e curto. Validar a forma AQUI não substitui a
+        // validação da edge — é defesa em profundidade, e barra lixo antes de
+        // gastar uma chamada. A edge revalida com a mesma regra.
+        let corpo = { action: parsed.action };
+        if (!soLeitura) {
+            if (typeof parsed.profile_id !== 'string' || !/^\d{1,12}$/.test(parsed.profile_id.trim())) {
+                return res.status(400).json({ error: 'profile_id inválido' });
+            }
+            corpo = { action: parsed.action, profile_id: parsed.profile_id.trim() };
+        }
+
+        let edgeRes;
+        try {
+            edgeRes = await fetch(BACKUP_EDGE_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type':    'application/json',
+                    'Authorization':   `Bearer ${token}`,
+                    'apikey':          SUPABASE_ANON_KEY,
+                    'x-forwarded-for': ip,
+                    'x-proxy-secret':  PROXY_SECRET,
+                    'x-request-id':   _rid,
+                },
+                body: JSON.stringify(corpo),
+                signal: AbortSignal.timeout(15_000),
+            });
+        } catch (e) {
+            const code = e.name === 'TimeoutError' || e.name === 'AbortError' ? 504 : 502;
+            return res.status(code).json({ error: code === 504 ? 'Gateway Timeout' : 'Bad Gateway' });
+        }
+
+        return res.status(edgeRes.status)
+                  .setHeader('Content-Type', 'application/json')
+                  .send(await edgeRes.text());
+    }
+
     // ── POST { action:"snapshot" }: fotografa AGORA, antes de destruir ──────
     //
     // Achado de 2026-08-15: a tela de reset PROMETIA um backup ("Backup
