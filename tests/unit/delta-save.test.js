@@ -94,14 +94,18 @@ describe('delta save — o payload deixa de carregar o estado inteiro', () => {
       'sem retrato não há base contra a qual as operações façam sentido')
   })
 
-  test('`conjuntoIntacto` compara os DOIS sentidos (nasceu e sumiu)', () => {
-    const calc = bloco(DM, 'const conjuntoIntacto =', 'const soOps')
-    // Só `every` seria insuficiente: um perfil novo passaria batido se os
-    // tamanhos não fossem comparados também.
-    assert.match(calc, /this\.#retrato\.size\s*===\s*idsAgora\.size/,
+  test('a comparação de conjunto olha os DOIS sentidos (nasceu e sumiu)', () => {
+    // Em 2026-08-15 o cálculo subiu para ANTES do pulo de save vazio e passou a
+    // se chamar `mesmoConjunto` — porque o pulo precisa da mesma resposta. O que
+    // este teste protege não mudou: os dois sentidos.
+    const calc = bloco(DM, 'const mesmoConjunto =', 'if (sombra.completo')
+    assert.match(calc, /this\.#retrato\.size\s*===\s*idsDoSave\.size/,
       'sem comparar o tamanho, um perfil NOVO passaria como conjunto intacto')
     assert.match(calc, /every\(/,
       'sem varrer o retrato, um perfil REMOVIDO passaria como conjunto intacto')
+    // E o alias tem de continuar apontando para o mesmo cálculo: duas cópias da
+    // regra divergem, e é ela que decide se uma remoção chega ao servidor.
+    assert.match(DM, /const conjuntoIntacto = mesmoConjunto;/)
   })
 })
 

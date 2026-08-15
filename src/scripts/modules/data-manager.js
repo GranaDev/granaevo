@@ -935,7 +935,31 @@ class DataManager {
             // descrevem TUDO que mudou. Zero operações num save completo é uma
             // afirmação forte: "não mexi em nada". Se algo escapou da derivação,
             // `completo` é falso e o save segue normalmente.
-            if (sombra.completo && sombra.ops.length === 0) {
+            // ⚠️ ZERO OPERAÇÕES NÃO PROVA "NÃO MEXI EM NADA" QUANDO UM PERFIL SUMIU.
+            //
+            // Achado em 2026-08-15, no smoke test: remover um perfil do array e
+            // salvar não gerava POST NENHUM. Payload medido: 0 bytes.
+            //
+            // O mecanismo: `#perfisTocados` marca o perfil removido como tocado
+            // (ele compara o retrato com o array de agora), mas `#derivarOperacoes`
+            // itera sobre os perfis PRESENTES — e o removido, por definição, não
+            // está lá. Nenhuma operação é gerada para ele. Sobra `ops.length === 0`
+            // com `completo === true`, que este bloco lê como "nada mudou".
+            //
+            // A guarda que existe para exatamente isto — `conjuntoIntacto`, o
+            // `every()` do Gate 2 — está LOGO ABAIXO, e o `return` daqui a torna
+            // inalcançável. Controle presente, caminho que não passa por ele.
+            //
+            // Hoje o produto não tem exclusão de perfil, então nenhum usuário
+            // alcança este caminho. Mas ele é pré-requisito da própria exclusão:
+            // sem esta linha, a primeira versão de "apagar perfil" descartaria a
+            // remoção em silêncio, e o perfil voltaria no load seguinte.
+            const idsDoSave = new Set(safeProfiles.map((p) => String(p?.id)));
+            const mesmoConjunto =
+                this.#retrato.size === idsDoSave.size &&
+                [...this.#retrato.keys()].every((id) => idsDoSave.has(id));
+
+            if (sombra.completo && sombra.ops.length === 0 && mesmoConjunto) {
                 if (IS_DEV || OPS_DEBUG) {
                     if (OPS_DEBUG) {
                         if (!Array.isArray(window.__sombra)) window.__sombra = [];
@@ -972,10 +996,11 @@ class DataManager {
             // num save que criou ou removeu um perfil perderia essa mudança em
             // silêncio. Por isso quem confere aqui é o cliente, que tem o
             // retrato do último load/save e sabe exatamente se o conjunto mudou.
-            const idsAgora = new Set(safeProfiles.map((p) => String(p?.id)));
-            const conjuntoIntacto =
-                this.#retrato.size === idsAgora.size &&
-                [...this.#retrato.keys()].every((id) => idsAgora.has(id));
+            // Já calculado acima, no pulo de save vazio — que precisa da mesma
+            // resposta. Reaproveita em vez de recalcular: duas cópias da mesma
+            // regra divergem com o tempo, e esta decide se uma remoção de perfil
+            // chega ou não ao servidor.
+            const conjuntoIntacto = mesmoConjunto;
 
             // `#retrato.size > 0` exclui o primeiro save da sessão sem load bom:
             // sem retrato não há base contra a qual as operações façam sentido.

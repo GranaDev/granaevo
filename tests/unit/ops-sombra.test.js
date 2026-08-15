@@ -387,13 +387,30 @@ describe('⭐ save que não tem nada a dizer não é enviado', () => {
 
   test('zero operações num save completo = não envia', () => {
     const fn = DM.slice(DM.indexOf('#derivarOperacoes(safeProfiles, tocados)'))
-    assert.match(fn, /if \(sombra\.completo && sombra\.ops\.length === 0\)/)
+    assert.match(fn, /if \(sombra\.completo && sombra\.ops\.length === 0 && mesmoConjunto\)/)
+  })
+
+  test('⭐ mas NÃO pula quando um perfil sumiu do conjunto', () => {
+    // Achado de 2026-08-15: remover um perfil e salvar não gerava POST nenhum
+    // (payload medido: 0 bytes). `#perfisTocados` marca o removido como tocado,
+    // mas `#derivarOperacoes` itera sobre os perfis PRESENTES — o removido não
+    // está lá, então nenhuma operação nasce. Sobra "zero ops + completo", que
+    // este bloco lia como "não mexi em nada".
+    //
+    // A guarda que existe para isto (`conjuntoIntacto`) ficava LOGO ABAIXO, e o
+    // `return` do pulo a tornava inalcançável: controle presente, caminho que
+    // não passa por ele. É pré-requisito da exclusão de perfil — sem isto, a
+    // primeira versão de "apagar perfil" descartaria a remoção em silêncio.
+    const i = DM.indexOf('const idsDoSave = new Set(')
+    const j = DM.indexOf('if (sombra.completo', i)
+    assert.ok(i > 0 && j > i, 'o cálculo do conjunto saiu de antes do pulo')
+    assert.match(DM.slice(i, j), /every\(\(id\) => idsDoSave\.has\(id\)\)/)
   })
 
   // O trecho do "pular", delimitado por TEXTO e não por indentação: asserção
   // presa a espaços já reprovou aqui só porque um comentário mudou de linha.
   const PULAR = (() => {
-    const i = DM.indexOf('if (sombra.completo && sombra.ops.length === 0)')
+    const i = DM.indexOf('if (sombra.completo && sombra.ops.length === 0 && mesmoConjunto)')
     return i > 0 ? DM.slice(i, DM.indexOf('const dataToSave', i)) : ''
   })()
 
