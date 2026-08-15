@@ -308,3 +308,32 @@ describe('o cliente: duas confirmações e nenhum HTML do usuário', () => {
       'sem o catch, o chunk faltando (offline, janela pós-deploy) quebraria a seleção de perfis')
   })
 })
+
+// ═════════════════════════════════════════════════════════════════════════════
+describe('⭐ quem LÊ perfis precisa filtrar is_active', () => {
+  // ACHADO EM PRODUÇÃO, no primeiro teste real: o perfil era excluído no banco
+  // (is_active = false, backup gravado) e continuava aparecendo na seleção — e a
+  // vaga parecia nunca abrir.
+  //
+  // A migration mudou o SIGNIFICADO de `is_active`: antes só o cron de downgrade
+  // a escrevia, agora ela marca "excluído pelo usuário". Mudar o sentido de uma
+  // coluna obriga a auditar TODO caminho que a lê — e eu não fiz isso.
+  const DASH = soCodigo(readFileSync(join(RAIZ, 'src/scripts/pages/dashboard.js'), 'utf8'))
+  const ENG  = soCodigo(readFileSync(join(RAIZ, 'src/scripts/modules/assistant/engine.js'), 'utf8'))
+
+  test('⭐ a lista da tela de seleção não traz perfil excluído', () => {
+    // Os dois SELECT de perfis do dashboard: a lista principal e o recarregamento
+    // de fotos em background. Um sem o outro deixa o perfil voltando pela janela.
+    const selects = DASH.split(".from('profiles')").length - 1
+    const filtros = DASH.split(".eq('is_active', true)").length - 1
+    assert.ok(selects > 0, 'o dashboard deixou de ler profiles — o teste perdeu o alvo')
+    assert.equal(filtros, selects,
+      `${selects} leitura(s) de profiles para ${filtros} filtro(s) de is_active: ` +
+      'perfil excluído volta a aparecer na seleção')
+  })
+
+  test('o assistente não sugere perfil excluído', () => {
+    assert.match(ENG, /\.from\('profiles'\)[\s\S]{0,120}?\.eq\('is_active', true\)/,
+      'o assistente passou a enxergar perfis excluídos ao interpretar comandos')
+  })
+})

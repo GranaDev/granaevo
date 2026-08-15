@@ -591,6 +591,11 @@ async function carregarPerfis(targetUserId = null) {
             .from('profiles')
             .select('id, name, photo_url')
             .eq('user_id', userIdSeguro)
+            // Perfil excluído (is_active = false) fica FORA da lista. Ele ainda
+            // existe — a linha e o backup de 7 dias seguem lá para a restauração —
+            // mas não é um perfil que se possa abrir. Sem este filtro o excluído
+            // continua na tela de seleção e a vaga parece nunca abrir.
+            .eq('is_active', true)
             .order('id', { ascending: true });
 
         if (error) throw error;
@@ -631,6 +636,11 @@ async function _recarregarFotosPerfisBackground(userIdSeguro) {
             .from('profiles')
             .select('id, name, photo_url')
             .eq('user_id', userIdSeguro)
+            // Perfil excluído (is_active = false) fica FORA da lista. Ele ainda
+            // existe — a linha e o backup de 7 dias seguem lá para a restauração —
+            // mas não é um perfil que se possa abrir. Sem este filtro o excluído
+            // continua na tela de seleção e a vaga parece nunca abrir.
+            .eq('is_active', true)
             .order('id', { ascending: true });
         if (error || !perfis?.length) return;
 

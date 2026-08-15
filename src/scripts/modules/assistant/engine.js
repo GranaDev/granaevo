@@ -144,7 +144,7 @@ class AssistantEngine {
             const uid = session?.user?.id;
             if (!uid) return;
             const { data, error } = await supabase
-                .from('profiles').select('id, name').eq('user_id', uid).order('id', { ascending: true });
+                .from('profiles').select('id, name').eq('user_id', uid).eq('is_active', true).order('id', { ascending: true });
             if (!error && Array.isArray(data)) this.#daConta = data;
         } catch { /* sem a tabela, cai no blob — pior, mas funciona */ }
     }
