@@ -160,8 +160,27 @@ export default defineConfig(({ mode }) => ({
         //   garante que o usuário sempre receba a versão mais nova do app.
         // Imagens, woff2, CDN EXCLUÍDOS: browser HTTP cache é suficiente e
         //   não tem risco de resposta opaca corrompida.
-        globPatterns: ['assets/**/*.{js,css}'],
-        globIgnores:  ['workbox-*.js', 'sw.js', 'stats.html'],
+        // Os 4 scripts de boot da RAIZ entram junto (2026-08-15). Eles não têm
+        // hash no nome, e é exatamente por isso que precisam estar aqui:
+        //
+        //   • na REDE eles são `max-age=0, must-revalidate` — nome estável com
+        //     cache longo congela a versão, que foi o defeito que quebrou o PWA
+        //     offline (ver o header do sw.js, mesmo commit);
+        //   • mas `must-revalidate` significa "não use sem revalidar", e offline
+        //     não há como revalidar. Sem estarem no precache, o carregamento
+        //     inicial offline perderia theme-init, css-boot, pwa-init e
+        //     registerSW — troca de um buraco por outro.
+        //
+        // No precache o Workbox os versiona por REVISION (hash do conteúdo, não
+        // do nome), então um deploy novo invalida corretamente mesmo sem hash no
+        // arquivo. Frescor pela rede, disponibilidade pelo Service Worker.
+        globPatterns: [
+          'assets/**/*.{js,css}',
+          '{theme-init,css-boot,pwa-init,registerSW,sw-push-handler}.js',
+        ],
+        // `sw.js` e `workbox-*` nunca entram no próprio precache; `assistant-sw`
+        // é o Service Worker do OUTRO app e tem ciclo de vida próprio.
+        globIgnores:  ['workbox-*.js', 'sw.js', 'assistant-sw.js', 'stats.html'],
 
         // Sem navigate fallback (não interceptar navegação HTML)
         navigateFallback: null,

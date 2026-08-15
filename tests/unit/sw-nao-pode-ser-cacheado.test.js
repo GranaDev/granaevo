@@ -122,3 +122,39 @@ describe('nenhum arquivo SEM HASH pode ficar em cache longo', () => {
     )
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('sem cache na rede, mas disponível offline', () => {
+  // As duas metades do mesmo conserto, e uma sem a outra é um buraco novo:
+  //   • `max-age=0, must-revalidate` na REDE impede servir versão congelada;
+  //   • mas "não use sem revalidar" quebra offline, onde não há como revalidar.
+  // Por isso os scripts de boot (sem hash no nome) precisam estar no precache:
+  // lá o Workbox os versiona por REVISION — hash do conteúdo, não do nome.
+  const CFG = readFileSync(join(RAIZ, 'vite.config.js'), 'utf8')
+  const BOOT = ['theme-init', 'css-boot', 'pwa-init', 'registerSW', 'sw-push-handler']
+
+  test('⭐ os scripts de boot estão no globPatterns', () => {
+    const bloco = CFG.slice(CFG.indexOf('globPatterns:'), CFG.indexOf('globIgnores:'))
+    for (const f of BOOT) {
+      assert.ok(bloco.includes(f),
+        `${f} saiu do precache — com max-age=0 na rede, ele some no carregamento offline`)
+    }
+  })
+
+  test('sw.js e assistant-sw.js NÃO entram no próprio precache', () => {
+    const bloco = CFG.slice(CFG.indexOf('globIgnores:'), CFG.indexOf('globIgnores:') + 220)
+    assert.match(bloco, /'sw\.js'/, 'o SW não pode precachear a si mesmo')
+    assert.match(bloco, /'assistant-sw\.js'/, 'o SW do assistente tem ciclo de vida próprio')
+  })
+
+  test('o build de verdade confirma', () => {
+    const sw = join(RAIZ, 'dist', 'sw.js')
+    if (!existsSync(sw)) return
+    const conteudo = readFileSync(sw, 'utf8')
+    for (const f of BOOT) {
+      assert.match(conteudo, new RegExp(`"${f}\.js"`), `${f}.js não foi precacheado no build`)
+    }
+    assert.doesNotMatch(conteudo, /"sw\.js"/)
+    assert.doesNotMatch(conteudo, /"assistant-sw\.js"/)
+  })
+})
