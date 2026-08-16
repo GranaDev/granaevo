@@ -71,7 +71,18 @@ describe('registrarMovimento — grava QUEM (sem mexer no dinheiro)', () => {
     const meta = { movimentos: [] }
     registrarMovimento(meta, { id: 'u1', nome: 'Ana', tipo: 'aporte', valor: 100, data: '2026-07-18', hora: '10:00' })
     assert.equal(meta.movimentos.length, 1)
-    assert.deepEqual(meta.movimentos[0], { memberId: 'u1', memberNome: 'Ana', tipo: 'aporte', valor: 100, data: '2026-07-18', hora: '10:00' })
+    // `mid` e `em` entraram em 2026-08-16: são o que torna a trilha UNÍVEL entre
+    // as cópias dos perfis (dedupe por id, ordem estável por tempo). Por isso a
+    // asserção passou a olhar os campos que descrevem o movimento, em vez de
+    // exigir o objeto inteiro — um campo novo não deve reprovar um teste de
+    // conteúdo.
+    const mov = meta.movimentos[0]
+    assert.deepEqual(
+      { memberId: mov.memberId, memberNome: mov.memberNome, tipo: mov.tipo,
+        valor: mov.valor, data: mov.data, hora: mov.hora },
+      { memberId: 'u1', memberNome: 'Ana', tipo: 'aporte', valor: 100, data: '2026-07-18', hora: '10:00' })
+    assert.ok(mov.mid, 'movimento sem `mid` não pode ser deduplicado na união')
+    assert.equal(typeof mov.em, 'number', 'sem `em` a ordem da trilha varia entre perfis')
   })
   test('cria o array se faltar', () => {
     const meta = {}
@@ -354,10 +365,22 @@ describe('reconciliação de cópias por lastUpdate', () => {
     assert.equal(metaAtivaB.movimentos.length, 1)
     assert.equal(metaAtivaB.lastUpdate, '2026-07-24T10:00:00.000Z')
   })
-  test('não reconcilia se a cópia ativa já é a mais nova', () => {
+  test('cópia mais antiga não derruba o saldo da ativa', () => {
+    // A intenção original — "não aceitar um saldo mais velho por cima" — segue
+    // valendo, e é o que este teste protege.
+    //
+    // O que mudou em 2026-08-16: a PRIMEIRA reconciliação agora devolve `true`,
+    // porque migra o saldo legado para a trilha (mudança real, e necessária).
+    // O saldo não se mexe, e a segunda chamada estabiliza em `false`.
     const metaAtiva = { id: 'r1', compartilhada: true, saved: 200, lastUpdate: '2026-07-24T11:00:00.000Z' }
-    const profiles = [{ id: 'A', metas: [{ id: 'r1', compartilhada: true, saved: 100, lastUpdate: '2026-07-24T10:00:00.000Z' }] }]
-    assert.equal(reconciliarCopiaAtiva(metaAtiva, profiles), false)
+    const profiles = [
+      { id: 'A', metas: [{ id: 'r1', compartilhada: true, saved: 100, lastUpdate: '2026-07-24T10:00:00.000Z' }] },
+      { id: 'B', metas: [metaAtiva] },
+    ]
+    reconciliarCopiaAtiva(metaAtiva, profiles)
+    assert.equal(metaAtiva.saved, 200, 'a cópia velha (100) derrubou o saldo da ativa')
+    assert.equal(reconciliarCopiaAtiva(metaAtiva, profiles), false,
+      'a reconciliação não estabiliza — salvaria a cada render')
     assert.equal(metaAtiva.saved, 200)
   })
   test('reserva não compartilhada não reconcilia', () => {

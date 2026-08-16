@@ -226,6 +226,17 @@ const CAMPOS_SINC = [
     'tipoReserva', 'origemExistente', 'lastUpdate',
 ];
 
+// Campos DECLARATIVOS: o último que falou vence, e isso está certo — objetivo,
+// prazo e roster são decisões, não acumuladores.
+//
+// `saved` e `movimentos` foram retirados desta lista em 2026-08-16. Eles são
+// ACUMULADORES: a trilha se une e o saldo sai dela. Copiar um acumulador da
+// "cópia vencedora" era o que fazia um aporte apagar o outro. `CAMPOS_SINC`
+// continua completo porque a PROPAGAÇÃO (que empurra o estado inteiro para as
+// outras cópias) precisa levar tudo — quem não pode escolher um lado é a
+// RECONCILIAÇÃO, que junta o que voltou divergente.
+const CAMPOS_DECLARATIVOS = CAMPOS_SINC.filter(k => k !== 'saved' && k !== 'movimentos');
+
 // ── SAIR DA RESERVA (substitui a dissolução em bloco) ───────────────────────
 // A dissolução dividia o bolo entre TODOS de uma vez e dependia de cada perfil
 // abrir o app para reclamar a parte dele. Errado por dois motivos: quem clica
@@ -326,12 +337,60 @@ export function copiaMaisRecente(profiles, reservaId) {
  */
 export function reconciliarCopiaAtiva(metaAtiva, profiles) {
     if (!ehCompartilhada(metaAtiva) || metaAtiva.id == null) return false;
+    if (!Array.isArray(profiles)) return false;
+
+    const rid = String(metaAtiva.id);
+    const outras = [];
+    for (const p of profiles) {
+        for (const m of (Array.isArray(p?.metas) ? p.metas : [])) {
+            if (m && m !== metaAtiva && String(m.id) === rid) outras.push(m);
+        }
+    }
+
+    let mudou = false;
+
+    // ── 1. A TRILHA SE UNE, NUNCA SE SOBRESCREVE ────────────────────────────
+    // Antes `movimentos` vinha em CAMPOS_SINC e era substituído pela cópia
+    // "vencedora". Como o desempate por `lastUpdate` sorteava (os carimbos
+    // empatavam), a trilha de quem tinha acabado de aportar era apagada — o
+    // "Quem colocou" vazio saía daí.
+    //
+    // Migra o legado ANTES de unir: uma cópia com saldo e sem trilha entraria na
+    // união como zero e apagaria dinheiro real.
+    // Todas as cópias sem trilha migram com o MESMO valor — o maior entre elas.
+    // Valores diferentes gerariam entradas de legado divergentes disputando o
+    // mesmo `mid`, e a união escolheria por ordem de array (o sorteio de novo).
+    const legado = saldoLegadoMaisCompleto([metaAtiva, ...outras]);
+    if (migrarSaldoLegado(metaAtiva, legado)) mudou = true;
+    for (const o of outras) migrarSaldoLegado(o, legado);
+
+    const unida = unirMovimentos(metaAtiva.movimentos, ...outras.map(o => o.movimentos));
+    if (JSON.stringify(unida) !== JSON.stringify(metaAtiva.movimentos ?? [])) {
+        metaAtiva.movimentos = unida;
+        mudou = true;
+    }
+
+    // ── 2. O SALDO É DERIVADO DA TRILHA ─────────────────────────────────────
+    // Deixa de ser um número que as cópias disputam. Duas pessoas aportando ao
+    // mesmo tempo agora SOMAM — antes uma vencia e a outra sumia.
+    const derivado = saldoDeMovimentos(unida);
+    if (derivado !== null && Number(metaAtiva.saved || 0) !== derivado) {
+        metaAtiva.saved = derivado;
+        mudou = true;
+    }
+
+    // ── 3. Os demais campos ainda seguem a cópia mais recente ───────────────
+    // Objetivo, prazo, roster e afins são declarações, não acumuladores: para
+    // eles "o último que falou" continua sendo a regra certa. `saved` e
+    // `movimentos` saíram daqui — são derivados/unidos acima.
     const recente = copiaMaisRecente(profiles, metaAtiva.id);
-    if (!recente || recente === metaAtiva) return false;
-    if (String(recente.lastUpdate || '') <= String(metaAtiva.lastUpdate || '')) return false;
-    const clone = JSON.parse(JSON.stringify(recente));
-    for (const k of CAMPOS_SINC) if (k in clone) metaAtiva[k] = clone[k];
-    return true;
+    if (recente && recente !== metaAtiva &&
+        String(recente.lastUpdate || '') > String(metaAtiva.lastUpdate || '')) {
+        const clone = JSON.parse(JSON.stringify(recente));
+        for (const k of CAMPOS_DECLARATIVOS) if (k in clone) { metaAtiva[k] = clone[k]; mudou = true; }
+    }
+
+    return mudou;
 }
 
 /**
@@ -362,15 +421,149 @@ export function registrarMovimento(meta, { id, nome, tipo, valor, data, hora } =
     if (!isFinite(v) || v <= 0) return;
     if (tipo !== 'aporte' && tipo !== 'retirada') return;
     meta.movimentos.push({
+        // `mid` é o que torna a trilha UNÍVEL entre cópias (2026-08-16). Sem um
+        // id por movimento, unir duas listas ou duplicaria tudo, ou obrigaria a
+        // comparar campo a campo — e dois aportes iguais no mesmo minuto são
+        // indistinguíveis assim. Com `mid`, união é `dedupe por chave`.
+        mid:        _novoMid(),
         memberId:   id != null ? String(id) : null,
         memberNome: String(nome ?? 'Membro').trim().slice(0, 80) || 'Membro',
         tipo,
         valor:      Math.round(v * 100) / 100,
         data:       data ?? null,
         hora:       hora ?? null,
+        // Ordena a trilha entre cópias sem depender do relógio de `data`/`hora`,
+        // que são só rótulos de exibição.
+        em:         Date.now(),
     });
     // Cap defensivo: trilha não pode crescer sem limite dentro do blob.
     if (meta.movimentos.length > 500) meta.movimentos = meta.movimentos.slice(-500);
+}
+
+/** Id de movimento. `randomUUID` quando existe; senão, aleatório + tempo. */
+function _novoMid() {
+    try {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+    } catch { /* ambiente sem crypto: cai no fallback */ }
+    return `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// A TRILHA É A FONTE DA VERDADE (2026-08-16)
+//
+// ACHADO, medido em produção: duas cópias da mesma reserva com saldos
+// diferentes (500 e 1000) e `lastUpdate` IDÊNTICO ao milissegundo. O desempate
+// por hora virava sorteio pela ordem do array, e a reconciliação trazia a cópia
+// errada. Pior: `movimentos` estava em CAMPOS_SINC, então a reconciliação
+// SOBRESCREVIA a trilha — por isso "Quem colocou" ficava vazio mesmo para quem
+// tinha acabado de aportar.
+//
+// A raiz é o modelo: comparar saldos entre cópias pressupõe que uma delas está
+// certa. Numa reserva compartilhada não está — cada uma viu uma parte. O saldo
+// não é um número a ser disputado, é a SOMA do que cada um pôs.
+//
+// Agora: os movimentos se UNEM (nunca se sobrescrevem) e o saldo é DERIVADO
+// deles. Duas escritas simultâneas passam a somar em vez de uma vencer.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * União de trilhas, sem duplicar. Dedupe por `mid`.
+ *
+ * Movimento sem `mid` é legado (gravado antes de 2026-08-16): recebe uma chave
+ * derivada do conteúdo, para que a mesma entrada vinda de duas cópias não conte
+ * duas vezes. Não é perfeito — dois aportes idênticos no mesmo segundo colapsam
+ * em um — mas é o mais seguro possível sem id, e só afeta dado antigo.
+ *
+ * PURA. Ordena por `em` (e depois por `mid`) para a lista ficar estável entre
+ * perfis: mesma entrada, mesma ordem, em qualquer aparelho.
+ */
+export function unirMovimentos(...listas) {
+    const mapa = new Map();
+    for (const lista of listas) {
+        if (!Array.isArray(lista)) continue;
+        for (const m of lista) {
+            if (!m || typeof m !== 'object') continue;
+            const chave = m.mid
+                ? `id:${m.mid}`
+                : `legado:${m.memberId ?? ''}:${m.tipo}:${m.valor}:${m.data ?? ''}:${m.hora ?? ''}`;
+            if (!mapa.has(chave)) mapa.set(chave, m);
+        }
+    }
+    return [...mapa.values()].sort((a, b) => {
+        const ea = Number(a?.em ?? 0), eb = Number(b?.em ?? 0);
+        if (ea !== eb) return ea - eb;
+        return String(a?.mid ?? '').localeCompare(String(b?.mid ?? ''));
+    });
+}
+
+/**
+ * Saldo derivado da trilha: aportes − retiradas.
+ *
+ * ⚠️ `null` quando NÃO há trilha — e o chamador precisa tratar isso. Reserva
+ * criada antes de 2026-08-16 tem `saved` sem nenhum movimento; devolver 0 ali
+ * ZERARIA o dinheiro de quem já usava a feature. Ver `migrarSaldoLegado`.
+ */
+export function saldoDeMovimentos(movimentos) {
+    if (!Array.isArray(movimentos) || movimentos.length === 0) return null;
+    let total = 0;
+    for (const m of movimentos) {
+        const v = Number(m?.valor);
+        if (!isFinite(v) || v <= 0) continue;
+        if (m.tipo === 'aporte')        total += v;
+        else if (m.tipo === 'retirada') total -= v;
+    }
+    return Math.round(total * 100) / 100;
+}
+
+/**
+ * Reserva antiga (saldo sem trilha) ganha UM movimento de abertura, para entrar
+ * no modelo novo sem perder um centavo.
+ *
+ * O `mid` é DETERMINÍSTICO (`legado:<id da reserva>`): se dois perfis migrarem a
+ * mesma reserva ao mesmo tempo, a união reconhece as duas entradas como a mesma
+ * e o saldo não dobra. É a diferença entre migrar e duplicar dinheiro.
+ *
+ * MUTA a meta. Retorna true se migrou.
+ */
+export function migrarSaldoLegado(meta, saldoForcado) {
+    if (!meta || typeof meta !== 'object') return false;
+    if (Array.isArray(meta.movimentos) && meta.movimentos.length > 0) return false;
+    const saldo = Math.round(Number(saldoForcado ?? meta.saved ?? 0) * 100) / 100;
+    if (!isFinite(saldo) || saldo <= 0) return false;
+
+    meta.movimentos = [{
+        mid:        `legado:${String(meta.id ?? '')}`,
+        memberId:   null,
+        memberNome: 'Saldo anterior',
+        tipo:       'aporte',
+        valor:      saldo,
+        data:       null,
+        hora:       null,
+        em:         0,        // sempre primeiro na ordem: é o ponto de partida
+    }];
+    return true;
+}
+
+/**
+ * O saldo legado a adotar quando as cópias divergem SEM trilha.
+ *
+ * É o MAIOR, e o motivo importa: sem trilha não dá para saber quais aportes são
+ * independentes. No caso medido em 2026-08-16 — B com 500, A com 1000 — os 500
+ * de B já estavam DENTRO dos 1000 de A (A viu o depósito de B antes de aportar).
+ * Somar daria 1500 e inventaria dinheiro; pegar o primeiro daria 500 e apagaria
+ * o aporte de A. O maior é o único que representa o acumulado real.
+ *
+ * A partir da migração isto deixa de importar: com trilha, aportes somam de
+ * verdade porque cada um tem `mid` próprio.
+ */
+export function saldoLegadoMaisCompleto(metas) {
+    let maior = 0;
+    for (const m of metas) {
+        if (!m || (Array.isArray(m.movimentos) && m.movimentos.length > 0)) continue;
+        const v = Math.round(Number(m.saved || 0) * 100) / 100;
+        if (isFinite(v) && v > maior) maior = v;
+    }
+    return maior;
 }
 
 /**
