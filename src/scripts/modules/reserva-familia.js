@@ -370,13 +370,50 @@ export function reconciliarCopiaAtiva(metaAtiva, profiles) {
         mudou = true;
     }
 
-    // ── 2. O SALDO É DERIVADO DA TRILHA ─────────────────────────────────────
-    // Deixa de ser um número que as cópias disputam. Duas pessoas aportando ao
-    // mesmo tempo agora SOMAM — antes uma vencia e a outra sumia.
+    // ── 2. O SALDO SEGUE A TRILHA — MAS A TRILHA NUNCA APAGA DINHEIRO ───────
+    //
+    // ⚠️ ISTO AQUI JÁ CAUSOU PERDA VISÍVEL (medido em 2026-08-16):
+    //
+    //   ANTES  saved=500 · movs=[Saldo anterior:500]
+    //   aporte saved=600 · movs=[Saldo anterior:500]   ← a trilha não recebeu
+    //   depois saved=500                                ← a derivação REVERTEU
+    //
+    // Existe caminho de aporte que mexe em `saved` sem chamar
+    // `registrarMovimento`. Enquanto a trilha estiver incompleta, derivar às
+    // cegas DESFAZ o aporte na cara do usuário.
+    //
+    // A regra, então, é assimétrica de propósito:
+    //   • trilha explica MAIS que o saldo  → o saldo sobe (é a soma dos aportes
+    //     de todos, e é justamente o que esta mudança veio trazer);
+    //   • trilha explica MENOS             → NÃO baixa. O saldo é a verdade, e a
+    //     diferença vira um movimento de ajuste — a trilha se completa sozinha
+    //     em vez de apagar o que não conhece.
+    //
+    // Assim o dinheiro nunca some por falta de registro, e a trilha converge
+    // para a verdade a cada reconciliação.
     const derivado = saldoDeMovimentos(unida);
-    if (derivado !== null && Number(metaAtiva.saved || 0) !== derivado) {
-        metaAtiva.saved = derivado;
-        mudou = true;
+    const atual = Math.round(Number(metaAtiva.saved || 0) * 100) / 100;
+
+    if (derivado !== null && derivado !== atual) {
+        if (derivado > atual) {
+            metaAtiva.saved = derivado;          // aporte de outro perfil entrando
+            mudou = true;
+        } else {
+            // Falta trilha para explicar o saldo: registra o que falta em vez de
+            // reverter. `mid` determinístico pelo valor para que a mesma lacuna,
+            // vista por duas cópias, não vire dois ajustes.
+            const falta = Math.round((atual - derivado) * 100) / 100;
+            const mid = `ajuste:${String(metaAtiva.id ?? '')}:${falta}:${unida.length}`;
+            if (!unida.some(m => m.mid === mid)) {
+                unida.push({
+                    mid, memberId: null, memberNome: 'Ajuste',
+                    tipo: 'aporte', valor: falta, data: null, hora: null,
+                    em: Date.now(),
+                });
+                metaAtiva.movimentos = unida;
+                mudou = true;
+            }
+        }
     }
 
     // ── 3. Os demais campos ainda seguem a cópia mais recente ───────────────

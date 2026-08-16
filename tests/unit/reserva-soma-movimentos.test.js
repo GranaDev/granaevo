@@ -237,3 +237,51 @@ describe('⭐ a cópia ativa sozinha também precisa migrar', () => {
     assert.equal(so.saved, 1500)
   })
 })
+
+// ═════════════════════════════════════════════════════════════════════════════
+describe('⭐ a derivação NUNCA apaga dinheiro que não sabe explicar', () => {
+  // ACHADO em produção, e foi um defeito que EU introduzi ao derivar o saldo:
+  //
+  //   ANTES  saved=500 · movs=[Saldo anterior:500]
+  //   aporte saved=600 · movs=[Saldo anterior:500]   ← a trilha não recebeu
+  //   depois saved=500                                ← a derivação REVERTEU
+  //
+  // Existe caminho de aporte que mexe em `saved` sem registrar o movimento.
+  // Derivar às cegas desfazia o aporte na cara do usuário.
+  test('⭐ trilha incompleta NÃO reverte o saldo', () => {
+    const m = { id: 'r1', compartilhada: true, membros: ['64', '65'], saved: 600, lastUpdate: T,
+                movimentos: [{ mid: 'legado:r1', memberNome: 'Saldo anterior', tipo: 'aporte', valor: 500, em: 0 }] }
+    R.reconciliarCopiaAtiva(m, [{ id: '64', metas: [m] }])
+    assert.equal(m.saved, 600, 'a derivação reverteu um aporte — dinheiro sumindo da tela')
+  })
+
+  test('a diferença vira movimento de ajuste, e a trilha se completa', () => {
+    const m = { id: 'r1', compartilhada: true, membros: ['64'], saved: 600, lastUpdate: T,
+                movimentos: [{ mid: 'legado:r1', memberNome: 'Saldo anterior', tipo: 'aporte', valor: 500, em: 0 }] }
+    R.reconciliarCopiaAtiva(m, [{ id: '64', metas: [m] }])
+    assert.equal(m.movimentos.length, 2)
+    assert.equal(R.saldoDeMovimentos(m.movimentos), 600, 'a trilha não passou a explicar o saldo')
+  })
+
+  test('⭐ o ajuste não se repete a cada render', () => {
+    // `renderMetasList` persiste quando a reconciliação devolve true. Um ajuste
+    // por render encheria a trilha e salvaria sem parar.
+    const m = { id: 'r1', compartilhada: true, membros: ['64'], saved: 600, lastUpdate: T,
+                movimentos: [{ mid: 'legado:r1', memberNome: 'Saldo anterior', tipo: 'aporte', valor: 500, em: 0 }] }
+    const P = [{ id: '64', metas: [m] }]
+    R.reconciliarCopiaAtiva(m, P); R.reconciliarCopiaAtiva(m, P); R.reconciliarCopiaAtiva(m, P)
+    assert.equal(m.movimentos.length, 2, 'o ajuste se repetiu a cada reconciliação')
+    assert.equal(m.saved, 600)
+  })
+
+  test('mas o saldo AINDA SOBE quando outro perfil aporta', () => {
+    // A assimetria precisa valer nos dois sentidos: nunca reduzir sem explicar,
+    // e sempre subir quando a trilha traz aporte de outra cópia.
+    const a = { id: 'r1', compartilhada: true, membros: ['64','65'], saved: 0, lastUpdate: T, movimentos: [] }
+    const b = { id: 'r1', compartilhada: true, membros: ['64','65'], saved: 0, lastUpdate: T, movimentos: [] }
+    R.registrarMovimento(a, { id: '64', nome: 'Giusepp', tipo: 'aporte', valor: 500 })
+    R.registrarMovimento(b, { id: '65', nome: 'Meow',    tipo: 'aporte', valor: 300 })
+    R.reconciliarCopiaAtiva(a, [{ id: '64', metas: [a] }, { id: '65', metas: [b] }])
+    assert.equal(a.saved, 800)
+  })
+})
