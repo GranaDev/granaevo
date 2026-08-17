@@ -13,7 +13,7 @@ let _carregando = false;
 // FONTE ÚNICA: public/scripts/modules/graficos.js (não há mais cópia em src/ —
 // a duplicata divergia e servia cores de tema escuro no tema claro). Ao editar
 // a engine, suba o ?v= abaixo para invalidar o cache do navegador.
-const _GRAFICOS_SRC = '/scripts/modules/graficos.js?v=6';
+const _GRAFICOS_SRC = '/scripts/modules/graficos.js?v=7';
 
 export function init(ctx) {
     _ctx = ctx;
@@ -21,6 +21,30 @@ export function init(ctx) {
     window.atualizarGraficos = () => atualizarGraficos();
     window.exportarGraficos  = () => exportarGraficos();
     inicializarGraficos();
+}
+
+// ── A PONTE DAS RESERVAS ────────────────────────────────────────────────────
+// A engine de gráficos é um script CLÁSSICO (public/), então não importa módulo
+// ES. Mas a conta das reservas da conta não pode ser reescrita lá: a reserva
+// compartilhada tem uma cópia no slot de CADA membro, e somar `window.metas`
+// contaria o mesmo cofre uma vez por perfil.
+//
+// Então a regra continua num lugar só (modules/relatorio-reservas.js, puro e
+// testado, o mesmo que a aba Relatórios usa) e aqui só a penduramos numa função
+// global. FUNÇÃO, não valor: a engine repinta várias vezes, e um retrato
+// congelado no boot mostraria o saldo de antes do último aporte.
+let _consolidar = null;
+async function _ligarPonteDeReservas() {
+    try {
+        if (!_consolidar) {
+            ({ consolidarReservas: _consolidar } = await import('../modules/relatorio-reservas.js?v=1'));
+        }
+        window.__reservasDaConta = () => _consolidar(_ctx?.allProfilesData);
+    } catch (e) {
+        // Sem a ponte a seção some, e o resto dos gráficos continua de pé.
+        // Melhor um card a menos do que a aba inteira em branco.
+        _ctx?._log?.warn?.('[graficos] ponte de reservas indisponível:', e?.message ?? e);
+    }
 }
 
 // ========== GRÁFICOS - CARGA SOB DEMANDA ==========
@@ -46,6 +70,11 @@ function _carregarScript(src, integrity) {
 }
 
 async function inicializarGraficos() {
+    // A ponte tem de existir ANTES da engine pintar: ela lê `__reservasDaConta`
+    // no meio do render, de forma síncrona. Ligada aqui, e não no init, porque
+    // este caminho é o único por onde TODA repintura passa.
+    await _ligarPonteDeReservas();
+
     // Já tudo carregado: só re-renderiza a UI (re-entrância é segura — guards internos).
     if (typeof Chart !== 'undefined' && window.GraficosGranaEvo) {
         _ctx._chartJsCarregado = true;
@@ -80,7 +109,10 @@ async function inicializarGraficos() {
 
 function atualizarGraficos() {
     if (window.GraficosGranaEvo?.gerar) {
-        window.GraficosGranaEvo.gerar();
+        // Repintura pedida pelo usuário: a ponte pode não estar de pé se a
+        // primeira carga falhou. `then` sem await — a engine lê a função no
+        // render, e um card a menos nunca vale travar o botão.
+        _ligarPonteDeReservas().finally(() => window.GraficosGranaEvo.gerar());
     } else if (typeof gerarGraficos === 'function') {
         // fallback para versões anteriores do graficos.js
         gerarGraficos();

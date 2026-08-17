@@ -8,7 +8,7 @@ import {
     montarRosterConvite,
     marcarReservaAtualizada, reconciliarCopiaAtiva,
     depositoLiquidoDe, ehUltimoMembro, sairDaReserva,
-    trilhaCheia, LIMITE_APORTES,
+    trilhaCheia, LIMITE_APORTES, outrosMembros,
     mesesComMovimento, movimentosDoMes, rotuloMes,
 } from '../modules/reserva-familia.js?v=9';
 import { aplicarMascaraMoeda, lerMoeda, definirMoeda } from '../modules/mascara-moeda.js?v=1';
@@ -1163,6 +1163,35 @@ function abrirMetaForm(editId = null) {
             // uma reserva sem participantes sumiria da tela de todo mundo).
             if (compartilhada && rosterMembros.length === 0) {
                 rosterMembros = [String(_ctx.perfilAtivo?.id ?? '')].filter(Boolean);
+            }
+
+            // ── DESPARTILHAR COM GENTE DENTRO NÃO PODE ──────────────────────
+            //
+            // Desmarcar "compartilhada" transformava um cofre de duas pessoas no
+            // cofre de UMA — com o dinheiro da outra dentro, sem devolver nada e
+            // sem avisar ninguém.
+            //
+            // Não dá para devolver automaticamente: o dinheiro só volta para
+            // alguém por uma transação NO SLOT DELE, e ninguém escreve no slot de
+            // ninguém (a INVARIANTE de reserva-familia.js). Devolver exigiria uma
+            // "parte a reclamar" que o app do outro materializa depois — que é
+            // exatamente a dissolução em bloco que este produto já testou e
+            // descartou: quem clicava decidia quanto o OUTRO levava.
+            //
+            // Então a saída é individual, como o resto da feature: cada um sai da
+            // reserva (e recebe a parte dele na hora). Aqui só recusamos.
+            if (isEdit && ehCompartilhada(meta) && !compartilhada) {
+                const outros = outrosMembros(meta, _ctx.perfilAtivo?.id);
+                if (outros.length > 0) {
+                    const nomes = outros
+                        .map(id => (_ctx.usuarioLogado?.perfis || []).find(p => String(p.id) === id))
+                        .map(p => (p?.nome || '').trim())
+                        .filter(Boolean);
+                    const quem = nomes.length ? nomes.join(', ') : 'Outro perfil';
+                    return _ctx.mostrarNotificacao(
+                        `${quem} ainda participa desta reserva. Para deixar de compartilhar, cada um precisa sair pela própria tela — quem sai recebe a parte dele de volta.`,
+                        'warning');
+                }
             }
 
             if (isEdit) {
@@ -3353,7 +3382,8 @@ function abrirGuardarForm() {
 // ========== AJUSTAR VALOR DA RESERVA ==========
 // Reconciliação: corrige o valor atual da reserva (meta.saved) para bater com
 // o valor real do usuário. NÃO cria transação e NÃO mexe no saldo do dashboard —
-// apenas acerta o valor exibido da reserva. Registra o ajuste em historicoAjustes.
+// apenas acerta o valor exibido da reserva. Em reserva COMPARTILHADA o ajuste
+// entra na trilha (`movimentos`) com nome e data — é dinheiro do pool comum.
 function abrirAjusteForm() {
     if (!_ctx.metaSelecionadaId) return _ctx.mostrarNotificacao('Selecione uma reserva primeiro.', 'error');
 
@@ -3510,14 +3540,17 @@ function abrirAjusteForm() {
             // ── Aplica o ajuste (reconciliação — sem transação) ──────────────
             meta.saved = novoValor;
 
-            if (!Array.isArray(meta.historicoAjustes)) meta.historicoAjustes = [];
-            meta.historicoAjustes.push({
-                data:           dh.data,
-                hora:           dh.hora,
-                valorAnterior,
-                valorNovo:      novoValor,
-                delta,
-            });
+            // ⚠️ Aqui havia um `meta.historicoAjustes.push({...})`. Ele NUNCA foi
+            // gravado: `historicoAjustes` não está no allowlist do save
+            // (dashboard.js `_ALLOWED_KEYS.meta`), então a portaria descartava o
+            // campo em toda gravação — e nenhuma tela jamais o leu. Era escrita
+            // pura, dando a impressão de que existia um histórico.
+            //
+            // Não foi para o allowlist de propósito: seria uma SEGUNDA história
+            // paralela do mesmo fato. Na reserva compartilhada o ajuste já entra
+            // na trilha logo acima, com nome e data, e aparece no extrato "Quem
+            // colocou". Se um dia a reserva privada precisar de histórico, o
+            // caminho é a MESMA trilha — não uma estrutura ao lado.
 
             _ctx.salvarDados();
             _ctx.atualizarTudo();

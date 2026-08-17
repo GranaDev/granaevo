@@ -323,6 +323,37 @@ export function sairDaReserva(meta, perfilId, valor, nome) {
     return { ok: true, valor: v, ultimo };
 }
 
+/**
+ * Quem mais está dentro desta reserva, além de mim? (ids de perfil)
+ *
+ * É a pergunta que decide se posso DESPARTILHAR: desmarcar "compartilhada"
+ * transformaria um cofre de duas pessoas no cofre de UMA — com o dinheiro da
+ * outra dentro, sem devolver nada e sem avisar.
+ *
+ * Devolver automaticamente não é possível por desenho: o dinheiro só volta para
+ * alguém por uma transação NO SLOT DELE, e ninguém escreve no slot de ninguém
+ * (a INVARIANTE do topo). Fazer isso exigiria uma "parte a reclamar" que o app
+ * do outro materializa depois — a dissolução em bloco que este produto já
+ * testou e descartou, porque quem clicava decidia quanto o OUTRO levava.
+ *
+ * Então a saída continua individual: cada um sai pela própria tela e recebe a
+ * parte dele na hora (`sairDaReserva`). Enquanto houver outro membro, a tela
+ * recusa — e é para isso que esta função existe.
+ */
+export function outrosMembros(meta, perfilId) {
+    if (!ehCompartilhada(meta)) return [];
+    const pid = String(perfilId ?? '');
+    return (Array.isArray(meta.membros) ? meta.membros : [])
+        .filter(id => id != null && id !== '')
+        .map(String)
+        .filter(id => id !== pid);
+}
+
+/** Posso deixar de compartilhar esta reserva? (só quando estou sozinho nela) */
+export function podeDespartilhar(meta, perfilId) {
+    return outrosMembros(meta, perfilId).length === 0;
+}
+
 /** Carimba a reserva como atualizada AGORA (para reconciliar entre cópias). MUTA. */
 export function marcarReservaAtualizada(meta) {
     if (meta && typeof meta === 'object') meta.lastUpdate = new Date().toISOString();

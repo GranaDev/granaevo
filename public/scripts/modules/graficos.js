@@ -837,6 +837,7 @@ function renderizarGraficosCompartilhadosUI(dadosGerais, dadosPorPerfil) {
             ${renderizarGraficoLinha(dadosGerais)}
         </div>
         ${renderizarRankingCategorias(dadosGerais)}
+        ${renderizarSecaoReservas(_dadosReservas())}
         ${htmlComparacao}
         ${renderizarTendencias(dadosGerais)}
     `);
@@ -1027,6 +1028,7 @@ function renderizarTodosGraficos(transacoes) {
         </div>
         ${renderizarRankingCategorias(dados)}
         ${renderizarTendencias(dados)}
+        ${renderizarSecaoReservas(_dadosReservas())}
         ${renderizarSecaoPatrimonio(dadosPatr)}
     `);
 
@@ -2095,7 +2097,14 @@ function navegarPara(pagina) {
 
 function _calcPatrimonioHistorico() {
     const txTodas = UserStore.getTransacoes();
-    const metas   = Array.isArray(window.metas) ? [...window.metas] : [];
+    // `saiu` = RECIBO de reserva compartilhada da qual este perfil já saiu. A
+    // cópia fica no blob porque a trilha dela é o que fecha a conta de quem
+    // ficou (ver src/scripts/modules/reserva-familia.js), mas o dinheiro já
+    // voltou para esta pessoa por uma transação de `retirada_reserva` — que o
+    // laço abaixo soma no saldo. Contar o `monthly` do recibo junto colocaria o
+    // MESMO dinheiro duas vezes no patrimônio histórico.
+    const metas   = Array.isArray(window.metas)
+        ? window.metas.filter(m => m?.saiu !== true) : [];
 
     // Coleta todos os YYYY-MM com dados
     const mesesSet = new Set();
@@ -2284,6 +2293,107 @@ function criarGraficoPatrimonio(canvasId, d) {
             }
         }
     });
+}
+
+// ========== RESERVAS DA CONTA ==========
+//
+// "Quanto a conta tem guardado, e quem pôs o quê." A conta em si NÃO mora aqui:
+// vem de `window.__reservasDaConta()`, que db-graficos.js liga ao módulo
+// src/scripts/modules/relatorio-reservas.js — o mesmo que a aba Relatórios usa.
+//
+// ⚠️ Por que não somar `window.metas` direto: a reserva compartilhada tem uma
+// cópia no slot de CADA membro. Um cofre de R$ 200 aparece como R$ 200 na tela
+// de cada participante (verdade — é o mesmo cofre), mas somar os perfis daria
+// R$ 400. Uma segunda implementação da regra aqui divergiria da do relatório;
+// este app já pagou esse preço com o modelo antigo e o novo de fatura.
+
+function renderizarSecaoReservas(d) {
+    if (!d || !Array.isArray(d.reservas) || d.reservas.length === 0) return '';
+
+    const compartilhadas = d.reservas.filter(r => r.compartilhada);
+    const linhas = d.reservas.slice(0, 12).map(r => {
+        const pct = r.objetivo > 0
+            ? Math.min(100, Math.round((r.saved / r.objetivo) * 100)) : null;
+        const nome = _sanitize(String(r.descricao ?? ''));
+        const selo = r.compartilhada ? '👥 ' : '';
+        return `
+            <div class="reservas-linha">
+                <div class="reservas-linha-topo">
+                    <span class="reservas-linha-nome">${selo}${nome}</span>
+                    <strong class="reservas-linha-valor">${formatarMoeda(r.saved)}</strong>
+                </div>
+                ${pct !== null ? `
+                <div class="reservas-barra"><div class="reservas-barra-fill" style="width:${pct}%"></div></div>
+                <div class="reservas-linha-sub">${pct}% de ${formatarMoeda(r.objetivo)}</div>` : ''}
+            </div>`;
+    }).join('');
+
+    // Composição da reserva compartilhada: quem colocou quanto. É a resposta
+    // visual para "essa reserva é nossa, mas quanto é de cada um?".
+    const composicao = compartilhadas.map(r => {
+        const pessoas = (r.membros || []).filter(m => !m.sistema && m.liquido > 0);
+        if (pessoas.length === 0) return '';
+        const total = pessoas.reduce((s, m) => s + m.liquido, 0) || 1;
+        const barras = pessoas.map((m, i) => {
+            const pct = Math.max(2, Math.round((m.liquido / total) * 100));
+            const cor = ['#00d68f', '#4da6ff', '#ffd166', '#ff6b6b', '#b388ff'][i % 5];
+            return `<div class="reservas-comp-parte" style="width:${pct}%;background:${cor}"
+                         title="${_sanitize(m.nome)}: ${formatarMoeda(m.liquido)}"></div>`;
+        }).join('');
+        const legenda = pessoas.map((m, i) => {
+            const cor = ['#00d68f', '#4da6ff', '#ffd166', '#ff6b6b', '#b388ff'][i % 5];
+            return `<span class="reservas-comp-item">
+                        <i class="reservas-comp-bolinha" style="background:${cor}"></i>
+                        ${_sanitize(m.nome)} · ${formatarMoeda(m.liquido)}
+                    </span>`;
+        }).join('');
+        return `
+            <div class="reservas-comp">
+                <div class="reservas-comp-titulo">👥 ${_sanitize(String(r.descricao ?? ''))}</div>
+                <div class="reservas-comp-barra">${barras}</div>
+                <div class="reservas-comp-legenda">${legenda}</div>
+            </div>`;
+    }).join('');
+
+    return `
+        <div class="patrimonio-section">
+            <div class="grafico-titulo-container">
+                <h3 class="grafico-titulo"><i class="fas fa-piggy-bank"></i> Reservas da Conta</h3>
+                <p style="color:var(--text-secondary);font-size:0.82rem;margin-top:4px;">
+                    ${compartilhadas.length > 0
+                        ? 'A reserva compartilhada é um cofre só — contada uma vez aqui, mesmo aparecendo na tela de cada participante.'
+                        : 'Total guardado em todas as reservas da conta.'}
+                </p>
+            </div>
+            <div class="patrimonio-summary-cards">
+                <div class="patrimonio-card">
+                    <div class="patrimonio-card-label">Total guardado</div>
+                    <div class="patrimonio-card-value" style="color:var(--primary);">${formatarMoeda(d.total)}</div>
+                </div>
+                <div class="patrimonio-card">
+                    <div class="patrimonio-card-label">Reservas</div>
+                    <div class="patrimonio-card-value">${d.reservas.length}</div>
+                </div>
+                ${compartilhadas.length > 0 ? `
+                <div class="patrimonio-card">
+                    <div class="patrimonio-card-label">Em compartilhadas</div>
+                    <div class="patrimonio-card-value">${formatarMoeda(d.totalCompartilhado)}</div>
+                </div>` : ''}
+            </div>
+            <div class="reservas-lista">${linhas}</div>
+            ${composicao}
+        </div>`;
+}
+
+/** A conta das reservas, ou null quando a ponte com o módulo não está de pé. */
+function _dadosReservas() {
+    try {
+        return typeof window.__reservasDaConta === 'function'
+            ? window.__reservasDaConta() : null;
+    } catch (e) {
+        console.warn('reservas:', e);
+        return null;
+    }
 }
 
 // ========== NAMESPACE PÚBLICO (ÚNICO — R6: retrocompat global removida) ==========

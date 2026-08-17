@@ -565,3 +565,80 @@ describe('o RECIBO não pode ser lido como reserva ativa', () => {
       'a exportação de portabilidade passou a esconder dado do titular')
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('⭐ despartilhar com gente dentro não pode', () => {
+  // Desmarcar "compartilhada" virava o cofre de duas pessoas em cofre de uma —
+  // com o dinheiro da outra dentro, sem devolver e sem avisar. Devolver
+  // automaticamente exigiria escrever no slot do outro (proibido) ou uma "parte
+  // a reclamar", que é a dissolução em bloco que este produto já descartou.
+  const reserva = (membros) => ({ id: 'r1', compartilhada: true, membros })
+
+  test('⭐ com outro membro no roster, a tela recusa', () => {
+    assert.equal(R.podeDespartilhar(reserva(['64', '65']), '64'), false,
+      'daria para ficar com o dinheiro do outro desmarcando uma caixinha')
+    assert.deepEqual(R.outrosMembros(reserva(['64', '65']), '64'), ['65'])
+  })
+
+  test('sozinho na reserva, pode', () => {
+    assert.equal(R.podeDespartilhar(reserva(['64']), '64'), true)
+    assert.equal(R.podeDespartilhar(reserva([]), '64'), true)
+  })
+
+  test('id numérico (perfil legado) é comparado como string', () => {
+    assert.equal(R.podeDespartilhar({ id: 'r1', compartilhada: true, membros: [64] }, 64), true)
+    assert.equal(R.podeDespartilhar({ id: 'r1', compartilhada: true, membros: [64, 65] }, '64'), false)
+  })
+
+  test('reserva que nem é compartilhada não tem o que barrar', () => {
+    assert.equal(R.podeDespartilhar({ id: 'r1', membros: ['64', '65'] }, '64'), true)
+  })
+
+  test('roster com lixo não inventa membro fantasma', () => {
+    // `String(null)` é 'null' e passaria por um filtro de truthy — a mesma
+    // armadilha já documentada em montarRosterConvite.
+    assert.equal(R.podeDespartilhar({ id: 'r1', compartilhada: true, membros: [null, '', '64'] }, '64'), true)
+  })
+
+  test('a tela de edição usa a função pura (e não uma cópia da regra)', () => {
+    const src = readFileSync(join(RAIZ, 'src/scripts/pages/db-metas.js'), 'utf8')
+    assert.match(src, /outrosMembros\(meta, _ctx\.perfilAtivo\?\.id\)/,
+      'db-metas voltou a reimplementar a regra em vez de chamar a função testada')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('a engine de gráficos também ignora o recibo', () => {
+  // graficos.js é script CLÁSSICO e soma `m.monthly` para o patrimônio
+  // histórico. O dinheiro do recibo já voltou por uma transação de retirada,
+  // que o mesmo cálculo soma — contar os dois põe o valor em dobro.
+  const soCodigo = (txt) => txt.split('\n')
+    .filter((l) => !l.trim().startsWith('//') && !l.trim().startsWith('*') && !l.trim().startsWith('/*'))
+    .join('\n')
+
+  test('⭐ _calcPatrimonioHistorico filtra `saiu`', () => {
+    // Peneira comentário: a palavra "saiu" aparece no texto que EXPLICA a regra,
+    // e a asserção crua passaria com o filtro removido.
+    const src = soCodigo(readFileSync(join(RAIZ, 'public/scripts/modules/graficos.js'), 'utf8'))
+    assert.match(src, /window\.metas\.filter\(m => m\?\.saiu !== true\)/,
+      'o patrimônio histórico dos gráficos voltou a contar a reserva de que o perfil saiu')
+  })
+
+  test('⭐ a seção de reservas NÃO reimplementa a conta', () => {
+    // Se a engine somasse `window.metas`, contaria a reserva compartilhada uma
+    // vez por perfil. Ela tem de consumir a mesma função do relatório.
+    const src = soCodigo(readFileSync(join(RAIZ, 'public/scripts/modules/graficos.js'), 'utf8'))
+    assert.match(src, /window\.__reservasDaConta/,
+      'a engine parou de usar a ponte e provavelmente recalcula por conta própria')
+    const ponte = readFileSync(join(RAIZ, 'src/scripts/pages/db-graficos.js'), 'utf8')
+    assert.match(ponte, /relatorio-reservas\.js/,
+      'a ponte não aponta mais para o módulo da regra')
+  })
+
+  test('a versão do script clássico foi bumpada (senão o navegador serve o antigo)', () => {
+    const ponte = readFileSync(join(RAIZ, 'src/scripts/pages/db-graficos.js'), 'utf8')
+    const m = /graficos\.js\?v=(\d+)/.exec(ponte)
+    assert.ok(m, 'o ?v= sumiu do caminho da engine')
+    assert.ok(Number(m[1]) >= 7, `engine editada e servida como v${m[1]} — cache antigo continuaria valendo`)
+  })
+})

@@ -1240,3 +1240,51 @@
         max-width: 100% !important;
     }
 }
+
+/* =====================================================
+   RESERVAS DA CONTA — aba Gráficos
+   Reaproveita .patrimonio-section/.patrimonio-card (já definidos em
+   _db-all.css) para o quadro e os cartões de resumo. Aqui ficam só as peças
+   próprias: a lista de reservas e a barra de composição por membro.
+   Cores por var() — o tema claro entra sozinho, sem regra duplicada.
+   ===================================================== */
+.reservas-lista { display: flex; flex-direction: column; gap: 10px; }
+
+.reservas-linha {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px;
+    padding: 10px 14px;
+}
+.reservas-linha-topo {
+    display: flex; justify-content: space-between;
+    align-items: baseline; gap: 10px;
+}
+.reservas-linha-nome  { font-size: 0.92rem; font-weight: 600; }
+.reservas-linha-valor { color: var(--primary); white-space: nowrap; }
+.reservas-linha-sub   { font-size: 0.76rem; color: var(--text-secondary); margin-top: 4px; }
+
+.reservas-barra {
+    height: 6px; border-radius: 999px; margin-top: 8px;
+    background: rgba(255,255,255,0.08); overflow: hidden;
+}
+.reservas-barra-fill { height: 100%; background: var(--primary); border-radius: 999px; }
+
+/* Composição: quem colocou quanto, em uma barra só */
+.reservas-comp { margin-top: 18px; }
+.reservas-comp-titulo {
+    font-size: 0.86rem; font-weight: 600; margin-bottom: 8px;
+}
+.reservas-comp-barra {
+    display: flex; height: 14px; border-radius: 999px;
+    overflow: hidden; background: rgba(255,255,255,0.06);
+}
+.reservas-comp-parte { height: 100%; }
+.reservas-comp-legenda {
+    display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px;
+    font-size: 0.8rem; color: var(--text-secondary);
+}
+.reservas-comp-item { display: inline-flex; align-items: center; gap: 6px; }
+.reservas-comp-bolinha {
+    width: 10px; height: 10px; border-radius: 50%; display: inline-block;
+}

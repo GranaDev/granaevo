@@ -280,7 +280,7 @@ async function popularFiltrosRelatorio() {
 
     // Carrega o histórico de todos os perfis em background (casal/família) e
     // re-renderiza as caixas de mês/ano com os meses realmente disponíveis.
-    if (_ctx.tipoRelatorioAtivo !== 'individual' && _ctx.tipoRelatorioAtivo !== 'patrimonio') {
+    if (_ctx.tipoRelatorioAtivo !== 'individual' && _ctx.tipoRelatorioAtivo !== 'patrimonio' && _ctx.tipoRelatorioAtivo !== 'reservas') {
         try {
             const userData = await dataManager.loadUserData();
             const periodosDisponiveis = new Set();
@@ -291,7 +291,7 @@ async function popularFiltrosRelatorio() {
             }
             // Só re-renderiza se o usuário ainda estiver num modo multi-perfil
             // (evita sobrescrever se ele trocou para individual/patrimônio enquanto carregava).
-            if (_ctx.tipoRelatorioAtivo !== 'individual' && _ctx.tipoRelatorioAtivo !== 'patrimonio') {
+            if (_ctx.tipoRelatorioAtivo !== 'individual' && _ctx.tipoRelatorioAtivo !== 'patrimonio' && _ctx.tipoRelatorioAtivo !== 'reservas') {
                 _renderPeriodos(periodosDisponiveis);
             }
         } catch (e) {
@@ -476,6 +476,7 @@ function setupBotoesRelatorio() {
     // Declarado no escopo da função (não dentro do if abaixo): o handler do botão
     // "Família" o referencia, e um `const` block-scoped causaria ReferenceError.
     let newBtnPatrimonio = null;
+    let newBtnReservas   = null;
     
     btnIndividual.parentNode.replaceChild(newBtnIndividual, btnIndividual);
     btnCasal.parentNode.replaceChild(newBtnCasal, btnCasal);
@@ -548,18 +549,189 @@ function setupBotoesRelatorio() {
         });
     }
 
+    // ── Reservas da conta ────────────────────────────────────────────────
+    // Mesmo padrão do patrimonial: não depende de mês/ano e se gera sozinha.
+    // Existe para responder "quanto a conta tem guardado?" SEM contar a reserva
+    // compartilhada uma vez por perfil — ver modules/relatorio-reservas.js.
+    const btnReservas = document.querySelector('.tipo-relatorio-btns [data-tipo="reservas"]');
+    if (btnReservas) {
+        newBtnReservas = btnReservas.cloneNode(true);
+        btnReservas.parentNode.replaceChild(newBtnReservas, btnReservas);
+
+        newBtnReservas.addEventListener('click', function () {
+            _ctx.tipoRelatorioAtivo = 'reservas';
+            newBtnIndividual.classList.remove('active');
+            newBtnCasal.classList.remove('active');
+            newBtnFamilia.classList.remove('active');
+            newBtnPatrimonio?.classList.remove('active');
+            newBtnReservas.classList.add('active');
+            perfilSelector.classList.remove('show');
+            const periodRow = document.querySelector('.rel-period-row');
+            if (periodRow) periodRow.style.display = 'none';
+            const resultado = document.getElementById('relatorioResultado');
+            if (resultado) {
+                resultado.classList.remove('js-hidden');
+                _gerarRelatorioReservas(resultado);
+            }
+        });
+    }
+    // O patrimonial também precisa apagar o "ativo" da aba de reservas.
+    newBtnPatrimonio?.addEventListener('click', () => newBtnReservas?.classList.remove('active'), true);
+
     // Restaura seletores ao trocar para outro tipo
     [newBtnIndividual, newBtnCasal, newBtnFamilia].forEach(btn => {
         btn.addEventListener('click', () => {
             const periodRow = document.querySelector('.rel-period-row');
             if (periodRow) periodRow.style.display = '';
+            newBtnReservas?.classList.remove('active');
         }, true);
     });
 }
 
 // _gerandoRelatorio é estado de dashboard.js, acessível via _ctx.
 
+// ══════════════════════════════════════════════════════════════════════════
+// RELATÓRIO DE RESERVAS DA CONTA
+//
+// Responde "quanto a conta tem guardado, e quem pôs o quê" — a pergunta que a
+// tela de Reservas responde por PERFIL, aqui respondida pela conta inteira.
+//
+// ⚠️ A razão de existir é uma armadilha de contagem: a reserva compartilhada
+// tem uma cópia no slot de cada membro. Um cofre de R$ 200 aparece como R$ 200
+// na tela de cada um (verdade: é o mesmo cofre), mas somar os perfis daria
+// R$ 400. A regra de contar UMA vez mora em modules/relatorio-reservas.js,
+// pura e testada, e é a MESMA que a aba Gráficos consome.
+//
+// Montado por DOM, não por string: nome de perfil e descrição de reserva são
+// texto do usuário, e `textContent` fecha a porta do XSS sem depender de
+// lembrar do escape em cada interpolação.
+// ══════════════════════════════════════════════════════════════════════════
+async function _gerarRelatorioReservas(container) {
+    container.textContent = '';
+    const _fmt = (v) => (_ctx.formatBRL ? _ctx.formatBRL(v) : `R$ ${Number(v).toFixed(2)}`);
+
+    const cabecalho = document.createElement('div');
+    cabecalho.className = 'rel-section-header';
+    cabecalho.style.cssText = 'display:flex; align-items:center; gap:8px; margin-bottom:14px;';
+    const ic = document.createElement('i');
+    ic.className = 'fas fa-piggy-bank';
+    ic.setAttribute('aria-hidden', 'true');
+    const tt = document.createElement('span');
+    tt.textContent = 'Reservas da conta';
+    cabecalho.appendChild(ic); cabecalho.appendChild(tt);
+    container.appendChild(cabecalho);
+
+    let dados;
+    try {
+        const [{ consolidarReservas }, userData] = await Promise.all([
+            import('../modules/relatorio-reservas.js?v=1'),
+            dataManager.loadUserData(),
+        ]);
+        dados = consolidarReservas(userData?.profiles);
+    } catch (e) {
+        _ctx._log?.warn?.('RELATORIO_RESERVAS_001', e?.message ?? e);
+        const erro = document.createElement('div');
+        erro.style.cssText = 'padding:24px; text-align:center; color:var(--text-secondary);';
+        erro.textContent = 'Não foi possível carregar as reservas agora. Tente de novo em instantes.';
+        container.appendChild(erro);
+        return;
+    }
+
+    if (dados.reservas.length === 0) {
+        const vazio = document.createElement('div');
+        vazio.style.cssText = 'padding:32px; text-align:center; color:var(--text-secondary);';
+        vazio.textContent = 'Nenhuma reserva criada ainda.';
+        container.appendChild(vazio);
+        return;
+    }
+
+    // ── Resumo ──────────────────────────────────────────────────────────────
+    const resumo = document.createElement('div');
+    resumo.style.cssText = 'display:flex; flex-wrap:wrap; gap:12px; margin-bottom:18px;';
+    const cartao = (rotulo, valor, cor) => {
+        const c = document.createElement('div');
+        c.style.cssText = 'flex:1 1 160px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px 14px;';
+        const r = document.createElement('div');
+        r.style.cssText = 'font-size:0.75rem; color:var(--text-secondary); margin-bottom:4px;';
+        r.textContent = rotulo;
+        const v = document.createElement('div');
+        v.style.cssText = `font-size:1.15rem; font-weight:700; color:${cor};`;
+        v.textContent = valor;
+        c.appendChild(r); c.appendChild(v);
+        return c;
+    };
+    const nCompart = dados.reservas.filter(r => r.compartilhada).length;
+    resumo.appendChild(cartao('Total guardado', _fmt(dados.total), 'var(--primary)'));
+    resumo.appendChild(cartao('Reservas', String(dados.reservas.length), 'var(--text-primary)'));
+    if (nCompart > 0) {
+        resumo.appendChild(cartao('Em reservas compartilhadas', _fmt(dados.totalCompartilhado), 'var(--text-primary)'));
+    }
+    container.appendChild(resumo);
+
+    if (nCompart > 0) {
+        const nota = document.createElement('div');
+        nota.style.cssText = 'background:rgba(77,166,255,0.08); border-left:3px solid #4da6ff; border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:0.82rem; color:var(--text-secondary); line-height:1.5;';
+        nota.textContent = 'A reserva compartilhada é um cofre só, contado uma vez aqui — mesmo aparecendo na tela de cada participante.';
+        container.appendChild(nota);
+    }
+
+    // ── Uma linha por reserva ───────────────────────────────────────────────
+    for (const r of dados.reservas) {
+        const card = document.createElement('div');
+        card.style.cssText = 'border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:12px 14px; margin-bottom:10px;';
+
+        const topo = document.createElement('div');
+        topo.style.cssText = 'display:flex; justify-content:space-between; align-items:baseline; gap:10px;';
+        const nome = document.createElement('strong');
+        nome.style.cssText = 'font-size:0.95rem;';
+        nome.textContent = (r.compartilhada ? '👥 ' : '') + r.descricao;
+        const valor = document.createElement('strong');
+        valor.style.cssText = 'color:var(--primary); white-space:nowrap;';
+        valor.textContent = _fmt(r.saved);
+        topo.appendChild(nome); topo.appendChild(valor);
+        card.appendChild(topo);
+
+        const sub = document.createElement('div');
+        sub.style.cssText = 'font-size:0.8rem; color:var(--text-secondary); margin-top:4px;';
+        const partes = [];
+        if (r.objetivo > 0) {
+            partes.push(`${Math.min(100, Math.round((r.saved / r.objetivo) * 100))}% de ${_fmt(r.objetivo)}`);
+        }
+        partes.push(r.perfis.join(', '));
+        sub.textContent = partes.join(' · ');
+        card.appendChild(sub);
+
+        // Quem colocou quanto — só faz sentido na compartilhada.
+        const pessoas = r.membros.filter(m => !m.sistema);
+        if (r.compartilhada && pessoas.length > 0) {
+            const div = document.createElement('div');
+            div.style.cssText = 'margin-top:8px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.06);';
+            for (const p of pessoas) {
+                const l = document.createElement('div');
+                l.style.cssText = 'display:flex; justify-content:space-between; font-size:0.84rem; padding:2px 0;';
+                const n = document.createElement('span');
+                n.textContent = p.nome;
+                const v = document.createElement('span');
+                v.style.color = p.liquido < 0 ? '#ff6b6b' : 'var(--text-primary)';
+                v.textContent = _fmt(p.liquido);
+                l.appendChild(n); l.appendChild(v);
+                div.appendChild(l);
+            }
+            card.appendChild(div);
+        }
+        container.appendChild(card);
+    }
+}
+
 async function gerarRelatorio() {
+    // Reservas da conta — não depende de recorte de período: é uma FOTO do que
+    // está guardado agora. Vem antes do resto pelo mesmo motivo do patrimonial.
+    if (_ctx.tipoRelatorioAtivo === 'reservas') {
+        const resultado = document.getElementById('relatorioResultado');
+        if (resultado) { resultado.classList.remove('js-hidden'); _gerarRelatorioReservas(resultado); }
+        return;
+    }
+
     // Patrimônio + Score juntos — não precisam de mês/ano
     if (_ctx.tipoRelatorioAtivo === 'patrimonio') {
         const resultado = document.getElementById('relatorioResultado');
