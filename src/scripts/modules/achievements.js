@@ -49,8 +49,12 @@ function _saldo(transacoes) {
     }
     return s;
 }
+// `saiu` = recibo de reserva compartilhada da qual o perfil saiu: a cópia
+// permanece no slot só para a trilha fechar a conta de quem ficou. O dinheiro já
+// voltou por uma transação de retirada — somar aqui contaria duas vezes.
+const _minha = (m) => m?.saiu !== true;
 function _reservado(metas) {
-    return metas.reduce((s, m) => s + Math.max(0, _num(m.saved)), 0);
+    return metas.filter(_minha).reduce((s, m) => s + Math.max(0, _num(m.saved)), 0);
 }
 // Patrimônio = saldo em conta + total reservado em metas.
 function _patrimonio(state) {
@@ -165,7 +169,7 @@ function _parcelas(s) {
 }
 
 function _metasConcluidas(metas) {
-    return metas.filter(m => _num(m.objetivo) > 0 && _num(m.saved) >= _num(m.objetivo)).length;
+    return metas.filter(m => _minha(m) && _num(m.objetivo) > 0 && _num(m.saved) >= _num(m.objetivo)).length;
 }
 
 // ── Métricas públicas para o catálogo de apresentação (barras de progresso) ──
@@ -209,9 +213,9 @@ export const ACHIEVEMENTS = Object.freeze([
     { id: 'reserva_20k',           rarity: 'epico', check: (s, ctx) => ctx.m.reservado >= 20000 },
     { id: 'meta_concluida',        rarity: 'raro',  check: (s) => _metasConcluidas(s.metas) >= 1 },
     { id: 'duas_metas_concluidas', rarity: 'epico', check: (s) => _metasConcluidas(s.metas) >= 2 },
-    { id: 'meta_grande',           rarity: 'epico', check: (s) => s.metas.some(m => _num(m.objetivo) >= 10000 && _num(m.saved) >= _num(m.objetivo)) },
-    { id: 'tres_metas',            rarity: 'raro',  check: (s) => s.metas.length >= 3 },
-    { id: 'cinco_metas',           rarity: 'epico', check: (s) => s.metas.length >= 5 },
+    { id: 'meta_grande',           rarity: 'epico', check: (s) => s.metas.some(m => _minha(m) && _num(m.objetivo) >= 10000 && _num(m.saved) >= _num(m.objetivo)) },
+    { id: 'tres_metas',            rarity: 'raro',  check: (s) => s.metas.filter(_minha).length >= 3 },
+    { id: 'cinco_metas',           rarity: 'epico', check: (s) => s.metas.filter(_minha).length >= 5 },
     { id: 'reserva_emergencia',    rarity: 'epico', check: (s, ctx) => ctx.m.gastoMedio > 0 && ctx.m.reservado >= 3 * ctx.m.gastoMedio },
 
     // ---- Hábito / consistência ----

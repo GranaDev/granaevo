@@ -763,6 +763,12 @@ async function carregarDadosPerfil(perfilId) {
         // fail-safe. Ver reestruturação 2026-07-17 e modules/fatura-parcelas.js.
         _migrarParcelasAntigas();
 
+        // Reserva compartilhada: o que o outro membro lançou entra AQUI, antes de
+        // qualquer tela ler `metas`. Sem isto o saldo da reserva só se atualizava
+        // ao abrir a aba Reservas — e o refetch do tempo real repintava o número
+        // velho. Ver `_sincronizarReservasCompartilhadas`.
+        await _sincronizarReservasCompartilhadas();
+
         // ✅ Apenas contadores — sem PII
         _log.info('✅ [carregarDadosPerfil] Carregamento concluído.',
             '| Transações:', transacoes.length,
@@ -1074,6 +1080,11 @@ const _ALLOWED_KEYS = Object.freeze({
         // Convite→aceite (v2): ids de perfil convidados ainda pendentes. Sem
         // esta chave o convite sumiria no primeiro save (allow-list).
         'convites',
+        // `saiu`: esta cópia virou RECIBO — saí da reserva (ou fui tirado do
+        // roster), mas a trilha dela continua sendo o que prova, para quem ficou,
+        // o que eu pus e o que levei. Sem esta chave o recibo perderia a marca no
+        // primeiro save e a reserva voltaria a aparecer como minha.
+        'saiu',
         // Carimbo p/ reconciliar cópias da reserva entre perfis (qual é a mais nova).
         'lastUpdate',
         // `tipoReserva` (caixinha/poupança/CDB/…) e `origemExistente` eram
@@ -1096,6 +1107,77 @@ const _ALLOWED_KEYS = Object.freeze({
         'ativa', 'criadaEm', 'ultimaCobranca', 'canceladaEm',
     ]),
 });
+
+// ── RESERVA COMPARTILHADA: recibo, convergência e relevância ────────────────
+//
+// Uma reserva compartilhada tem uma cópia no slot de cada membro, e NINGUÉM
+// escreve o slot de outro (a razão está no topo de modules/reserva-familia.js:
+// escrever cruzado apagava o aporte alheio). O que faz as cópias concordarem é
+// a reconciliação, que UNE as trilhas e deriva o saldo delas.
+
+/**
+ * Esta cópia é um RECIBO? (saí da reserva, ou fui tirado do roster.)
+ * Ela fica no slot para a trilha fechar a conta de quem ficou, mas não é mais
+ * minha: não conta em total, patrimônio, conquistas nem lista.
+ */
+function _ehRecibo(m) {
+    return m?.saiu === true;
+}
+
+/**
+ * Ids cuja mudança me alcança: o meu, mais quem divide (ou vai dividir) uma
+ * reserva comigo.
+ *
+ * ⚠️ `convites` entra junto, e não é detalhe. Quem eu convidei ainda não está em
+ * `membros` NA MINHA CÓPIA — o aceite dele acontece no slot dele. Sem contar os
+ * convidados, o primeiro aporte do recém-chegado era descartado pelo filtro do
+ * tempo real, e eu só descobria que ele entrou (e que pôs dinheiro) no F5
+ * seguinte. Era o último elo do "tempo real não funciona".
+ *
+ * Recibo (`saiu`) fica de fora: aquela reserva não é mais minha.
+ */
+function _perfisComReservaComigo() {
+    const meu = String(perfilAtivo?.id ?? '');
+    const ids = new Set(meu ? [meu] : []);
+    for (const m of (Array.isArray(metas) ? metas : [])) {
+        if (m?.compartilhada !== true || _ehRecibo(m)) continue;
+        for (const lista of [m.membros, m.convites]) {
+            if (!Array.isArray(lista)) continue;
+            for (const id of lista) if (id != null) ids.add(String(id));
+        }
+    }
+    return [...ids];
+}
+
+/**
+ * Traz o que os outros membros lançaram nas reservas que divido com eles.
+ *
+ * ⚠️ RODA NO LOAD, não só no render da aba Reservas. Antes isto vivia dentro de
+ * `renderMetasList` — um módulo LAZY. Quem estava na tela inicial (ou em
+ * qualquer outra) via o total de reservas do jeito que estava na última vez que
+ * abriu a lista, mesmo depois do refetch do tempo real.
+ *
+ * O `import()` é dinâmico de propósito: só quem TEM reserva compartilhada baixa
+ * o módulo, e o bundle de boot não engorda (este arquivo vive num teto de KB).
+ */
+async function _sincronizarReservasCompartilhadas() {
+    if (!Array.isArray(metas) || !metas.some(m => m?.compartilhada === true)) return false;
+    try {
+        const { reconciliarCopiaAtiva } = await import('../modules/reserva-familia.js?v=9');
+        const pid = perfilAtivo?.id;
+        let mudou = false;
+        for (const m of metas) {
+            if (m?.compartilhada === true && reconciliarCopiaAtiva(m, _allProfilesData, pid)) mudou = true;
+        }
+        if (mudou) salvarDados();
+        return mudou;
+    } catch (e) {
+        // Conforto, não integridade: sem isto a aba Reservas ainda reconcilia ao
+        // abrir. Falhar aqui não pode derrubar o load.
+        _log.warn('[reserva] reconciliação no load falhou:', e?.message ?? e);
+        return false;
+    }
+}
 
 // ========== ASSINATURAS — MOTOR DE COBRANÇA RECORRENTE ==========
 // Calcula a data (YYYY-MM-DD) da fatura do cartão à qual uma cobrança feita em
@@ -2969,6 +3051,7 @@ function atualizarDashboardResumo() {
     const saldo = saldoTotal;
 
     const totalReservasCalc = metas.reduce((s, m, i) => {
+        if (_ehRecibo(m)) return s;
         return s + toValorSeguro(m.saved, `meta[${i}] id=${m.id}`);
     }, 0);
 
@@ -4301,11 +4384,13 @@ function atualizarHeaderReservas() {
     
     // Calcular total reservado (soma de todas as metas)
     const totalReservado = metas.reduce((sum, meta) => {
+        if (_ehRecibo(meta)) return sum;
         return sum + Number(meta.saved || 0);
     }, 0);
-    
+
     // Contar reservas ativas (metas que ainda não atingiram o objetivo)
     const reservasAtivas = metas.filter(meta => {
+        if (_ehRecibo(meta)) return false;
         const saved = Number(meta.saved || 0);
         const objetivo = Number(meta.objetivo || 0);
         return saved < objetivo;
@@ -4718,6 +4803,10 @@ async function ligarTempoReal() {
             url: SUPABASE_URL, apikey: SUPABASE_ANON_KEY, conta,
             token:       () => getValidAccessToken(),
             perfilAtual: () => String(perfilAtivo?.id ?? ''),
+            // Quem divide reserva comigo mexe em dinheiro MEU. Sem isto, o save
+            // do outro perfil era descartado pelo filtro e a reserva só
+            // atualizava no F5. Recalculado a cada aviso — o roster muda.
+            perfisRelevantes: _perfisComReservaComigo,
             ocupado:     () => !!(document.getElementById('modalOverlay')?.classList.contains('active') ||
                                   document.getElementById('bottomSheetOverlay')?.classList.contains('active')),
             aoPresenca: _renderPresenca,

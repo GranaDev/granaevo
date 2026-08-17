@@ -203,13 +203,31 @@ describe('estabilidade e convergência', () => {
       'a reconciliação nunca estabiliza e salva a cada render')
   })
 
-  test('`saved` e `movimentos` saíram dos campos copiados por hora', () => {
-    // São acumuladores: copiar da "cópia vencedora" é o que apagava aportes.
-    const src = readFileSync(
-      new URL('../../src/scripts/modules/reserva-familia.js', import.meta.url), 'utf8')
-    assert.match(src, /CAMPOS_DECLARATIVOS = CAMPOS_SINC\.filter\(k => k !== 'saved' && k !== 'movimentos'\)/)
-    assert.match(src, /for \(const k of CAMPOS_DECLARATIVOS\)/,
-      'a reconciliação voltou a copiar todos os campos, inclusive os acumuladores')
+  test('⭐ acumulador NÃO é copiado da "cópia vencedora" — só o declarativo', () => {
+    // São acumuladores: copiar `saved`/`movimentos`/`monthly` da cópia mais nova
+    // é o que apagava aportes. Antes isto era uma expressão regular sobre o
+    // fonte; agora é comportamento — a asserção de texto passava mesmo com a
+    // regra desligada num ramo morto (ver assercoes_que_passam_com_codigo_removido).
+    const minha = {
+      id: 'r1', compartilhada: true, membros: ['64', '65'], objetivo: 1000,
+      saved: 0, monthly: {}, movimentos: [], lastUpdate: '2026-08-17T09:00:00.000Z',
+    }
+    R.registrarMovimento(minha, { id: '64', nome: 'B', tipo: 'aporte', valor: 100, data: '17/08/2026' })
+
+    // A outra cópia é MAIS NOVA e traz um objetivo novo + acumuladores próprios.
+    const dela = {
+      id: 'r1', compartilhada: true, membros: ['64', '65'], objetivo: 7000,
+      saved: 999, monthly: { '2026-01': 999 }, movimentos: [],
+      lastUpdate: '2026-08-17T23:00:00.000Z',
+    }
+    R.reconciliarCopiaAtiva(minha, [{ id: '64', metas: [minha] }, { id: '65', metas: [dela] }], '64')
+
+    assert.equal(minha.objetivo, 7000, 'o campo DECLARATIVO não seguiu a cópia mais nova')
+    assert.equal(minha.saved, 100,
+      'o saldo veio copiado da outra cópia em vez de sair da trilha — é o bug que apagava aportes')
+    assert.equal(minha.monthly['2026-01'], undefined,
+      'o histórico mensal da outra cópia sobrescreveu o meu')
+    assert.equal(minha.movimentos.length, 1, 'a trilha foi substituída em vez de unida')
   })
 })
 
@@ -283,5 +301,62 @@ describe('⭐ a derivação NUNCA apaga dinheiro que não sabe explicar', () => 
     R.registrarMovimento(b, { id: '65', nome: 'Meow',    tipo: 'aporte', valor: 300 })
     R.reconciliarCopiaAtiva(a, [{ id: '64', metas: [a] }, { id: '65', metas: [b] }])
     assert.equal(a.saved, 800)
+  })
+})
+
+// ═════════════════════════════════════════════════════════════════════════════
+describe('⭐ a migração das reservas que JÁ existem em produção', () => {
+  // A propagação antiga deixou cópias divergentes, e a versão anterior da
+  // reconciliação lançava um "Ajuste" em CADA uma para fechar a própria conta.
+  // Ao unir as trilhas, dois reparos do mesmo buraco somariam — e a reserva da
+  // família amanheceria com dinheiro que ninguém pôs.
+  test('⭐ dois reparos concorrentes NÃO somam (não inventa dinheiro)', () => {
+    const ajuste = (valor, n) => ({
+      mid: `ajuste:r1:${valor}:${n}`, memberId: null, memberNome: 'Ajuste',
+      tipo: 'aporte', valor, data: null, hora: null, em: 10,
+    })
+    const unida = R.unirMovimentos([ajuste(500, 1)], [ajuste(300, 1)])
+    const reparos = unida.filter(m => String(m.mid).startsWith('ajuste:'))
+    assert.equal(reparos.length, 1, 'os dois reparos entraram e o saldo inflou')
+    assert.equal(reparos[0].valor, 500, 'ficou o reparo menor — apagaria dinheiro')
+  })
+
+  test('⭐ aberturas de legado divergentes colapsam na MAIOR', () => {
+    const legado = (valor) => ({
+      mid: 'legado:r1', memberId: null, memberNome: 'Saldo anterior',
+      tipo: 'aporte', valor, data: null, hora: null, em: 0,
+    })
+    const unida = R.unirMovimentos([legado(500)], [legado(1000)])
+    assert.equal(unida.length, 1)
+    assert.equal(unida[0].valor, 1000)
+  })
+
+  test('rendimento de dias diferentes NÃO colapsa (cada dia é um crédito)', () => {
+    const rend = (dia, valor) => ({
+      mid: `rend:r1:${dia}`, memberId: null, memberNome: 'Rendimento',
+      tipo: 'aporte', valor, data: dia, hora: null, em: 1,
+    })
+    const unida = R.unirMovimentos([rend('2026-08-16', 3)], [rend('2026-08-17', 4)])
+    assert.equal(unida.length, 2, 'o rendimento de dois dias virou um só')
+    assert.equal(R.saldoDeMovimentos(unida), 7)
+  })
+
+  test('⭐ o rendimento do MESMO dia, calculado pelos dois membros, conta uma vez', () => {
+    const rend = (valor) => ({
+      mid: 'rend:r1:2026-08-17', memberId: null, memberNome: 'Rendimento',
+      tipo: 'aporte', valor, data: '2026-08-17', hora: null, em: 1,
+    })
+    assert.equal(R.saldoDeMovimentos(R.unirMovimentos([rend(5)], [rend(5)])), 5,
+      'o casal creditou juros em dobro')
+  })
+
+  test('⭐ o reparo se refaz sozinho se o colapso tiver ficado curto', () => {
+    // É o que torna o colapso seguro: perder um reparo é temporário.
+    const m = { id: 'r1', compartilhada: true, membros: ['64'], saved: 900,
+                movimentos: [{ mid: 'ajuste:r1:500:1', memberId: null, memberNome: 'Ajuste',
+                               tipo: 'aporte', valor: 500, data: null, hora: null, em: 10 }] }
+    assert.equal(R.repararSaldoLocal(m), true, 'a diferença de 400 não foi lançada')
+    assert.equal(R.saldoDeMovimentos(m.movimentos), 900, 'a trilha não passou a explicar o saldo')
+    assert.equal(R.repararSaldoLocal(m), false, 'o reparo se repete a cada reconciliação')
   })
 })

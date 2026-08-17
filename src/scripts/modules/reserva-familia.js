@@ -26,6 +26,30 @@
 // "de quem" é registro de justiça, não uma carteira separada.
 //
 // 100% puro: sem DOM, sem rede, sem supabase. Testável.
+//
+// ╔═══════════════════════════════════════════════════════════════════════════╗
+// ║ 🔴 INVARIANTE (2026-08-17) — NINGUÉM ESCREVE NO SLOT DE OUTRO PERFIL.     ║
+// ║                                                                           ║
+// ║ Até aqui existia `sincronizarReservaEmPerfis`: ao aportar, o cliente      ║
+// ║ copiava a SUA versão da reserva para dentro do slot de cada outro membro. ║
+// ║ Como o delta save manda `{op:'edit', r: <registro inteiro>}`, o servidor  ║
+// ║ SUBSTITUÍA o registro do outro — inclusive a trilha dele.                 ║
+// ║                                                                           ║
+// ║ Medido (tests/unit/reserva-compartilhada-e2e.test.js, com os módulos      ║
+// ║ reais e o aplicador do servidor):                                         ║
+// ║   A guarda 100 → slot A {100, [A:100]}                                    ║
+// ║   B guarda 100 → B propaga a visão DELE para o slot de A                  ║
+// ║                → slot A {100, [B:100]}   ← os 100 de A morreram no banco  ║
+// ║ Não é conflito de escrita simultânea: basta o outro não ter recarregado.  ║
+// ║                                                                           ║
+// ║ AGORA: cada perfil escreve só a PRÓPRIA cópia. A trilha é append-only e   ║
+// ║ se UNE por `mid` (`reconciliarCopiaAtiva`), então cada cópia converge      ║
+// ║ para o mesmo conjunto sem que ninguém precise sobrescrever ninguém.        ║
+// ║ Dois aportes simultâneos SOMAM em vez de um apagar o outro.               ║
+// ║                                                                           ║
+// ║ ⚠️ Não reintroduza escrita cruzada "só para o outro ver mais rápido".     ║
+// ║ Quem faz o outro ver é a campainha (tempo-real) + a reconciliação.        ║
+// ╚═══════════════════════════════════════════════════════════════════════════╝
 // ----------------------------------------------------------------------------
 
 /**
@@ -74,6 +98,10 @@ export function ehCompartilhada(meta) {
  */
 export function perfilParticipa(meta, perfilId) {
     if (!ehCompartilhada(meta)) return true;              // não é compartilhada → todos veem
+    // Saí da reserva: a cópia continua no meu slot como RECIBO (a trilha dela é
+    // o que prova, para quem ficou, o que eu pus e o que levei), mas ela não é
+    // mais minha — não aparece na lista nem conta no meu total. Ver `sairDaReserva`.
+    if (meta.saiu === true) return false;
     const membros = meta.membros;
     if (!Array.isArray(membros) || membros.length === 0) return true;
 
@@ -168,6 +196,15 @@ export function montarRosterConvite(rosterIds, criadorId, metaAtual = {}) {
         if (jaMembros.has(id)) membros.push(id);   // já aceitou antes → continua membro
         else convites.push(id);                     // novo no roster → convite pendente
     }
+    // ⚠️ QUEM JÁ ACEITOU NÃO SAI DAQUI POR EDIÇÃO DE OUTRA PESSOA.
+    // Desmarcar alguém no formulário tirava o membro do roster — e a cópia dele
+    // então sumia da tela dele, com o dinheiro que ele tinha posto lá dentro,
+    // sem transação de volta e sem aviso. Sair da reserva é ato individual
+    // (`sairDaReserva`), que devolve o valor a quem sai. Aqui o formulário só
+    // CONVIDA.
+    for (const id of jaMembros) {
+        if (id !== criador && !membros.includes(id)) membros.push(id);
+    }
     // Preserva convites pendentes que NÃO estavam no roster: o form de EDIÇÃO
     // lista só membros (db-metas.js:575), então não devemos apagar convites que
     // ele nem mostra. Sem isto, qualquer edição zerava os convites em voo.
@@ -178,44 +215,20 @@ export function montarRosterConvite(rosterIds, criadorId, metaAtual = {}) {
 }
 
 // ----------------------------------------------------------------------------
-// PROPAGAÇÃO ENTRE PERFIS (o que faz a reserva aparecer em OUTRO perfil).
+// COMO A RESERVA CHEGA AO OUTRO PERFIL (sem escrita cruzada).
 //
-// Cada perfil tem seu PRÓPRIO array de `metas` no blob — uma reserva criada no
-// perfil A não aparece no perfil B sozinha. Para o convite→aceite funcionar, a
-// reserva compartilhada ganha uma CÓPIA no slot de cada perfil participante
-// (membros ∪ convites). A meta inteira é estado COMPARTILHADO: o dinheiro real
-// são as transações (array à parte, com metaId), que ficam com quem contribuiu —
-// a meta em si (saved/movimentos/objetivo/…) é a mesma para todos. Por isso
-// propagamos a meta inteira, sem tocar em transações.
+// Cada perfil tem seu PRÓPRIO array de `metas` no blob. A cópia no slot de um
+// membro nasce quando ELE aceita o convite (`aceitarConvite` grava no próprio
+// slot) e morre quando ELE sai (`sairDaReserva`). Ninguém cria nem apaga a cópia
+// de outra pessoa — ver a INVARIANTE no topo do arquivo.
+//
+// Depois disso, as cópias conversam por CONVERGÊNCIA, não por cópia:
+//   • a trilha (`movimentos`) se UNE por `mid` — append-only, nunca sobrescrita;
+//   • o saldo é DERIVADO dessa união, então ele é a soma do que todos puseram;
+//   • os campos declarativos (objetivo, prazo, roster) seguem o `lastUpdate`
+//     mais novo, porque decisão não é acumulador.
+// Tudo isso vive em `reconciliarCopiaAtiva`, que roda ao carregar e ao renderizar.
 // ----------------------------------------------------------------------------
-
-/**
- * Garante a cópia de UMA reserva compartilhada em cada perfil MEMBRO (aceito) e a
- * remove de quem não é mais membro. Os CONVIDADOS pendentes NÃO recebem cópia —
- * senão a reserva contaria no total/patrimônio deles antes de aceitarem; o
- * convite é descoberto varrendo a lista `convites` das cópias dos membros.
- * MUTA `profiles` (o array de perfis do blob). `cloneFn` injeta o clone (default
- * deep-clone) — testável. Retorna profiles.
- */
-export function sincronizarReservaEmPerfis(profiles, reserva, cloneFn) {
-    if (!Array.isArray(profiles) || !ehCompartilhada(reserva) || reserva.id == null) return profiles;
-    const clone = typeof cloneFn === 'function' ? cloneFn : (x) => JSON.parse(JSON.stringify(x));
-    const rid = String(reserva.id);
-    const participantes = new Set(Array.isArray(reserva.membros) ? reserva.membros.map(String) : []);
-    for (const p of profiles) {
-        if (!p || typeof p !== 'object') continue;
-        if (!Array.isArray(p.metas)) p.metas = [];
-        const idx = p.metas.findIndex(m => m && String(m.id) === rid);
-        if (participantes.has(String(p.id))) {
-            const copia = clone(reserva);          // cópia independente (sem alias)
-            if (idx === -1) p.metas.push(copia);
-            else p.metas[idx] = copia;
-        } else if (idx !== -1) {
-            p.metas.splice(idx, 1);                 // não participa → remove a cópia
-        }
-    }
-    return profiles;
-}
 
 // Campos COMPARTILHADOS de uma reserva (iguais em toda cópia). As transações
 // (dinheiro) ficam à parte, com metaId, e não entram aqui.
@@ -229,13 +242,13 @@ const CAMPOS_SINC = [
 // Campos DECLARATIVOS: o último que falou vence, e isso está certo — objetivo,
 // prazo e roster são decisões, não acumuladores.
 //
-// `saved` e `movimentos` foram retirados desta lista em 2026-08-16. Eles são
-// ACUMULADORES: a trilha se une e o saldo sai dela. Copiar um acumulador da
-// "cópia vencedora" era o que fazia um aporte apagar o outro. `CAMPOS_SINC`
-// continua completo porque a PROPAGAÇÃO (que empurra o estado inteiro para as
-// outras cópias) precisa levar tudo — quem não pode escolher um lado é a
-// RECONCILIAÇÃO, que junta o que voltou divergente.
-const CAMPOS_DECLARATIVOS = CAMPOS_SINC.filter(k => k !== 'saved' && k !== 'movimentos');
+// `saved` e `movimentos` estão FORA desta lista, e é a diferença que faz a
+// feature funcionar. Eles são ACUMULADORES: a trilha se une e o saldo sai dela.
+// Copiar um acumulador da "cópia vencedora" é o que fazia um aporte apagar o
+// outro. `monthly` e `historicoRetiradas` seguem juntos por serem históricos
+// por cópia — quem manda no dinheiro é `movimentos`.
+const CAMPOS_DECLARATIVOS = CAMPOS_SINC.filter(
+    k => k !== 'saved' && k !== 'movimentos' && k !== 'monthly' && k !== 'historicoRetiradas');
 
 // ── SAIR DA RESERVA (substitui a dissolução em bloco) ───────────────────────
 // A dissolução dividia o bolo entre TODOS de uma vez e dependia de cada perfil
@@ -271,7 +284,14 @@ export function ehUltimoMembro(meta, perfilId) {
 
 /**
  * Tira ESTE perfil da reserva levando `valor` de volta. MUTA a meta:
- * desconta do saldo, registra a retirada na trilha e remove o perfil do roster.
+ * desconta do saldo, registra a retirada na trilha, sai do roster e marca a
+ * cópia como RECIBO (`saiu`).
+ *
+ * ⚠️ POR QUE A CÓPIA NÃO É APAGADA. A trilha desta cópia é a única prova, para
+ * quem ficou, de que eu pus R$ X e levei R$ Y. Apagá-la some com as duas pontas:
+ * quem já tinha absorvido meus aportes ficaria com dinheiro a mais na conta, e
+ * quem não tinha, a menos. Como recibo, ela é lida pela união (a soma bate) e
+ * ignorada por tudo o que é meu (`perfilParticipa` devolve false).
  *
  * O `valor` é escolhido na tela (default = o que ele depositou; "Outro valor"
  * cobre rendimento). Teto = saldo da reserva: ninguém pode sacar dinheiro que a
@@ -297,6 +317,7 @@ export function sairDaReserva(meta, perfilId, valor, nome) {
 
     if (Array.isArray(meta.membros)) meta.membros = meta.membros.map(String).filter(id => id !== pid);
     if (Array.isArray(meta.convites)) meta.convites = meta.convites.map(String).filter(id => id !== pid);
+    meta.saiu = true;                     // vira recibo (ver o bloco acima)
     marcarReservaAtualizada(meta);
 
     return { ok: true, valor: v, ultimo };
@@ -330,12 +351,14 @@ export function copiaMaisRecente(profiles, reservaId) {
 }
 
 /**
- * Reconcilia UMA reserva ativa contra as cópias nos perfis: se existe uma cópia
- * mais recente (por lastUpdate), traz os campos compartilhados para a meta ativa.
- * MUTA `metaAtiva`. Retorna true se mudou algo. É o que faz o perfil B ver o
- * saldo que o perfil A depositou, sem depender da propagação em memória.
+ * Reconcilia UMA reserva ativa contra as cópias nos perfis: une a trilha, deriva
+ * o saldo dela e adota os campos declarativos da cópia mais nova.
+ * MUTA `metaAtiva` — e **somente** `metaAtiva`. Retorna true se mudou algo.
+ *
+ * É o que faz o perfil B ver o que o perfil A depositou. Repare que ele lê as
+ * outras cópias e não escreve NENHUMA delas: é a INVARIANTE do topo do arquivo.
  */
-export function reconciliarCopiaAtiva(metaAtiva, profiles) {
+export function reconciliarCopiaAtiva(metaAtiva, profiles, perfilAtivoId) {
     if (!ehCompartilhada(metaAtiva) || metaAtiva.id == null) return false;
     if (!Array.isArray(profiles)) return false;
 
@@ -356,13 +379,30 @@ export function reconciliarCopiaAtiva(metaAtiva, profiles) {
     // "Quem colocou" vazio saía daí.
     //
     // Migra o legado ANTES de unir: uma cópia com saldo e sem trilha entraria na
-    // união como zero e apagaria dinheiro real.
-    // Todas as cópias sem trilha migram com o MESMO valor — o maior entre elas.
-    // Valores diferentes gerariam entradas de legado divergentes disputando o
-    // mesmo `mid`, e a união escolheria por ordem de array (o sorteio de novo).
+    // união como zero e apagaria dinheiro real. O `mid` do legado é determinístico
+    // por reserva, então a entrada de abertura que CADA cópia cria na sua própria
+    // sessão colapsa numa só na união.
+    //
+    // ⚠️ Só a cópia ATIVA é migrada. Migrar as outras aqui seria escrever no slot
+    // alheio — e o delta save mandaria o registro INTEIRO da minha visão por cima
+    // do que aquele perfil tem gravado. Ler o valor delas basta: é o que
+    // `saldoLegadoMaisCompleto` faz.
     const legado = saldoLegadoMaisCompleto([metaAtiva, ...outras]);
     if (migrarSaldoLegado(metaAtiva, legado)) mudou = true;
-    for (const o of outras) migrarSaldoLegado(o, legado);
+
+    // ── 1b. CONSERTO LOCAL: dinheiro MEU que a MINHA trilha não explica ─────
+    //
+    // Acontece quando algum caminho mexeu em `meta.saved` sem registrar o
+    // movimento — hoje isso é um cliente com bundle velho em cache (todos os
+    // caminhos desta versão registram). Sem este passo, derivar o saldo apagaria
+    // aquele valor da tela.
+    //
+    // ⚠️ A conferência é contra a MINHA trilha, nunca contra a união. Contra a
+    // união, a retirada legítima do outro membro (que a união conhece e a minha
+    // cópia ainda não) pareceria "dinheiro sem explicação" e viraria ajuste — o
+    // saldo compartilhado nunca conseguiria DESCER. Foi assim que a saída de um
+    // membro deixava o outro com o dinheiro na tela.
+    if (repararSaldoLocal(metaAtiva)) mudou = true;
 
     const unida = unirMovimentos(metaAtiva.movimentos, ...outras.map(o => o.movimentos));
     if (JSON.stringify(unida) !== JSON.stringify(metaAtiva.movimentos ?? [])) {
@@ -370,56 +410,30 @@ export function reconciliarCopiaAtiva(metaAtiva, profiles) {
         mudou = true;
     }
 
-    // ── 2. O SALDO SEGUE A TRILHA — MAS A TRILHA NUNCA APAGA DINHEIRO ───────
+    // ── 2. O SALDO É A TRILHA ───────────────────────────────────────────────
     //
-    // ⚠️ ISTO AQUI JÁ CAUSOU PERDA VISÍVEL (medido em 2026-08-16):
+    // Depois do conserto local acima, tudo o que é meu já está explicado na
+    // trilha. O saldo então é, exatamente, a soma da união — para cima quando
+    // alguém aporta, para baixo quando alguém retira ou sai da reserva.
     //
-    //   ANTES  saved=500 · movs=[Saldo anterior:500]
-    //   aporte saved=600 · movs=[Saldo anterior:500]   ← a trilha não recebeu
-    //   depois saved=500                                ← a derivação REVERTEU
-    //
-    // Existe caminho de aporte que mexe em `saved` sem chamar
-    // `registrarMovimento`. Enquanto a trilha estiver incompleta, derivar às
-    // cegas DESFAZ o aporte na cara do usuário.
-    //
-    // A regra, então, é assimétrica de propósito:
-    //   • trilha explica MAIS que o saldo  → o saldo sobe (é a soma dos aportes
-    //     de todos, e é justamente o que esta mudança veio trazer);
-    //   • trilha explica MENOS             → NÃO baixa. O saldo é a verdade, e a
-    //     diferença vira um movimento de ajuste — a trilha se completa sozinha
-    //     em vez de apagar o que não conhece.
-    //
-    // Assim o dinheiro nunca some por falta de registro, e a trilha converge
-    // para a verdade a cada reconciliação.
+    // Derivar nos dois sentidos é o que faz as cópias CONVERGIREM: enquanto o
+    // saldo só podia subir, a retirada do outro membro nunca chegava, e cada
+    // cópia acumulava um número diferente sem que ninguém errasse nada.
     const derivado = saldoDeMovimentos(unida);
     const atual = Math.round(Number(metaAtiva.saved || 0) * 100) / 100;
-
     if (derivado !== null && derivado !== atual) {
-        if (derivado > atual) {
-            metaAtiva.saved = derivado;          // aporte de outro perfil entrando
-            mudou = true;
-        } else {
-            // Falta trilha para explicar o saldo: registra o que falta em vez de
-            // reverter. `mid` determinístico pelo valor para que a mesma lacuna,
-            // vista por duas cópias, não vire dois ajustes.
-            const falta = Math.round((atual - derivado) * 100) / 100;
-            const mid = `ajuste:${String(metaAtiva.id ?? '')}:${falta}:${unida.length}`;
-            if (!unida.some(m => m.mid === mid)) {
-                unida.push({
-                    mid, memberId: null, memberNome: 'Ajuste',
-                    tipo: 'aporte', valor: falta, data: null, hora: null,
-                    em: Date.now(),
-                });
-                metaAtiva.movimentos = unida;
-                mudou = true;
-            }
-        }
+        metaAtiva.saved = derivado;
+        mudou = true;
     }
 
     // ── 3. Os demais campos ainda seguem a cópia mais recente ───────────────
     // Objetivo, prazo, roster e afins são declarações, não acumuladores: para
-    // eles "o último que falou" continua sendo a regra certa. `saved` e
-    // `movimentos` saíram daqui — são derivados/unidos acima.
+    // eles "o último que falou" continua sendo a regra certa. `saved`,
+    // `movimentos` e `monthly` saíram daqui — são derivados/unidos acima.
+    const pid = String(perfilAtivoId ?? '');
+    const euEraMembro = !!pid && Array.isArray(metaAtiva.membros) &&
+                        metaAtiva.membros.map(String).includes(pid);
+
     const recente = copiaMaisRecente(profiles, metaAtiva.id);
     if (recente && recente !== metaAtiva &&
         String(recente.lastUpdate || '') > String(metaAtiva.lastUpdate || '')) {
@@ -427,22 +441,158 @@ export function reconciliarCopiaAtiva(metaAtiva, profiles) {
         for (const k of CAMPOS_DECLARATIVOS) if (k in clone) { metaAtiva[k] = clone[k]; mudou = true; }
     }
 
+    // ── 3b. SÓ EU DIGO QUE EU SAÍ ───────────────────────────────────────────
+    //
+    // 🔴 BUG MEDIDO na simulação de ponta a ponta: o perfil B aceitava o convite
+    // (entrava em `membros` na cópia DELE) e, no aporte seguinte do perfil A —
+    // que ainda não tinha recarregado e por isso listava B como convite pendente
+    // — o carimbo de A ficava mais novo. A reconciliação de B então adotava o
+    // roster velho de A, B saía de `membros` e a reserva sumia da tela de B,
+    // levando junto a trilha dele.
+    //
+    // O roster tem dois donos e não pode ser um bloco de "último que falou":
+    // quem convida declara os CONVITES; quem aceita declara a PRÓPRIA entrada.
+    // Aqui reafirmamos a segunda parte — a saída continua sendo ato explícito
+    // meu (`sairDaReserva`, que marca `saiu`).
+    if (euEraMembro && metaAtiva.saiu !== true) {
+        if (!Array.isArray(metaAtiva.membros)) metaAtiva.membros = [];
+        if (!metaAtiva.membros.map(String).includes(pid)) {
+            metaAtiva.membros = [...metaAtiva.membros.map(String), pid];
+            mudou = true;
+        }
+        if (Array.isArray(metaAtiva.convites) && metaAtiva.convites.map(String).includes(pid)) {
+            metaAtiva.convites = metaAtiva.convites.map(String).filter(x => x !== pid);
+            mudou = true;
+        }
+    }
+
+    // ── 4. O gráfico mensal também é da RESERVA, não de quem abriu a tela ───
+    // `monthly` alimenta o gráfico de linha. Sem propagação ele ficaria só com o
+    // que ESTE perfil guardou, e o gráfico contaria uma história menor que o
+    // saldo logo acima dele. Derivar da trilha unida resolve sem sincronizar
+    // nada: mesma fonte, mesmo número.
+    //
+    // Os meses ANTERIORES à trilha (reserva legada) são preservados — a migração
+    // cria uma única entrada de abertura, sem mês, e sobrescrever apagaria o
+    // histórico do gráfico de quem já usava a reserva.
+    if (aplicarMensalDaTrilha(metaAtiva, unida)) mudou = true;
+
     return mudou;
 }
 
 /**
- * Remove uma reserva (por id) das cópias de TODOS os perfis do array — usado ao
- * excluir/dissolver a reserva. MUTA `profiles`. Retorna profiles.
+ * Fecha a conta ENTRE A MINHA TRILHA E O MEU SALDO, sem olhar as outras cópias.
+ *
+ * Se a minha trilha explica MENOS do que o meu `saved`, existe dinheiro que
+ * entrou aqui sem passar pelo registro — na prática, uma aba com bundle antigo
+ * em cache de Service Worker, de uma versão em que nem todo caminho registrava.
+ * Em vez de deixar a derivação apagar esse valor da tela, ele vira um lançamento
+ * de ajuste: a trilha passa a explicar o saldo e o dinheiro não some.
+ *
+ * O caso contrário (trilha explicando MAIS) não faz nada: é o meu próprio saldo
+ * ainda não atualizado, e a derivação da união resolve logo depois.
+ *
+ * `mid` determinístico pelo conteúdo: reconciliar duas vezes não empilha ajuste.
+ * MUTA. Retorna true se lançou.
  */
-export function removerReservaDePerfis(profiles, reservaId) {
-    if (!Array.isArray(profiles) || reservaId == null) return profiles;
-    const rid = String(reservaId);
-    for (const p of profiles) {
-        if (!p || !Array.isArray(p.metas)) continue;
-        const idx = p.metas.findIndex(m => m && String(m.id) === rid);
-        if (idx !== -1) p.metas.splice(idx, 1);
+export function repararSaldoLocal(meta) {
+    if (!meta || typeof meta !== 'object') return false;
+    const minha = Array.isArray(meta.movimentos) ? meta.movimentos : [];
+    const derivado = saldoDeMovimentos(minha);
+    if (derivado === null) return false;                 // sem trilha: ver migrarSaldoLegado
+    const atual = Math.round(Number(meta.saved || 0) * 100) / 100;
+    const falta = Math.round((atual - derivado) * 100) / 100;
+    if (falta <= 0) return false;
+
+    const mid = `ajuste:${String(meta.id ?? '')}:${falta}:${minha.length}`;
+    if (minha.some(m => m?.mid === mid)) return false;
+    meta.movimentos = [...minha, {
+        mid, memberId: null, memberNome: 'Ajuste',
+        tipo: 'aporte', valor: falta, data: null, hora: null,
+        em: Date.now(),
+    }];
+    return true;
+}
+
+/**
+ * Recalcula `meta.monthly` a partir da trilha, preservando os meses que só o
+ * histórico antigo conhece. MUTA. Retorna true se mudou.
+ */
+export function aplicarMensalDaTrilha(meta, movimentos) {
+    const derivado = mensalDeMovimentos(movimentos ?? meta?.movimentos);
+    if (!derivado) return false;
+    const atual = (meta.monthly && typeof meta.monthly === 'object' && !Array.isArray(meta.monthly))
+        ? meta.monthly : {};
+    const novo = { ...atual, ...derivado };
+    if (JSON.stringify(novo) === JSON.stringify(atual)) return false;
+    meta.monthly = novo;
+    return true;
+}
+
+/**
+ * `{ 'YYYY-MM': quanto a reserva cresceu no mês }` a partir da trilha.
+ * Negativo vira 0 — mesma regra que a tela de retirada sempre aplicou, para o
+ * gráfico não desenhar barra negativa. Null quando não há trilha datável.
+ */
+export function mensalDeMovimentos(movimentos) {
+    if (!Array.isArray(movimentos) || movimentos.length === 0) return null;
+    const out = {};
+    let algum = false;
+    for (const m of movimentos) {
+        const ym = mesDoMovimento(m);
+        if (!ym) continue;                       // abertura do legado não tem mês
+        const v = Number(m?.valor);
+        if (!isFinite(v) || v <= 0) continue;
+        if (m.tipo !== 'aporte' && m.tipo !== 'retirada') continue;
+        algum = true;
+        out[ym] = Math.round(((out[ym] || 0) + (m.tipo === 'aporte' ? v : -v)) * 100) / 100;
     }
-    return profiles;
+    if (!algum) return null;
+    for (const k of Object.keys(out)) if (out[k] < 0) out[k] = 0;
+    return out;
+}
+
+/**
+ * Mês (`YYYY-MM`) de um movimento. Prefere `data` (dd/mm/aaaa, o rótulo que o
+ * usuário vê); cai para `em` (epoch), que existe desde 2026-08-16. Null quando
+ * nenhum dos dois serve — é o caso da entrada de abertura do legado, que
+ * representa "o que já estava lá" e não pertence a mês nenhum.
+ */
+export function mesDoMovimento(m) {
+    const data = String(m?.data ?? '');
+    const br = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(data);
+    if (br) return `${br[3]}-${br[2]}`;
+    const iso = /^(\d{4})-(\d{2})-\d{2}/.exec(data);
+    if (iso) return `${iso[1]}-${iso[2]}`;
+    const em = Number(m?.em);
+    if (isFinite(em) && em > 0) {
+        const d = new Date(em);
+        if (!isNaN(d.getTime())) {
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        }
+    }
+    return null;
+}
+
+/**
+ * Teto de lançamentos por reserva compartilhada.
+ *
+ * ⚠️ ANTES daqui saía um `slice(-500)`: a trilha era CORTADA em silêncio quando
+ * passava do teto. Com o saldo derivado da trilha, cortar o começo dela é apagar
+ * dinheiro — e apagar em silêncio, que é o pior jeito. Agora o teto BARRA
+ * aportes novos (com aviso na tela) e nunca remove o que já foi lançado.
+ *
+ * Retiradas nunca são barradas: elas ENCOLHEM a reserva, e trancar a saída do
+ * dinheiro de alguém por causa de um limite técnico seria indefensável.
+ *
+ * 500 lançamentos é ~40 anos de um depósito por mês; ninguém esbarra nisso na
+ * prática. O número existe para o blob não crescer sem limite.
+ */
+export const LIMITE_APORTES = 500;
+
+/** A trilha já não aceita novos aportes? (a tela avisa antes de mexer no saldo) */
+export function trilhaCheia(meta) {
+    return Array.isArray(meta?.movimentos) && meta.movimentos.length >= LIMITE_APORTES;
 }
 
 /**
@@ -450,19 +600,29 @@ export function removerReservaDePerfis(profiles, reservaId) {
  * Chamado junto de guardar/retirar quando a caixinha é compartilhada — o
  * dinheiro em si já é movido pelo fluxo normal da meta; aqui só gravamos QUEM.
  * Ignora entrada inválida em silêncio (falha segura: nunca grava lixo).
+ *
+ * @param {string} [mid] chave determinística, para lançamento de SISTEMA que
+ *   duas cópias podem gerar sozinhas (rendimento do dia, abertura do legado).
+ *   Mesmo `mid` = mesmo lançamento, e a união conta uma vez só. Movimento de
+ *   pessoa nunca passa `mid` — ali cada clique é um evento distinto.
+ * @returns {boolean} true se entrou na trilha.
  */
-export function registrarMovimento(meta, { id, nome, tipo, valor, data, hora } = {}) {
-    if (!meta) return;
+export function registrarMovimento(meta, { id, nome, tipo, valor, data, hora, mid } = {}) {
+    if (!meta) return false;
     if (!Array.isArray(meta.movimentos)) meta.movimentos = [];
     const v = Number(valor);
-    if (!isFinite(v) || v <= 0) return;
-    if (tipo !== 'aporte' && tipo !== 'retirada') return;
+    if (!isFinite(v) || v <= 0) return false;
+    if (tipo !== 'aporte' && tipo !== 'retirada') return false;
+    // Idempotência do lançamento de sistema: rodar duas vezes no mesmo dia (dois
+    // renders, dois aparelhos) não pode creditar rendimento duas vezes.
+    if (mid && meta.movimentos.some(m => m?.mid === mid)) return false;
+    if (tipo === 'aporte' && meta.movimentos.length >= LIMITE_APORTES) return false;
     meta.movimentos.push({
         // `mid` é o que torna a trilha UNÍVEL entre cópias (2026-08-16). Sem um
         // id por movimento, unir duas listas ou duplicaria tudo, ou obrigaria a
         // comparar campo a campo — e dois aportes iguais no mesmo minuto são
         // indistinguíveis assim. Com `mid`, união é `dedupe por chave`.
-        mid:        _novoMid(),
+        mid:        mid || _novoMid(),
         memberId:   id != null ? String(id) : null,
         memberNome: String(nome ?? 'Membro').trim().slice(0, 80) || 'Membro',
         tipo,
@@ -473,8 +633,30 @@ export function registrarMovimento(meta, { id, nome, tipo, valor, data, hora } =
         // que são só rótulos de exibição.
         em:         Date.now(),
     });
-    // Cap defensivo: trilha não pode crescer sem limite dentro do blob.
-    if (meta.movimentos.length > 500) meta.movimentos = meta.movimentos.slice(-500);
+    return true;
+}
+
+/**
+ * Chave de dedupe de um `mid`.
+ *
+ * Para lançamento de PESSOA, é o próprio id — cada clique é um evento distinto e
+ * dois aportes de R$100 no mesmo minuto são dois aportes.
+ *
+ * Para os dois lançamentos de REPARO — `legado:<reserva>` (abertura de saldo
+ * antigo) e `ajuste:<reserva>:<falta>:<n>` (dinheiro que a trilha não explicava)
+ * — a chave é só `<tipo>:<reserva>`. Eles descrevem o MESMO buraco visto de
+ * cópias diferentes; se o valor entrasse na chave, cada cópia traria o seu e a
+ * união somaria reparos concorrentes, inventando dinheiro numa reserva de
+ * família. O `rend:<reserva>:<dia>` NÃO colapsa: cada dia é um crédito real.
+ */
+function _chaveDeUniao(mid) {
+    const s = String(mid);
+    for (const tipo of ['legado', 'ajuste']) {
+        if (!s.startsWith(tipo + ':')) continue;
+        const partes = s.split(':');
+        return `${tipo}:${partes[1] ?? ''}`;
+    }
+    return `id:${s}`;
 }
 
 /** Id de movimento. `randomUUID` quando existe; senão, aleatório + tempo. */
@@ -521,12 +703,29 @@ export function unirMovimentos(...listas) {
         for (const m of lista) {
             if (!m || typeof m !== 'object') continue;
             const chave = m.mid
-                ? `id:${m.mid}`
+                ? _chaveDeUniao(m.mid)
                 : `legado:${m.memberId ?? ''}:${m.tipo}:${m.valor}:${m.data ?? ''}:${m.hora ?? ''}`;
-            if (!mapa.has(chave)) mapa.set(chave, m);
+            const jaTem = mapa.get(chave);
+            if (jaTem === undefined) { mapa.set(chave, m); continue; }
+            // Colisão de REPARO (abertura do legado, ajuste): duas cópias
+            // consertaram o MESMO buraco cada uma por si, com valores diferentes
+            // — herança da propagação antiga, que as deixava divergentes. Somar
+            // as duas inventaria dinheiro; ficar com a primeira seria sortear
+            // pela ordem do array. Fica a MAIOR, que é o acumulado que de fato
+            // existiu (mesma razão de `saldoLegadoMaisCompleto`).
+            //
+            // Colapsar aqui é seguro porque o reparo se refaz sozinho: se a
+            // maior não cobrir tudo, `repararSaldoLocal` lança a diferença que
+            // faltar na próxima reconciliação. Perder é temporário; inventar, não.
+            if (Number(m.valor) > Number(jaTem.valor)) mapa.set(chave, m);
         }
     }
-    return [...mapa.values()].sort((a, b) => {
+    // Cópia rasa de cada lançamento (são objetos planos). Sem isto, a trilha da
+    // minha cópia passaria a apontar para os OBJETOS que vivem no slot do outro
+    // perfil — e qualquer mutação futura num deles escreveria no slot alheio pela
+    // porta dos fundos, que é exatamente a classe de defeito que esta mudança
+    // veio eliminar. Custa um objeto por lançamento, uma vez por reconciliação.
+    return [...mapa.values()].map((m) => ({ ...m })).sort((a, b) => {
         const ea = Number(a?.em ?? 0), eb = Number(b?.em ?? 0);
         if (ea !== eb) return ea - eb;
         return String(a?.mid ?? '').localeCompare(String(b?.mid ?? ''));
@@ -609,6 +808,11 @@ export function saldoLegadoMaisCompleto(metas) {
  * Devolve o LÍQUIDO por pessoa (aportes − retiradas), do que mais contribuiu
  * para o que menos. Só aportes esconderia quem coloca 500 e tira 400 todo mês;
  * o líquido conta a história real sem acusar ninguém — só exibe o número.
+ *
+ * `sistema: true` marca as linhas que NÃO são de uma pessoa: a abertura do saldo
+ * legado e o ajuste de reconciliação. Elas entram na conta (é dinheiro real),
+ * mas a tela precisa saber separá-las — "Saldo anterior" listado como se fosse
+ * um membro da família foi reclamação explícita do dono.
  */
 export function porMembro(movimentos) {
     if (!Array.isArray(movimentos)) return [];
@@ -621,7 +825,11 @@ export function porMembro(movimentos) {
         // nome não deve virar duas pessoas).
         const chave = String(m.memberId ?? `anon:${m.memberNome}`);
         let e = mapa.get(chave);
-        if (!e) { e = { id: m.memberId ?? null, nome: m.memberNome || 'Membro', aportes: 0, retiradas: 0, liquido: 0 }; mapa.set(chave, e); }
+        if (!e) {
+            e = { id: m.memberId ?? null, nome: m.memberNome || 'Membro',
+                  aportes: 0, retiradas: 0, liquido: 0, sistema: m.memberId == null };
+            mapa.set(chave, e);
+        }
         e.nome = m.memberNome || e.nome;
         if (m.tipo === 'aporte') { e.aportes += v; e.liquido += v; }
         else                     { e.retiradas += v; e.liquido -= v; }
@@ -632,6 +840,57 @@ export function porMembro(movimentos) {
         e.liquido   = Math.round(e.liquido * 100) / 100;
     }
     return [...mapa.values()].sort((a, b) => b.liquido - a.liquido);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXTRATO POR MÊS — o que a tela mostra no lugar de um número solto
+//
+// O card antigo dizia só "Fulano: R$ 300" (o líquido acumulado desde sempre).
+// Não respondia "quando", não respondia "quanto foi cada depósito", e misturava
+// as linhas de sistema com as pessoas. Estas funções são puras e devolvem o
+// material do card novo: os meses que existem, e o que aconteceu em cada um.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Meses com movimento, do mais recente para o mais antigo (`['2026-08', …]`).
+ * A abertura do legado não tem mês e não vira opção — ela aparece no total.
+ */
+export function mesesComMovimento(movimentos) {
+    if (!Array.isArray(movimentos)) return [];
+    const meses = new Set();
+    for (const m of movimentos) {
+        const ym = mesDoMovimento(m);
+        if (ym) meses.add(ym);
+    }
+    return [...meses].sort().reverse();
+}
+
+/**
+ * Lançamentos de um mês (`YYYY-MM`), do mais recente para o mais antigo.
+ * `null`/vazio devolve a trilha inteira — é o modo "Tudo" do seletor.
+ */
+export function movimentosDoMes(movimentos, ym) {
+    if (!Array.isArray(movimentos)) return [];
+    const lista = ym
+        ? movimentos.filter(m => mesDoMovimento(m) === ym)
+        : movimentos.slice();
+    return lista
+        .filter(m => m && (m.tipo === 'aporte' || m.tipo === 'retirada') && Number(m.valor) > 0)
+        .sort((a, b) => {
+            const ea = Number(a?.em ?? 0), eb = Number(b?.em ?? 0);
+            if (ea !== eb) return eb - ea;
+            return String(b?.mid ?? '').localeCompare(String(a?.mid ?? ''));
+        });
+}
+
+/** `'2026-08'` → `'Agosto de 2026'`. Fora do padrão, devolve a própria chave. */
+export function rotuloMes(ym) {
+    const m = /^(\d{4})-(\d{2})$/.exec(String(ym ?? ''));
+    if (!m) return String(ym ?? '');
+    const nomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    const i = Number(m[2]) - 1;
+    return `${nomes[i] ?? m[2]} de ${m[1]}`;
 }
 
 /** Progresso rumo ao objetivo (0–100), ou null quando não há objetivo. */

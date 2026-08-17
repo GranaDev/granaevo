@@ -929,6 +929,12 @@ class AssistantEngine {
                 const tela = res.categoria === 'assinatura' ? 'cartoes' : res.categoria === 'retirada_reserva' ? 'reservas' : 'dashboard';
                 return { text: P.renderHandoff(res.categoria), handoff: res.categoria, cta: { label: 'Abrir no GranaEvo', tela } };
             }
+            if (res.reason === 'trilha_cheia') {
+                // Reserva compartilhada no teto de lançamentos. Dizer o motivo de
+                // verdade: cair no "digite um valor" genérico mandaria a pessoa
+                // tentar de novo para sempre.
+                return { text: `A reserva "${res.meta}" atingiu o limite de lançamentos. Crie uma nova reserva para continuar guardando.` };
+            }
             return { text: P.SISTEMA.semValor() };
         }
 

@@ -16,8 +16,8 @@ import {
   depositoLiquidoDe, ehUltimoMembro, sairDaReserva,
   convitesPendentes, temConvitePendente, contarConvitesPendentes,
   aceitarConvite, recusarConvite, montarRosterConvite,
-  sincronizarReservaEmPerfis, removerReservaDePerfis,
   marcarReservaAtualizada, copiaMaisRecente, reconciliarCopiaAtiva,
+  repararSaldoLocal, trilhaCheia, LIMITE_APORTES,
 } from '../../src/scripts/modules/reserva-familia.js'
 
 const mov = (tipo, valor, id, nome) => ({ memberId: id, memberNome: nome, tipo, valor })
@@ -113,8 +113,21 @@ describe('porMembro — quem colocou e quem tirou', () => {
     const ms = [mov('aporte', 500, 'u1', 'Ana'), mov('aporte', 300, 'u2', 'Bruno'), mov('retirada', 100, 'u1', 'Ana')]
     const r = porMembro(ms)
     assert.equal(r.length, 2)
-    assert.deepEqual(r[0], { id: 'u1', nome: 'Ana', aportes: 500, retiradas: 100, liquido: 400 })
-    assert.deepEqual(r[1], { id: 'u2', nome: 'Bruno', aportes: 300, retiradas: 0, liquido: 300 })
+    assert.deepEqual(r[0], { id: 'u1', nome: 'Ana', aportes: 500, retiradas: 100, liquido: 400, sistema: false })
+    assert.deepEqual(r[1], { id: 'u2', nome: 'Bruno', aportes: 300, retiradas: 0, liquido: 300, sistema: false })
+  })
+
+  test('⭐ lançamento sem dono é marcado como SISTEMA, não como pessoa', () => {
+    // "Saldo anterior" e "Rendimento" apareciam na lista como se fossem membros
+    // da família — reclamação direta do dono. Continuam na conta (é dinheiro
+    // real), mas a tela precisa saber separá-los.
+    const r = porMembro([
+      mov('aporte', 100, 'u1', 'Ana'),
+      { memberId: null, memberNome: 'Saldo anterior', tipo: 'aporte', valor: 500 },
+    ])
+    assert.equal(r.find(x => x.nome === 'Ana').sistema, false)
+    assert.equal(r.find(x => x.nome === 'Saldo anterior').sistema, true,
+      'a linha de sistema passaria por membro da família na tela')
   })
   test('ordena pelo líquido — quem sustenta aparece primeiro', () => {
     const ms = [mov('aporte', 100, 'u1', 'Ana'), mov('aporte', 900, 'u2', 'Bruno')]
@@ -279,61 +292,52 @@ describe('montarRosterConvite — criador aceito, demais pendentes', () => {
   })
 })
 
-// ── Propagação entre perfis (o que faz a reserva aparecer em OUTRO perfil) ────
+// ── 🔴 A ESCRITA CRUZADA FOI REMOVIDA (2026-08-17) ───────────────────────────
+//
+// `sincronizarReservaEmPerfis` e `removerReservaDePerfis` copiavam a reserva
+// para dentro do slot dos OUTROS perfis. Como o delta save manda o registro
+// inteiro (`{op:'edit', r}`), o servidor substituía a cópia do outro membro pela
+// visão de quem salvou — e o aporte dele morria no banco. Está medido em
+// tests/unit/reserva-compartilhada-e2e.test.js, com os módulos reais.
+//
+// Estes testes travam a AUSÊNCIA delas: reintroduzir a escrita cruzada volta a
+// apagar dinheiro, e o defeito não aparece em teste de unidade nenhum.
 const perfil = (id, metas = []) => ({ id, nome: 'P' + id, metas })
 
-describe('sincronizarReservaEmPerfis', () => {
-  test('injeta cópia só nos MEMBROS; convidado pendente NÃO recebe (não polui total)', () => {
-    const reserva = { id: 'r1', compartilhada: true, saved: 100, membros: ['A'], convites: ['B'] }
-    const profiles = [perfil('A'), perfil('B'), perfil('C')]
-    sincronizarReservaEmPerfis(profiles, reserva)
-    assert.equal(profiles[0].metas.length, 1)          // A (membro) → cópia
-    assert.equal(profiles[1].metas.length, 0)          // B (convidado pendente) → NADA
-    assert.equal(profiles[2].metas.length, 0)          // C fora → nada
-    assert.equal(profiles[0].metas[0].saved, 100)
+describe('🔴 ninguém escreve no slot de outro perfil', () => {
+  test('⭐ o módulo não exporta mais função de escrita cruzada', async () => {
+    const mod = await import('../../src/scripts/modules/reserva-familia.js')
+    assert.equal(mod.sincronizarReservaEmPerfis, undefined,
+      'a propagação entre perfis voltou — ela apagava o aporte do outro membro')
+    assert.equal(mod.removerReservaDePerfis, undefined,
+      'apagar a cópia alheia voltou — ela leva junto a trilha de quem ficou')
   })
-  test('cópias são independentes (deep clone, sem alias)', () => {
-    const reserva = { id: 'r1', compartilhada: true, saved: 10, movimentos: [{ v: 1 }], membros: ['A', 'B'], convites: [] }
-    const profiles = [perfil('A'), perfil('B')]
-    sincronizarReservaEmPerfis(profiles, reserva)
-    profiles[0].metas[0].saved = 999
-    profiles[0].metas[0].movimentos[0].v = 999
-    assert.equal(profiles[1].metas[0].saved, 10)       // B não mudou junto
-    assert.equal(profiles[1].metas[0].movimentos[0].v, 1)
-    assert.equal(reserva.saved, 10)                    // fonte intacta
-  })
-  test('atualiza cópia existente em vez de duplicar', () => {
-    const profiles = [perfil('A', [{ id: 'r1', compartilhada: true, saved: 1 }])]
-    sincronizarReservaEmPerfis(profiles, { id: 'r1', compartilhada: true, saved: 50, membros: ['A'], convites: [] })
-    assert.equal(profiles[0].metas.length, 1)
-    assert.equal(profiles[0].metas[0].saved, 50)
-  })
-  test('quem deixou de participar perde a cópia', () => {
-    const profiles = [perfil('A', [{ id: 'r1', compartilhada: true }]), perfil('B', [{ id: 'r1', compartilhada: true }])]
-    // Agora só A participa (B recusou/saiu)
-    sincronizarReservaEmPerfis(profiles, { id: 'r1', compartilhada: true, membros: ['A'], convites: [] })
-    assert.equal(profiles[0].metas.length, 1)
-    assert.equal(profiles[1].metas.length, 0)          // B perdeu a cópia
-  })
-  test('não-compartilhada ou sem id → no-op', () => {
-    const profiles = [perfil('A')]
-    sincronizarReservaEmPerfis(profiles, { id: 'r1', compartilhada: false, membros: ['A'] })
-    sincronizarReservaEmPerfis(profiles, { compartilhada: true, membros: ['A'] })
-    assert.equal(profiles[0].metas.length, 0)
-  })
-})
 
-describe('removerReservaDePerfis', () => {
-  test('remove a reserva de TODOS os perfis', () => {
-    const profiles = [
-      perfil('A', [{ id: 'r1' }, { id: 'r2' }]),
-      perfil('B', [{ id: 'r1' }]),
-      perfil('C', []),
-    ]
-    removerReservaDePerfis(profiles, 'r1')
-    assert.deepEqual(profiles[0].metas.map(m => m.id), ['r2'])
-    assert.equal(profiles[1].metas.length, 0)
-    assert.equal(profiles[2].metas.length, 0)
+  test('⭐ reconciliar NÃO muda nenhuma outra cópia', () => {
+    // A invariante, exercitada: só a cópia ativa pode sair diferente.
+    const minha  = { id: 'r1', compartilhada: true, membros: ['A', 'B'], saved: 0,
+                     movimentos: [], lastUpdate: '2026-08-17T10:00:00.000Z' }
+    const dela   = { id: 'r1', compartilhada: true, membros: ['A', 'B'], saved: 300,
+                     movimentos: [], lastUpdate: '2026-08-17T09:00:00.000Z' }
+    const profiles = [perfil('A', [minha]), perfil('B', [dela])]
+    const antes = JSON.stringify(dela)
+
+    reconciliarCopiaAtiva(minha, profiles, 'A')
+
+    assert.equal(JSON.stringify(dela), antes,
+      'a reconciliação mexeu na cópia do outro perfil (isso vira um edit no save dele)')
+  })
+
+  test('⭐ nem para migrar o saldo legado de quem ainda não tem trilha', () => {
+    // A migração do legado mexia em TODAS as cópias. Parecia inofensiva (só
+    // acrescenta a entrada de abertura), mas o save manda o registro inteiro.
+    const minha = { id: 'r1', compartilhada: true, membros: ['A', 'B'], saved: 500, movimentos: [] }
+    const dela  = { id: 'r1', compartilhada: true, membros: ['A', 'B'], saved: 500, movimentos: [] }
+    reconciliarCopiaAtiva(minha, [perfil('A', [minha]), perfil('B', [dela])], 'A')
+
+    assert.equal(minha.movimentos.length, 1, 'a minha cópia não migrou')
+    assert.deepEqual(dela.movimentos, [], 'a cópia do outro perfil foi escrita na minha sessão')
+    assert.equal(minha.saved, 500, 'a migração perdeu o saldo legado')
   })
 })
 

@@ -6,66 +6,74 @@ import {
     contaCompartilhada, ehCompartilhada, membroAtual, registrarMovimento,
     porMembro, perfilParticipa,
     montarRosterConvite,
-    sincronizarReservaEmPerfis, removerReservaDePerfis,
     marcarReservaAtualizada, reconciliarCopiaAtiva,
     depositoLiquidoDe, ehUltimoMembro, sairDaReserva,
-} from '../modules/reserva-familia.js?v=8';
+    trilhaCheia, LIMITE_APORTES,
+    mesesComMovimento, movimentosDoMes, rotuloMes,
+} from '../modules/reserva-familia.js?v=9';
 import { aplicarMascaraMoeda, lerMoeda, definirMoeda } from '../modules/mascara-moeda.js?v=1';
 import { novoId } from '../modules/registro-id.js?v=1';
 
-// ── Reserva compartilhada v2: propagação entre perfis ───────────────────────
+// ── Reserva compartilhada: cada perfil escreve SÓ o próprio slot ────────────
 // O blob é UMA linha (array de perfis), cada perfil com suas próprias `metas`.
-// Para uma reserva compartilhada aparecer nos OUTROS perfis, gravamos uma cópia
-// no slot de cada MEMBRO (aceito). O perfil ATIVO é reconstruído de `_ctx.metas`
-// no save, então propagamos só nos demais. `_ctx.allProfilesData` é a fonte de
-// verdade (todos os perfis em memória) exposta pelo dashboard.
-function _outrosPerfis() {
-    const profiles = _ctx.allProfilesData;
-    if (!Array.isArray(profiles)) return null;
-    const ativoId = String(_ctx.perfilAtivo?.id ?? '');
-    return profiles.filter(p => String(p?.id) !== ativoId);
-}
-function _sincReserva(reserva) {
+// Uma reserva compartilhada tem uma cópia no slot de cada membro.
+//
+// 🔴 Até 2026-08-17 este arquivo PROPAGAVA a reserva para os slots dos outros
+// perfis a cada aporte. Como o delta save manda `{op:'edit', r: <registro
+// inteiro>}`, o servidor substituía a cópia do outro pela MINHA visão — e o
+// aporte dele morria no banco. Está medido em
+// tests/unit/reserva-compartilhada-e2e.test.js. Ver a INVARIANTE no topo de
+// modules/reserva-familia.js: **ninguém escreve no slot de outro perfil.**
+//
+// O que faz a mudança chegar ao outro perfil agora: a campainha do tempo real
+// (que passou a considerar os perfis com quem eu divido reserva) + a
+// reconciliação abaixo, que UNE as trilhas e deriva o saldo delas.
+function _marcarReserva(reserva) {
     if (!ehCompartilhada(reserva)) return;
-    // Carimba ANTES de propagar: o `lastUpdate` é o que a reconciliação usa para
-    // saber qual cópia é a mais nova quando o perfil B recarrega do servidor.
+    // O `lastUpdate` é o que a reconciliação usa para saber qual cópia trouxe a
+    // decisão mais nova (objetivo, prazo, roster). Dinheiro não depende dele.
     marcarReservaAtualizada(reserva);
-    const outros = _outrosPerfis();
-    if (outros) sincronizarReservaEmPerfis(outros, reserva);
 }
-// Antes de renderizar, traz para cada reserva compartilhada do perfil ativo a
-// versão mais recente entre as cópias dos perfis (o saldo que outro perfil
-// depositou). Cada slot de quem escreveu SEMPRE persiste certo, então basta
-// puxar a cópia de maior lastUpdate. Persiste se algo mudou (heal permanente).
-function _reconciliarReservasAtivas() {
-    const profiles = _ctx.allProfilesData;
-    if (!Array.isArray(profiles) || !Array.isArray(_ctx.metas)) return;
+// Traz para cada reserva compartilhada do perfil ativo tudo o que as outras
+// cópias sabem: a trilha unida, o saldo derivado dela e as decisões mais novas.
+// Persiste se algo mudou (heal permanente). Exportada porque o dashboard chama
+// isto no LOAD — antes rodava só no render da aba Reservas, então quem estava na
+// tela inicial via o saldo velho até abrir a lista.
+export function reconciliarReservasCompartilhadas() {
+    const profiles = _ctx?.allProfilesData;
+    if (!Array.isArray(profiles) || !Array.isArray(_ctx.metas)) return false;
+    const pid = _ctx.perfilAtivo?.id;
     let mudou = false;
     for (const m of _ctx.metas) {
-        if (ehCompartilhada(m) && reconciliarCopiaAtiva(m, profiles)) mudou = true;
+        if (ehCompartilhada(m) && reconciliarCopiaAtiva(m, profiles, pid)) mudou = true;
     }
     if (mudou) _ctx.salvarDados();
+    return mudou;
 }
-function _removerReserva(id) {
-    const outros = _outrosPerfis();
-    if (outros) removerReservaDePerfis(outros, id);
-}
+const _reconciliarReservasAtivas = reconciliarReservasCompartilhadas;
 // Reserva compartilhada que já não me tem no roster (outro perfil me removeu, ou
-// eu saí em outro aparelho): a cópia no MEU slot precisa sumir. A reconciliação
-// traz o `membros` novo; aqui só tiramos da lista o que deixou de ser meu.
-function _limparReservasQueSai() {
+// eu saí em outro aparelho): a cópia no MEU slot deixa de ser minha. A
+// reconciliação traz o `membros` novo; aqui só marcamos o que deixou de ser meu.
+//
+// ⚠️ MARCA, NÃO APAGA. Apagar levaria junto a MINHA trilha — e é dela que sai o
+// saldo de quem ficou. Quem já tinha absorvido meus aportes ficaria com dinheiro
+// a mais; quem não tinha, a menos. Como recibo (`saiu`), a cópia some da minha
+// tela (perfilParticipa) e continua somando certo na união dos outros.
+function _marcarReservasQueSai() {
     if (!Array.isArray(_ctx.metas)) return;
     const pid = String(_ctx.perfilAtivo?.id ?? '');
     if (!pid) return;
-    const antes = _ctx.metas.length;
-    _ctx.metas = _ctx.metas.filter(m => {
-        if (!ehCompartilhada(m) || !Array.isArray(m.membros)) return true;
+    let mudou = false;
+    for (const m of _ctx.metas) {
+        if (!ehCompartilhada(m) || m.saiu === true || !Array.isArray(m.membros)) continue;
         // Roster legado (nomes) nunca esconde nada — mesma regra de perfilParticipa.
         const pareceId = (v) => /^[0-9a-f-]{16,}$/i.test(String(v)) || /^\d+$/.test(String(v));
-        if (!m.membros.some(pareceId)) return true;
-        return m.membros.map(String).includes(pid);
-    });
-    if (_ctx.metas.length !== antes) _ctx.salvarDados();
+        if (!m.membros.some(pareceId)) continue;
+        if (m.membros.map(String).includes(pid)) continue;
+        m.saiu = true;
+        mudou = true;
+    }
+    if (mudou) _ctx.salvarDados();
 }
 // Dispara o push do convite para os OUTROS membros da conta (via edge, pois o
 // cliente não pode inserir notificação para outro usuário). BEST-EFFORT: o banner
@@ -309,8 +317,31 @@ async function aplicarRendimentosDiarios() {
         if (rendimento < 0.01) return; // menos de R$0,01 — não credita ainda
 
         const rendSeguro = parseFloat(rendimento.toFixed(2));
-        meta.saved       = parseFloat((meta.saved + rendSeguro).toFixed(2));
-        meta.monthly     = meta.monthly || {};
+
+        // Reserva compartilhada: o rendimento também tem de entrar na trilha —
+        // ela é a fonte do saldo. Sem isto o crédito de juros seria uma diferença
+        // sem dono e viraria linha de "Ajuste" na reconciliação.
+        //
+        // O `mid` é DETERMINÍSTICO pelo dia porque CADA membro abre a tela e
+        // calcularia o rendimento na sua própria cópia. Com a mesma chave, a
+        // união conta uma vez só — sem ela, o casal creditaria juros em dobro.
+        //
+        // ⚠️ A ORDEM IMPORTA: só mexe no dinheiro se o lançamento entrou. Creditar
+        // primeiro e deixar o `mid` recusar depois somaria ao `saved` um valor que
+        // a trilha não explica — e a reconciliação transformaria isso num "Ajuste"
+        // eterno na cara do usuário.
+        if (ehCompartilhada(meta)) {
+            const entrou = registrarMovimento(meta, {
+                id: null, nome: 'Rendimento', tipo: 'aporte', valor: rendSeguro,
+                data: hojeISO,
+                mid: `rend:${String(meta.id ?? '')}:${hojeISO}`,
+            });
+            if (!entrou) return;                   // outro membro já creditou hoje
+            marcarReservaAtualizada(meta);
+        }
+
+        meta.saved   = parseFloat((meta.saved + rendSeguro).toFixed(2));
+        meta.monthly = meta.monthly || {};
         meta.monthly[mesKey] = parseFloat(
             ((meta.monthly[mesKey] || 0) + rendSeguro).toFixed(2)
         );
@@ -323,7 +354,7 @@ async function aplicarRendimentosDiarios() {
 
 export function init(ctx) {
     _ctx = ctx;
-    window._dbMetas = { renderMetasList };
+    window._dbMetas = { renderMetasList, reconciliarReservasCompartilhadas };
     window.abrirMetaForm          = (id) => abrirMetaForm(id);
     window.removerMeta            = (id) => removerMeta(id);
     window.selecionarMeta         = (id) => selecionarMeta(id);
@@ -1155,13 +1186,18 @@ function abrirMetaForm(editId = null) {
                     meta.membros  = membros;
                     meta.convites = convites;
                     if (!Array.isArray(meta.movimentos)) meta.movimentos = [];
-                    // Propaga a reserva para os slots dos outros perfis participantes.
-                    _sincReserva(meta);
+                    // Carimba: o roster novo chega aos outros pela reconciliação,
+                    // que segue o `lastUpdate` mais recente.
+                    _marcarReserva(meta);
                     // Notifica quem ainda está pendente (dedupe no servidor evita repetir).
                     if (meta.convites?.length) _notificarConviteReserva(meta.id, meta.descricao);
                 } else {
-                    // Deixou de ser compartilhada → some das cópias dos outros perfis.
-                    _removerReserva(meta.id);
+                    // Deixou de ser compartilhada: esvazia o roster e carimba. Cada
+                    // membro recebe isso pela reconciliação e a própria cópia dele
+                    // se marca como saída — nós não apagamos o slot de ninguém.
+                    meta.membros  = [];
+                    meta.convites = [];
+                    marcarReservaAtualizada(meta);
                 }
 
                 // Sincroniza conta fixa de aporte quando muda configuração
@@ -1182,10 +1218,12 @@ function abrirMetaForm(editId = null) {
                     novaMeta.movimentos = [];
                 }
                 _ctx.metas.push(novaMeta);
-                // Injeta a cópia da reserva nos slots dos perfis convidados —
-                // é o que faz o convite aparecer quando eles entrarem no perfil.
+                // O convidado NÃO recebe cópia: ele descobre o convite varrendo
+                // `convites` das cópias dos membros (_convitesReservaPendentes) e
+                // cria a dele própria ao aceitar. Sem cópia, a reserva também não
+                // conta no total dele antes de ele decidir.
                 if (compartilhada) {
-                    _sincReserva(novaMeta);
+                    _marcarReserva(novaMeta);
                     // Push para os outros membros da conta (dedupe no servidor).
                     if (novaMeta.convites?.length) _notificarConviteReserva(novaMeta.id, novaMeta.descricao);
                 }
@@ -1471,8 +1509,9 @@ function renderMetasList() {
     // perfil depositou) ANTES de renderizar. É o que corrige "reserva zerada no
     // perfil B" sem depender da propagação em memória sobreviver ao refetch.
     _reconciliarReservasAtivas();
-    // Reserva de que eu já não faço parte (saí, ou fui removido do roster) some.
-    _limparReservasQueSai();
+    // Reserva de que eu já não faço parte (saí, ou fui removido do roster) vira
+    // recibo e some da lista — sem apagar a trilha de quem ficou.
+    _marcarReservasQueSai();
 
     const searchVal  = (document.getElementById('metaSearchInput')?.value  || '').toLowerCase();
     const statusVal  = (document.getElementById('metaStatusFilter')?.value || '');
@@ -1862,13 +1901,19 @@ function _sairDaReservaCompartilhada(meta) {
             _ctx.transacoes = _ctx.transacoes.map(t =>
                 (t.metaId && String(t.metaId) === String(meta.id)) ? Object.assign({}, t, { metaId: null }) : t);
 
-            // Propaga o novo saldo/roster para as cópias dos outros perfis ANTES de
-            // sumir com a minha — quem ficou precisa ver a reserva reduzida. Se eu
-            // era o último, ela sai de todo mundo.
-            if (r.ultimo) _removerReserva(meta.id);
-            else          _sincReserva(meta);
-
-            _ctx.metas = _ctx.metas.filter(m => String(m.id) !== String(meta.id));
+            // Quem ficou vê a reserva reduzida pela RETIRADA que `sairDaReserva`
+            // acabou de gravar na trilha (e pelo roster novo, que viaja em
+            // `lastUpdate`): a reconciliação deles faz a conta sozinha.
+            //
+            // Antes, este ponto escrevia o estado nos slots alheios — e era isso
+            // que apagava o aporte do outro. Ver a INVARIANTE em reserva-familia.js.
+            //
+            // A cópia FICA no meu slot como recibo (`saiu = true`) e some da minha
+            // tela por `perfilParticipa`. Só o ÚLTIMO membro apaga de verdade: aí
+            // não há mais ninguém para quem a trilha faça diferença.
+            if (r.ultimo) {
+                _ctx.metas = _ctx.metas.filter(m => String(m.id) !== String(meta.id));
+            }
             if (String(_ctx.metaSelecionadaId) === String(meta.id)) _ctx.metaSelecionadaId = null;
 
             _ctx.fecharPopup();
@@ -1906,9 +1951,10 @@ function removerMeta(id) {
 
     if(!confirm('Remover meta? Isso também removerá os valores mensais associados.')) return;
 
+    // Só chega aqui reserva compartilhada SEM saldo e com este perfil como último
+    // membro (ver a guarda acima) — não há cópia de mais ninguém para tocar, e é
+    // por isso que apagar a minha é seguro.
     _ctx.metas = _ctx.metas.filter(m => m.id !== id);
-    // Reserva compartilhada sem saldo removida → some das cópias dos outros perfis.
-    if (ehCompartilhada(alvo)) _removerReserva(id);
     _ctx.transacoes = _ctx.transacoes.map(t => {
         if(t.metaId && String(t.metaId) === String(id)) {
             return Object.assign({}, t, { metaId: null });
@@ -2109,6 +2155,180 @@ function _desenharGraficoLinha(meta, ctxLine, line, period) {
     points.forEach(p => ctxLine.fillText(p.month, p.x, padding + h + 16));
 }
 
+// ── "QUEM COLOCOU" — o extrato da reserva compartilhada ─────────────────────
+//
+// O card antigo mostrava só o líquido acumulado por pessoa, desde sempre. Três
+// reclamações do dono, todas justas:
+//   • não dizia QUANDO nem QUANTO foi cada depósito — era um número solto;
+//   • listava "Saldo anterior" e "Ajuste" como se fossem gente da família;
+//   • sem propagação funcionando, costumava aparecer vazio (o bug de verdade,
+//     corrigido em modules/reserva-familia.js).
+//
+// Agora é um extrato: escolhe-se o mês e vê-se linha a linha quem pôs e quem
+// tirou, com a data. O resumo por pessoa continua, mas do PERÍODO escolhido, e
+// os lançamentos que não são de ninguém (rendimento, abertura do saldo antigo)
+// ficam num bloco à parte.
+//
+// Mês selecionado por reserva — trocar de reserva não herda o mês da anterior.
+let _extratoMes = { id: null, ym: undefined };
+
+/** 'dd/mm' a partir de `data` (dd/mm/aaaa ou ISO) ou de `em`. '' se não der. */
+function _diaCurto(m) {
+    const data = String(m?.data ?? '');
+    const br = /^(\d{2})\/(\d{2})\/\d{4}$/.exec(data);
+    if (br) return `${br[1]}/${br[2]}`;
+    const iso = /^\d{4}-(\d{2})-(\d{2})/.exec(data);
+    if (iso) return `${iso[2]}/${iso[1]}`;
+    const em = Number(m?.em);
+    if (isFinite(em) && em > 0) {
+        const d = new Date(em);
+        if (!isNaN(d.getTime())) {
+            return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+        }
+    }
+    return '';
+}
+
+function _cardQuemColocou(meta) {
+    const sec = document.createElement('div');
+    sec.style.cssText = 'background:rgba(67,160,71,0.06); border:1px solid rgba(67,160,71,0.2); border-radius:12px; padding:12px 14px; margin-bottom:14px;';
+
+    const trilha = Array.isArray(meta.movimentos) ? meta.movimentos : [];
+    const meses  = mesesComMovimento(trilha);
+
+    // ── Cabeçalho: título + seletor de mês ──────────────────────────────────
+    const topo = document.createElement('div');
+    topo.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;';
+
+    const tit = document.createElement('div');
+    tit.style.cssText = 'font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--primary);';
+    tit.textContent = '👥 Quem colocou';
+    topo.appendChild(tit);
+
+    // O mês guardado só vale para ESTA reserva; e se ele não existe mais na
+    // trilha (a pessoa apagou/entrou em outra), cai no mês mais recente.
+    if (String(_extratoMes.id) !== String(meta.id)) {
+        _extratoMes = { id: meta.id, ym: meses[0] };
+    } else if (_extratoMes.ym !== null && !meses.includes(_extratoMes.ym)) {
+        _extratoMes.ym = meses[0];
+    }
+
+    const sel = document.createElement('select');
+    sel.className = 'form-input';
+    sel.setAttribute('aria-label', 'Mês do extrato da reserva');
+    sel.style.cssText = 'width:auto; min-width:150px; padding:5px 10px; font-size:0.82rem;';
+    const optTudo = document.createElement('option');
+    optTudo.value = '';
+    optTudo.textContent = 'Tudo';
+    sel.appendChild(optTudo);
+    for (const ym of meses) {
+        const o = document.createElement('option');
+        o.value = ym;
+        o.textContent = rotuloMes(ym);
+        sel.appendChild(o);
+    }
+    sel.value = _extratoMes.ym ?? '';
+    if (meses.length > 0) topo.appendChild(sel);
+    sec.appendChild(topo);
+
+    const corpo = document.createElement('div');
+    sec.appendChild(corpo);
+
+    const linhaValor = (esq, valor, opts = {}) => {
+        const l = document.createElement('div');
+        l.style.cssText = 'display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding:4px 0; font-size:' + (opts.pequeno ? '0.82rem;' : '0.9rem;');
+        const e = document.createElement('span');
+        e.style.cssText = opts.mudo ? 'color:var(--text-muted);' : '';
+        e.textContent = esq;
+        const d = document.createElement('strong');
+        d.style.cssText = `white-space:nowrap; color:${valor < 0 ? '#ff6b6b' : 'var(--primary)'};`;
+        d.textContent = (valor < 0 ? '− ' : '+ ') + formatBRL(Math.abs(valor));
+        if (opts.titulo) d.title = opts.titulo;
+        l.appendChild(e); l.appendChild(d);
+        return l;
+    };
+
+    const pintar = () => {
+        corpo.innerHTML = '';
+        const ym    = _extratoMes.ym || null;
+        const itens = movimentosDoMes(trilha, ym);
+
+        if (itens.length === 0) {
+            const vazio = document.createElement('div');
+            vazio.style.cssText = 'font-size:0.85rem; color:var(--text-muted);';
+            vazio.textContent = trilha.length === 0
+                ? 'Ninguém colocou nada ainda. Use "Guardar" para começar.'
+                : 'Nenhum lançamento neste mês.';
+            corpo.appendChild(vazio);
+            return;
+        }
+
+        // ── Resumo por pessoa NO PERÍODO ────────────────────────────────────
+        const resumo  = porMembro(itens);
+        const pessoas = resumo.filter(p => !p.sistema);
+        const sistema = resumo.filter(p =>  p.sistema);
+
+        for (const p of pessoas) {
+            corpo.appendChild(linhaValor(
+                p.nome, p.liquido,
+                { titulo: p.retiradas > 0
+                    ? `Colocou ${formatBRL(p.aportes)} · retirou ${formatBRL(p.retiradas)}`
+                    : `Colocou ${formatBRL(p.aportes)}` },
+            ));
+        }
+        // Rendimento, abertura de saldo antigo e ajustes NÃO são pessoas — e
+        // aparecer como "membro" foi reclamação direta do dono.
+        for (const s of sistema) {
+            corpo.appendChild(linhaValor(s.nome, s.liquido, { mudo: true, pequeno: true }));
+        }
+
+        // ── Lançamento a lançamento ─────────────────────────────────────────
+        const sepTit = document.createElement('div');
+        sepTit.style.cssText = 'margin:10px 0 4px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.08); font-size:0.7rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted);';
+        sepTit.textContent = ym ? `Lançamentos · ${rotuloMes(ym)}` : 'Todos os lançamentos';
+        corpo.appendChild(sepTit);
+
+        // Teto de linhas: uma reserva de anos não pode pintar 500 nós no card.
+        const MAX_LINHAS = 60;
+        for (const mv of itens.slice(0, MAX_LINHAS)) {
+            const dia   = _diaCurto(mv);
+            const acao  = mv.tipo === 'aporte' ? 'guardou' : 'retirou';
+            const quem  = String(mv.memberNome || 'Membro');
+            const rotulo = (dia ? `${dia} · ` : '') + (mv.memberId == null ? quem : `${quem} ${acao}`);
+            corpo.appendChild(linhaValor(
+                rotulo,
+                mv.tipo === 'aporte' ? Number(mv.valor) : -Number(mv.valor),
+                { pequeno: true, mudo: mv.memberId == null },
+            ));
+        }
+        if (itens.length > MAX_LINHAS) {
+            const mais = document.createElement('div');
+            mais.style.cssText = 'font-size:0.78rem; color:var(--text-muted); padding-top:6px;';
+            mais.textContent = `+ ${itens.length - MAX_LINHAS} lançamento(s) mais antigos. Escolha um mês para ver.`;
+            corpo.appendChild(mais);
+        }
+
+        // ── Total da reserva (todos, sempre) ────────────────────────────────
+        const total = document.createElement('div');
+        total.style.cssText = 'display:flex; justify-content:space-between; align-items:baseline; margin-top:10px; padding-top:8px; border-top:1px solid rgba(255,255,255,0.08); font-size:0.88rem;';
+        const tl = document.createElement('span');
+        tl.style.color = 'var(--text-secondary)';
+        tl.textContent = 'Total da reserva';
+        const tv = document.createElement('strong');
+        tv.textContent = formatBRL(Number(meta.saved || 0));
+        total.appendChild(tl); total.appendChild(tv);
+        corpo.appendChild(total);
+    };
+
+    sel.addEventListener('change', () => {
+        _extratoMes = { id: meta.id, ym: sel.value || null };
+        pintar();
+    });
+
+    pintar();
+    return sec;
+}
+
 function renderMetaVisual() {
     const details = document.getElementById('metaDetalhes');
     const donut = document.getElementById('donutChart');
@@ -2213,33 +2433,7 @@ function renderMetaVisual() {
     // O coração da feature de família. Líquido por pessoa, do que mais
     // contribuiu para o que menos. textContent — nunca innerHTML com nome.
     if (ehCompartilhada(meta)) {
-        const membros = porMembro(meta.movimentos);
-        const secQuem = document.createElement('div');
-        secQuem.style.cssText = 'background:rgba(67,160,71,0.06); border:1px solid rgba(67,160,71,0.2); border-radius:12px; padding:12px 14px; margin-bottom:14px;';
-        const tit = document.createElement('div');
-        tit.style.cssText = 'font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--primary); margin-bottom:8px;';
-        tit.textContent = '👥 Quem colocou';
-        secQuem.appendChild(tit);
-        if (membros.length === 0) {
-            const vazio = document.createElement('div');
-            vazio.style.cssText = 'font-size:0.85rem; color:var(--text-muted);';
-            vazio.textContent = 'Ninguém colocou nada ainda. Use "Guardar" para começar.';
-            secQuem.appendChild(vazio);
-        } else {
-            for (const mem of membros) {
-                const linha = document.createElement('div');
-                linha.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:0.9rem;';
-                const n = document.createElement('span');
-                n.textContent = mem.nome;
-                const q = document.createElement('strong');
-                q.style.color = mem.liquido < 0 ? '#ff6b6b' : 'var(--primary)';
-                q.textContent = formatBRL(mem.liquido);
-                if (mem.retiradas > 0) q.title = `Colocou ${formatBRL(mem.aportes)} · retirou ${formatBRL(mem.retiradas)}`;
-                linha.appendChild(n); linha.appendChild(q);
-                secQuem.appendChild(linha);
-            }
-        }
-        details.appendChild(secQuem);
+        details.appendChild(_cardQuemColocou(meta));
     }
 
     // ── Seletor de período para o gráfico de linha ─────────────────────────
@@ -2916,8 +3110,7 @@ function abrirRetiradaForm() {
         if (ehCompartilhada(meta)) {
             const quem = membroAtual(_ctx);
             registrarMovimento(meta, { id: quem.id, nome: quem.nome, tipo: 'retirada', valor: valorRetirar, data: dh.data, hora: dh.hora });
-            // Propaga saldo/trilha para as cópias dos outros perfis.
-            _sincReserva(meta);
+            _marcarReserva(meta);
         }
 
         _ctx.salvarDados();
@@ -3085,6 +3278,14 @@ function abrirGuardarForm() {
             if (valor > saldoAtual) {
                 return _ctx.mostrarNotificacao(`Saldo insuficiente. Disponível: ${formatBRL(saldoAtual)}.`, 'error');
             }
+            // Teto da trilha: barra ANTES de mexer no dinheiro. O saldo de uma
+            // reserva compartilhada é a soma da trilha — deixar o aporte entrar e
+            // o registro ficar de fora seria criar dinheiro sem dono.
+            if (ehCompartilhada(meta) && trilhaCheia(meta)) {
+                return _ctx.mostrarNotificacao(
+                    `Esta reserva atingiu ${LIMITE_APORTES} lançamentos. Crie uma nova reserva para continuar guardando.`,
+                    'error');
+            }
 
             // ── Descrição (opcional, sanitizada) ─────────────────────────────
             const descRaw = inpDesc.value.trim();
@@ -3120,8 +3321,7 @@ function abrirGuardarForm() {
             if (ehCompartilhada(meta)) {
                 const quem = membroAtual(_ctx);
                 registrarMovimento(meta, { id: quem.id, nome: quem.nome, tipo: 'aporte', valor, data: dh.data, hora: dh.hora });
-                // Propaga saldo/trilha para as cópias dos outros perfis.
-                _sincReserva(meta);
+                _marcarReserva(meta);
             }
 
             _ctx.salvarDados();
@@ -3285,10 +3485,31 @@ function abrirAjusteForm() {
                 return _ctx.mostrarNotificacao('Nenhuma alteração no valor da reserva.', 'info');
             }
 
+            const dh = _ctx.agoraDataHora();
+
+            // Reserva compartilhada: o ajuste é dinheiro entrando ou saindo do
+            // pool comum, então tem de entrar na trilha COM NOME. Sem isto ele
+            // seria invisível para o outro membro e a reconciliação o converteria
+            // numa linha anônima de "Ajuste" — que foi o que poluiu o card.
+            if (ehCompartilhada(meta)) {
+                const quem = membroAtual(_ctx);
+                const entrou = registrarMovimento(meta, {
+                    id: quem.id, nome: quem.nome,
+                    tipo:  delta > 0 ? 'aporte' : 'retirada',
+                    valor: Math.abs(delta),
+                    data: dh.data, hora: dh.hora,
+                });
+                if (!entrou) {
+                    return _ctx.mostrarNotificacao(
+                        `Esta reserva atingiu ${LIMITE_APORTES} lançamentos. Crie uma nova reserva para continuar.`,
+                        'error');
+                }
+                _marcarReserva(meta);
+            }
+
             // ── Aplica o ajuste (reconciliação — sem transação) ──────────────
             meta.saved = novoValor;
 
-            const dh = _ctx.agoraDataHora();
             if (!Array.isArray(meta.historicoAjustes)) meta.historicoAjustes = [];
             meta.historicoAjustes.push({
                 data:           dh.data,

@@ -81,6 +81,11 @@ export function calcularPatrimonioHoje(ctx) {
     }
     let reservado = 0;
     for (const m of (ctx?.metas || [])) {
+        // `saiu` = recibo de reserva compartilhada da qual este perfil saiu. A
+        // cópia fica no slot para a trilha continuar somando certo para quem
+        // ficou (ver reserva-familia.js), mas o dinheiro já voltou por uma
+        // transação de retirada — contá-la aqui somaria o mesmo valor duas vezes.
+        if (m?.saiu === true) continue;
         reservado += Math.max(0, _valSeguro(m?.saved));
     }
     return { patrimonioHoje: saldo + reservado, saldo, reservado };

@@ -212,13 +212,46 @@ let _ouvindoVisibilidade = false;
 let _ultimoAoMudar = null;
 
 /**
+ * O aviso me alcança? PURA, e exportada de propósito.
+ *
+ * Ficava como um `if` dentro de `ligarNaTela` e só dava para conferir por
+ * expressão regular sobre o texto-fonte — que é justamente o tipo de teste que
+ * este projeto já viu passar com o código removido. Aqui a decisão é executável.
+ *
+ * A pergunta certa é "isto me alcança?", NÃO "isto é meu?". Numa reserva
+ * compartilhada o save do outro perfil mexe em dinheiro meu, e o filtro antigo
+ * (só o meu id) descartava exatamente esse aviso — era o "tempo real não
+ * funciona" da reserva compartilhada.
+ *
+ * @param {{perfis?: string[]}} aviso
+ * @param {string[]} relevantes  meu perfil + com quem divido (ou vou dividir) reserva
+ */
+export function avisoMeAlcanca(aviso, relevantes) {
+    const perfis = Array.isArray(aviso?.perfis) ? aviso.perfis.map(String) : [];
+    // Aviso sem perfis = "mudou algo na conta, não sei onde": aplica-se sempre.
+    if (perfis.length === 0) return true;
+    // ⚠️ Descarta o nullish ANTES do String(): `String(null)` é `'null'`, que
+    // passa por `filter(Boolean)` e vira um id fantasma — aí a lista parece
+    // preenchida e o aviso é descartado por comparar com lixo. Mesma armadilha
+    // já documentada em `montarRosterConvite`.
+    const meus = (Array.isArray(relevantes) ? relevantes : [])
+        .filter((v) => v != null && v !== '')
+        .map(String);
+    // Sem saber quem sou eu, não dá para descartar nada com segurança.
+    if (meus.length === 0) return true;
+    return perfis.some((id) => meus.includes(id));
+}
+
+/**
  * @param {object}   o
  * @param {Function} o.perfilAtual  () => string — id do perfil na tela.
+ * @param {Function} [o.perfisRelevantes] () => string[] — ids cuja mudança me
+ *   alcança: o meu, mais os de quem divide uma reserva comigo. Sem isto, só o meu.
  * @param {Function} o.ocupado      () => boolean — há formulário aberto?
  * @param {Function} o.recarregar   () => Promise<void> — busca e repinta.
  * @returns {Promise<{reaplicarPendente: Function}>}
  */
-export async function ligarNaTela({ url, apikey, conta, token, perfilAtual, ocupado, recarregar, aoPresenca }) {
+export async function ligarNaTela({ url, apikey, conta, token, perfilAtual, perfisRelevantes, ocupado, recarregar, aoPresenca }) {
     const aplicar = (aviso) => {
         // Formulário aberto: trocar os arrays embaixo de quem está digitando
         // apaga o que a pessoa escreveu — a mesma perda que este passo veio
@@ -232,9 +265,12 @@ export async function ligarNaTela({ url, apikey, conta, token, perfilAtual, ocup
 
     const aoMudar = (aviso) => {
         // Numa conta de família, o lançamento do outro no perfil DELE não deve
-        // sacudir a minha tela.
-        const meu = perfilAtual?.() ?? '';
-        if (aviso.perfis.length && meu && !aviso.perfis.includes(meu)) {
+        // sacudir a minha tela — mas "o perfil dele" nem sempre é assunto dele:
+        // numa reserva compartilhada o dinheiro é dos dois. A regra mora em
+        // `avisoMeAlcanca` (pura e testada); aqui só a aplicamos.
+        const relevantes = (perfisRelevantes?.() ?? [perfilAtual?.() ?? ''])
+            .map(String).filter(Boolean);
+        if (!avisoMeAlcanca(aviso, relevantes)) {
             _diag('ultimo', `ignorado: outro perfil (${aviso.perfis.length})`);
             return;
         }

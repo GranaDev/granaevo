@@ -42,8 +42,48 @@ const EDGE = readFileSync(join(RAIZ, 'supabase/functions/save-user-data/index.ts
 const EDGE_CODIGO = soCodigo(EDGE)
 const MIG  = readFileSync(join(RAIZ, 'supabase/migrations/20260807120000_realtime_conta_broadcast.sql'), 'utf8')
 
-// O CLIENT_ID é puro e não depende de rede — dá para importar de verdade.
-const { CLIENT_ID } = await import('../../src/scripts/modules/tempo-real.js')
+// O CLIENT_ID e o filtro de relevância são puros e não dependem de rede — dá
+// para importar e EXECUTAR de verdade.
+const { CLIENT_ID, avisoMeAlcanca } = await import('../../src/scripts/modules/tempo-real.js')
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('⭐ o filtro decide "isto me alcança?", não "isto é meu?"', () => {
+  // 🔴 REGRESSÃO REAL: o filtro antigo só aceitava avisos que citassem o MEU
+  // perfil. Numa reserva compartilhada, quem guarda dinheiro declara apenas o
+  // slot DELE — então o aviso do aporte do outro membro era descartado, e a
+  // reserva só atualizava no F5. Era o "tempo real não funciona" do recurso.
+  test('⭐ aviso de quem divide reserva comigo é APLICADO', () => {
+    assert.equal(avisoMeAlcanca({ perfis: ['65'] }, ['64', '65']), true,
+      'o aporte do outro membro da reserva foi descartado')
+  })
+
+  test('o lançamento de um perfil que não me toca continua sendo ignorado', () => {
+    // O filtro precisa continuar filtrando: sem isto, toda gravação de qualquer
+    // perfil da família repintaria a minha tela.
+    assert.equal(avisoMeAlcanca({ perfis: ['99'] }, ['64', '65']), false)
+  })
+
+  test('o meu próprio perfil sempre alcança', () => {
+    assert.equal(avisoMeAlcanca({ perfis: ['64'] }, ['64']), true)
+  })
+
+  test('aviso sem perfis (não sei onde mudou) aplica-se', () => {
+    assert.equal(avisoMeAlcanca({ perfis: [] }, ['64']), true)
+    assert.equal(avisoMeAlcanca({}, ['64']), true)
+  })
+
+  test('sem saber quem sou eu, não descarta nada', () => {
+    // Errar para "recarrega demais" custa um refetch; errar para "descarta"
+    // custa o usuário olhando um número velho sem saber.
+    assert.equal(avisoMeAlcanca({ perfis: ['65'] }, []), true)
+    assert.equal(avisoMeAlcanca({ perfis: ['65'] }, [null, '']), true)
+  })
+
+  test('compara como STRING (id de perfil legado é inteiro)', () => {
+    assert.equal(avisoMeAlcanca({ perfis: [65] }, [65]), true)
+    assert.equal(avisoMeAlcanca({ perfis: ['65'] }, [65]), true)
+  })
+})
 
 describe('🔒 o canal é PRIVADO nas duas pontas', () => {
   test('o cliente assina como privado', () => {
@@ -179,11 +219,11 @@ describe('o diagnóstico existe, porque isto falha calado', () => {
     const DASH = readFileSync(join(RAIZ, 'src/scripts/pages/dashboard.js'), 'utf8')
     assert.match(DASH, /estado: 'sem_conta_no_load'/)
     assert.match(DASH, /estado: 'erro_ao_ligar'/)
-    // O filtro por perfil mudou de casa junto com a lógica (teto de bundle).
-    // Asserta a CONDIÇÃO, não a mensagem: trocar o `if` por `if (false)` deixaria
-    // a string intacta num ramo morto, e o teste passaria com o filtro desligado.
-    assert.match(CODIGO, /if \(aviso\.perfis\.length && meu && !aviso\.perfis\.includes\(meu\)\)/)
+    // O filtro por perfil virou função pura (`avisoMeAlcanca`) e é EXERCITADO
+    // logo abaixo. Aqui fica só o rastro do descarte: sem ele, "o aviso chegou e
+    // nada aconteceu" não teria como ser diagnosticado em produção.
     assert.match(CODIGO, /ignorado: outro perfil/)
+    assert.match(CODIGO, /avisoMeAlcanca\(aviso, relevantes\)/)
   })
 
   test('o diagnóstico não carrega dado do usuário', () => {

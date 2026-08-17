@@ -13,11 +13,27 @@ import { categoriasEditaveis } from '../modules/categorias-edicao.js?v=1';
 // terceira cópia aqui repetiria o erro que fez o modelo antigo e o novo de
 // fatura coexistirem.
 import { applyRetirada } from '../modules/assistant/tx-builder.js';
+// Reserva compartilhada: todo caminho que mexe em `meta.saved` precisa dizer
+// QUEM mexeu. O saldo de uma reserva compartilhada é a soma da trilha — sem o
+// registro, o lançamento some para o outro membro. Ver reserva-familia.js.
+import { ehCompartilhada, registrarMovimento, marcarReservaAtualizada }
+    from '../modules/reserva-familia.js?v=9';
 
 let _ctx = null;
 
 // Proxy para utilitários de dashboard.js disponíveis via _ctx após init()
 const formatBRL = (...a) => _ctx.formatBRL(...a);
+
+/** Lança na trilha da reserva compartilhada, com a identidade do perfil ativo. */
+function _registrarNaReservaCompartilhada(meta, tipo, valor, data, hora) {
+    if (!ehCompartilhada(meta)) return;
+    registrarMovimento(meta, {
+        id:   _ctx?.perfilAtivo?.id != null ? String(_ctx.perfilAtivo.id) : null,
+        nome: (_ctx?.perfilAtivo?.nome || _ctx?.usuarioLogado?.nome || 'Você'),
+        tipo, valor, data, hora,
+    });
+    marcarReservaAtualizada(meta);
+}
 
 // Chip "⏱ Xh de trabalho" ao lado de valores de saída (Horas de Vida).
 // Retorna null se o recurso está desativado — appendChild condicional.
@@ -313,7 +329,11 @@ function lancarTransacao() {
         // tela guarda as coleções soltas. Ele muta os MESMOS arrays, então o
         // efeito é idêntico ao do chat.
         const r = applyRetirada(
-            { transacoes: _ctx.transacoes, metas: _ctx.metas },
+            // `id`/`nome` viajam junto: é com eles que `applyRetirada` credita a
+            // retirada a uma pessoa na trilha da reserva compartilhada. Sem eles,
+            // a retirada entraria anônima — e "quem tirou" é metade da feature.
+            { transacoes: _ctx.transacoes, metas: _ctx.metas,
+              id: _ctx.perfilAtivo?.id, nome: _ctx.perfilAtivo?.nome },
             { valor, metaId, descricao, motivoRetirada: 'Retirada pela tela de Transações' },
         );
         if (!r.ok) {
@@ -488,6 +508,11 @@ function lancarTransacao() {
                 const ym = _ctx.yearMonthKey(_ctx.isoDate());
                 meta.monthly = meta.monthly || {};
                 meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) + Number(valor)).toFixed(2));
+                // Reserva compartilhada: guardar POR AQUI também tem de dizer quem
+                // foi. Este caminho mexia em `saved` sem tocar na trilha — e a
+                // trilha é a fonte do saldo compartilhado, então o depósito ficava
+                // invisível para o outro membro e virava "Ajuste" na reconciliação.
+                _registrarNaReservaCompartilhada(meta, 'aporte', Number(valor), t.data, t.hora);
             }
         }
 
@@ -1206,6 +1231,12 @@ function editarTransacao(t) {
                     const ym = _ctx.yearMonthKey(t.data);
                     meta.monthly = meta.monthly || {};
                     meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) + sinal * diff).toFixed(2));
+                    // Editar o valor de uma transação de reserva move dinheiro do
+                    // pool. Lançamento de CORREÇÃO (a diferença), nunca reescrita
+                    // do original: o outro membro pode já ter absorvido a trilha.
+                    _registrarNaReservaCompartilhada(
+                        meta, sinal * diff > 0 ? 'aporte' : 'retirada',
+                        Math.abs(diff), t.data, t.hora);
                 }
             }
 
@@ -1246,6 +1277,10 @@ function excluirTransacao(t) {
         if (tinhaMonthly) {
             meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) + sinal * Number(t.valor)).toFixed(2));
         }
+        // Excluir/desfazer também move o pool da reserva compartilhada. Vai como
+        // lançamento contrário — a trilha é razão, não rascunho.
+        _registrarNaReservaCompartilhada(
+            meta, sinal > 0 ? 'aporte' : 'retirada', Number(t.valor), t.data, t.hora);
     };
 
     // D3: se esta transação é o PAGAMENTO de uma parcela (tem faturaId+compraId),

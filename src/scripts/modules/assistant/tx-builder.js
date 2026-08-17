@@ -11,6 +11,11 @@
 // ---------------------------------------------------------------------------
 
 import { agoraDataHora, yearMonthKey, brDateToObj } from './money.js';
+// Reserva compartilhada: mexer em `meta.saved` sem registrar QUEM deixa o outro
+// membro sem ver o lançamento e faz a reconciliação tratar a diferença como
+// ajuste anônimo. A trilha é a fonte do saldo — ver modules/reserva-familia.js.
+import { ehCompartilhada, registrarMovimento, marcarReservaAtualizada, trilhaCheia }
+    from '../reserva-familia.js?v=9';
 // Motor de parcelamento COMPARTILHADO com a tela de Transações — o assistente
 // não pode ter a sua própria versão da regra de fatura (foi assim que o modelo
 // antigo e o novo passaram a coexistir e a fatura exibiu valor errado).
@@ -107,6 +112,23 @@ export function buildTransaction(cmd, metaId = null) {
 }
 
 /**
+ * Registra na trilha de atribuição quando a reserva é COMPARTILHADA.
+ *
+ * A identidade sai do próprio `profile` — é o mesmo "perfil ativo" que a tela de
+ * Reservas usa (`membroAtual`), então o chat e a tela creditam a mesma pessoa. O
+ * shim da tela de Transações passa `{id, nome}` junto das coleções por isso.
+ */
+function _registrarNaTrilha(profile, meta, tipo, valor, data, hora) {
+    if (!ehCompartilhada(meta)) return;
+    registrarMovimento(meta, {
+        id:   profile?.id != null ? String(profile.id) : null,
+        nome: (profile?.nome || profile?.name || 'Membro'),
+        tipo, valor, data, hora,
+    });
+    marcarReservaAtualizada(meta);
+}
+
+/**
  * Aplica o lançamento ao perfil (mutação in-place).
  * O desfazer é feito por `undoLancamento` (match por campos, à prova de reload).
  * @returns {{ok:true, transaction, meta?} | {ok:false, reason, ...}}
@@ -126,6 +148,12 @@ export function applyLancamento(profile, cmd) {
         if (r.status !== 'ok') return { ok: false, reason: 'meta', metaStatus: r.status, opcoes: r.opcoes || [] };
 
         const meta = r.meta;
+        // Reserva compartilhada cheia: barra ANTES de mexer no dinheiro. O saldo
+        // dela é a soma da trilha; deixar o aporte entrar sem o registro criaria
+        // dinheiro sem dono, que a reconciliação depois não sabe explicar.
+        if (ehCompartilhada(meta) && trilhaCheia(meta)) {
+            return { ok: false, reason: 'trilha_cheia', meta: metaNome(meta) };
+        }
         const ym = yearMonthKey();
         const t = buildTransaction(cmd, String(meta.id));
         profile.transacoes.push(t);
@@ -133,6 +161,7 @@ export function applyLancamento(profile, cmd) {
         meta.saved = Number((Number(meta.saved || 0) + cmd.valor).toFixed(2));
         meta.monthly = meta.monthly || {};
         meta.monthly[ym] = Number((Number(meta.monthly[ym] || 0) + cmd.valor).toFixed(2));
+        _registrarNaTrilha(profile, meta, 'aporte', cmd.valor, t.data, t.hora);
 
         return { ok: true, transaction: t, meta: metaNome(meta) };
     }
@@ -198,6 +227,10 @@ export function applyRetirada(profile, cmd) {
         data: dh.data, valor: cmd.valor, motivo,
         saldoAnterior: disponivel, saldoPosterior: meta.saved,
     });
+
+    // Retirada nunca é barrada pelo teto da trilha: trancar a SAÍDA do dinheiro
+    // de alguém por causa de um limite técnico seria indefensável.
+    _registrarNaTrilha(profile, meta, 'retirada', cmd.valor, dh.data, dh.hora);
 
     return { ok: true, transaction: t, meta: metaNome(meta) };
 }
@@ -517,6 +550,12 @@ export function undoLancamento(profile, tx) {
             meta.monthly = meta.monthly || {};
             const novo = Number((Number(meta.monthly[ym] || 0) + sinal * valor).toFixed(2));
             if (novo > 0) meta.monthly[ym] = novo; else delete meta.monthly[ym];
+            // Reserva compartilhada: desfazer lança o movimento CONTRÁRIO em vez
+            // de apagar o original. Apagar não funcionaria — o outro membro pode
+            // já ter absorvido aquele lançamento na trilha dele, e a união o
+            // traria de volta. É a mesma regra do livro-razão: razão imutável,
+            // correção por lançamento oposto.
+            _registrarNaTrilha(profile, meta, sinal > 0 ? 'aporte' : 'retirada', valor, tx.data, tx.hora);
             // Remove a última entrada de histórico da retirada desfeita.
             if (tx.categoria === 'retirada_reserva' && Array.isArray(meta.historicoRetiradas)) {
                 for (let i = meta.historicoRetiradas.length - 1; i >= 0; i--) {
