@@ -1,8 +1,20 @@
 // supabase/functions/notify-reserve-invite/index.ts
 //
-// Empurra a notificacao de CONVITE de reserva compartilhada para os OUTROS
-// membros da conta. O cliente NAO pode inserir em radar_notifications para outro
-// usuario (RLS so deixa inserir p/ si mesmo), entao isto roda com service_role.
+// Empurra os avisos de reserva compartilhada para os OUTROS membros da conta. O
+// cliente NAO pode inserir em radar_notifications para outro usuario (RLS so
+// deixa inserir p/ si mesmo), entao isto roda com service_role.
+//
+// DOIS EVENTOS (o nome do arquivo ficou estreito; renomear custaria criar uma
+// funcao nova e apagar a antiga, com uma janela sem nenhuma das duas no ar):
+//   `convite` (padrao) — "Voce foi convidado para a reserva X"
+//   `saida`            — "Fulano saiu da reserva X"
+//
+// ⚠️ O NOME DE QUEM SAIU E RESOLVIDO AQUI, no banco, NUNCA aceito do cliente.
+// Este texto vai para a caixa de entrada de OUTRA pessoa e, via push, para a
+// tela de bloqueio do celular dela. Aceitar a string do cliente daria a qualquer
+// membro da conta um canal para escrever o que quisesse na notificacao alheia.
+// O cliente manda so o `perfil_id`; conferimos que o perfil e da conta e lemos o
+// `name` de `public.profiles`.
 //
 // Fluxo: valida JWT (dono ou convidado) -> resolve o dono -> lista os membros
 // ATIVOS da conta -> insere 1 aviso pendente por membro (menos quem convidou) ->
@@ -95,6 +107,11 @@ Deno.serve(async (req: Request) => {
   const reservaId = clamp(body.reserva_id, 64)
   if (!reservaId) return json({ error: 'reserva_id obrigatorio' }, 400, h)
   const reservaNome = clamp(body.reserva_nome, 40) || 'uma reserva'
+  const evento = body.evento === 'saida' ? 'saida' : 'convite'
+  const perfilId = Number.isInteger(body.perfil_id) ? Number(body.perfil_id) : null
+  if (evento === 'saida' && perfilId === null) {
+    return json({ error: 'perfil_id obrigatorio na saida' }, 400, h)
+  }
 
   // Resolve o DONO da conta (o convidado insere no registro do dono).
   let ownerId = callerId
@@ -139,8 +156,38 @@ Deno.serve(async (req: Request) => {
   const soEuNaConta = alvos.size === 0
   if (soEuNaConta) alvos.add(callerId)
 
+  // ── QUEM SAIU: nome lido do BANCO, nunca do corpo da requisicao ───────────
+  // `profiles` de uma conta ficam todos sob o user_id do DONO (conferido em
+  // producao), entao casar por (id, user_id = ownerId) prova que o perfil e
+  // desta conta. Perfil de outra conta nao casa e cai no generico.
+  let nomeQuemSaiu = 'Alguem'
+  if (evento === 'saida') {
+    const { data: perfil } = await admin
+      .from('profiles')
+      .select('name')
+      .eq('id', perfilId)
+      .eq('user_id', ownerId)
+      .maybeSingle()
+    nomeQuemSaiu = clamp(perfil?.name, 40) || 'Alguem'
+  }
+
   const nowIso = new Date().toISOString()
-  const linhas = [...alvos].map((uid) => ({
+  // O dia entra na chave da SAIDA porque sair e um evento que se repete: quem
+  // sai, e um dia volta e sai de novo, precisa avisar de novo. O convite nao —
+  // ali a chave por reserva e o proprio dedupe.
+  const dia = nowIso.slice(0, 10)
+
+  const linhas = [...alvos].map((uid) => (evento === 'saida' ? {
+    user_id:    uid,
+    dedupe_key: `saida:${reservaId}:${perfilId}:${dia}:${uid}`.slice(0, 120),
+    tipo:       'saida_reserva',
+    title:      'Saida de reserva compartilhada',
+    // Sem R$ no payload — regra do Radar. So quem saiu e de qual reserva.
+    body:       `${nomeQuemSaiu} saiu da reserva "${reservaNome}". O valor que era dele voltou para o saldo dele.`.slice(0, 200),
+    url:        '/dashboard#reservas',
+    fire_at:    nowIso,
+    status:     'pending',
+  } : {
     user_id:    uid,
     dedupe_key: `convite:${reservaId}:${uid}`.slice(0, 120),
     tipo:       'convite_reserva',
@@ -170,13 +217,13 @@ Deno.serve(async (req: Request) => {
     await fetch(`${supabaseUrl}/functions/v1/send-radar-push`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-proxy-secret': proxySecret },
-      body: JSON.stringify({ trigger: 'convite_reserva' }),
+      body: JSON.stringify({ trigger: evento === 'saida' ? 'saida_reserva' : 'convite_reserva' }),
       signal: AbortSignal.timeout(8_000),
     })
   } catch (e) {
     console.warn('[notify-reserve-invite] send-radar-push nao disparou agora:', (e as Error).message)
   }
 
-  console.log(`[notify-reserve-invite] convite ${reservaId.slice(0, 8)} -> ${alvos.size} membro(s)`)
+  console.log(`[notify-reserve-invite] ${evento} ${reservaId.slice(0, 8)} -> ${alvos.size} membro(s)`)
   return json({ ok: true, notified: alvos.size }, 200, h)
 })

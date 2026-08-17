@@ -75,10 +75,15 @@ function _marcarReservasQueSai() {
     }
     if (mudou) _ctx.salvarDados();
 }
-// Dispara o push do convite para os OUTROS membros da conta (via edge, pois o
-// cliente não pode inserir notificação para outro usuário). BEST-EFFORT: o banner
-// na aba Reservas é o caminho confiável; se o push falhar, não quebra nada.
-async function _notificarConviteReserva(reservaId, reservaNome) {
+// Dispara o aviso de reserva para os OUTROS membros da conta (via edge, pois o
+// cliente não pode inserir notificação para outro usuário). BEST-EFFORT: a tela
+// é o caminho confiável; se o push falhar, não quebra nada.
+//
+// `evento`: 'convite' (alguém foi chamado para a reserva) ou 'saida' (alguém
+// saiu dela). O texto NÃO viaja daqui — o servidor lê o nome do perfil no banco.
+// Mandar o nome do cliente daria a qualquer membro da conta um canal para
+// escrever o que quisesse na notificação (e no push, na tela de bloqueio) alheia.
+async function _notificarReserva(evento, reservaId, reservaNome) {
     try {
         const { supabase } = await import('../services/supabase-client.js?v=2');
         const { data: { session } } = await supabase.auth.getSession();
@@ -93,12 +98,16 @@ async function _notificarConviteReserva(reservaId, reservaNome) {
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({
                 action:       'reserve-invite-notify',
+                evento,
                 reserva_id:   String(reservaId),
                 reserva_nome: String(reservaNome || ''),
+                // Só o ID; quem resolve o nome é o servidor.
+                ...(evento === 'saida' ? { perfil_id: _ctx.perfilAtivo?.id } : {}),
             }),
         });
-    } catch { /* best-effort — o convite continua visível pelo banner */ }
+    } catch { /* best-effort — a tela de Reservas continua contando a verdade */ }
 }
+const _notificarConviteReserva = (id, nome) => _notificarReserva('convite', id, nome);
 
 // Reservas compartilhadas com convite PENDENTE para o perfil ativo. Como o
 // convidado não guarda cópia, varremos as cópias dos MEMBROS (nos slots dos
@@ -1929,6 +1938,12 @@ function _sairDaReservaCompartilhada(meta) {
             // Aportes antigos desta reserva ficam órfãos (o saldo já foi acertado).
             _ctx.transacoes = _ctx.transacoes.map(t =>
                 (t.metaId && String(t.metaId) === String(meta.id)) ? Object.assign({}, t, { metaId: null }) : t);
+
+            // Avisa quem FICOU: "Fulano saiu da reserva". Sem isto, o outro
+            // membro descobre que o saldo caiu e não sabe por quê — o saldo muda
+            // sozinho na tela dele, que é o tipo de coisa que faz a pessoa
+            // desconfiar do app. Só quando ainda há alguém para avisar.
+            if (!r.ultimo) _notificarReserva('saida', meta.id, meta.descricao);
 
             // Quem ficou vê a reserva reduzida pela RETIRADA que `sairDaReserva`
             // acabou de gravar na trilha (e pelo roster novo, que viaja em

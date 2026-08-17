@@ -629,6 +629,12 @@ export default async function handler(req, res) {
     //
     // Best-effort de propósito: o banner na aba Reservas é o caminho confiável do
     // convite; falhar aqui não pode quebrar a criação da reserva no cliente.
+    //
+    // `evento` (2026-08-17) escolhe QUAL aviso de reserva vai: `convite` (padrão,
+    // compatível com o cliente antigo, que não manda o campo) ou `saida` —
+    // "Fulano saiu da reserva". Um `action` só para os dois porque é a MESMA
+    // rota, o mesmo rate limit e a mesma Edge; separar criaria uma 13ª função na
+    // Vercel, que é o que congelou a produção em 2026-07-25.
     if (parsed?.action === 'reserve-invite-notify') {
         if (!SUPABASE_URL) return res.status(503).json({ error: 'Serviço indisponível' });
 
@@ -642,6 +648,18 @@ export default async function handler(req, res) {
         }
         const reservaNome = typeof parsed?.reserva_nome === 'string' ? parsed.reserva_nome.slice(0, 60) : '';
 
+        const evento = parsed?.evento === 'saida' ? 'saida' : 'convite';
+        // Id do perfil que saiu. Só o ID viaja — o NOME quem resolve é a Edge,
+        // lendo `profiles` com service_role. Aceitar o nome do cliente deixaria
+        // qualquer um escrever texto arbitrário na notificação (e no push, na
+        // tela de bloqueio) de outra pessoa da conta.
+        const perfilId = Number.isInteger(parsed?.perfil_id) ? parsed.perfil_id
+                       : /^\d{1,12}$/.test(String(parsed?.perfil_id ?? '')) ? Number(parsed.perfil_id)
+                       : null;
+        if (evento === 'saida' && perfilId === null) {
+            return res.status(400).json({ error: 'perfil_id inválido' });
+        }
+
         try {
             const riRes = await fetch(`${SUPABASE_URL}/functions/v1/notify-reserve-invite`, {
                 method:  'POST',
@@ -653,7 +671,12 @@ export default async function handler(req, res) {
                     'x-proxy-secret':  PROXY_SECRET,
                     'x-request-id':   _rid,
                 },
-                body:   JSON.stringify({ reserva_id: parsed.reserva_id, reserva_nome: reservaNome }),
+                body:   JSON.stringify({
+                    reserva_id:   parsed.reserva_id,
+                    reserva_nome: reservaNome,
+                    evento,
+                    ...(perfilId !== null ? { perfil_id: perfilId } : {}),
+                }),
                 signal: AbortSignal.timeout(15_000),
             });
             return res.status(riRes.status)
