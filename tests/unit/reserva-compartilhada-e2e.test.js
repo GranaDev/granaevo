@@ -523,3 +523,45 @@ describe('a invariante não pode vazar por aliasing', () => {
     assert.equal(objetoDela.valor, 40, 'mutar a minha trilha alterou a cópia do outro perfil')
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('o RECIBO não pode ser lido como reserva ativa', () => {
+  // `saiu` é um estado NOVO. Quem lê `metas` e não o conhece conta dinheiro que
+  // já voltou para a pessoa por uma transação de retirada — o mesmo valor duas
+  // vezes. Estes são os consumidores varridos; o teste existe para que o
+  // PRÓXIMO consumidor de `metas` não passe batido.
+  const FONTES = [
+    ['src/scripts/pages/dashboard.js', /_ehRecibo\(m/],
+    ['src/scripts/pages/db-relatorios.js', /_reservasAtivas\(/],
+    ['src/scripts/modules/patrimonio.js', /m\?\.saiu === true/],
+    ['src/scripts/modules/achievements.js', /_minha = \(m\) => m\?\.saiu !== true/],
+  ]
+  for (const [arquivo, marca] of FONTES) {
+    test(`${arquivo} filtra o recibo`, () => {
+      const src = readFileSync(join(RAIZ, arquivo), 'utf8')
+      assert.match(src, marca, `${arquivo} voltou a somar reserva de que o perfil já saiu`)
+    })
+  }
+
+  test('⭐ a exportação LGPD NÃO esconde o recibo — ali a pergunta é outra', async () => {
+    // "O que vocês guardam sobre mim?" inclui o recibo. Filtrá-lo seria esconder
+    // dado do titular — o oposto do que a exportação existe para fazer (art.
+    // 18, V). Exercita a montagem DE VERDADE: a versão anterior deste teste
+    // procurava a palavra "saiu" no fonte e casava com um COMENTÁRIO.
+    const { montarPlanilha } = await import('../../src/scripts/modules/export-planilha.js')
+    const abas = montarPlanilha({
+      conta: { email: 'a@b.c', tipo: 'titular' },
+      dados_financeiros: [{
+        id: 1, nome: 'Pessoal',
+        transacoes: [], contasFixas: [], cartoesCredito: [], assinaturas: [], orcamentos: {},
+        metas: [{ nome: 'Reserva que eu deixei', objetivo: 8000, saved: 300, saiu: true }],
+      }],
+      metadados_da_conta: {},
+    })
+    const metas = abas.find(a => a.nome === 'Metas')
+    const texto = (metas?.linhas ?? []).flat()
+      .map(c => (c && typeof c === 'object' ? c.v : c)).join(' | ')
+    assert.match(String(texto), /Reserva que eu deixei/,
+      'a exportação de portabilidade passou a esconder dado do titular')
+  })
+})

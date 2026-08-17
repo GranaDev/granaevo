@@ -13,6 +13,24 @@ import { dataManager } from '../modules/data-manager.js?v=8';
 import { calcScore as _calcScoreCore } from '../modules/score-financeiro.js?v=1';
 let _ctx = null;
 
+/**
+ * Só as reservas ATIVAS do perfil.
+ *
+ * Reserva compartilhada de que a pessoa saiu fica no blob como RECIBO
+ * (`saiu: true`): a trilha dela é o que fecha a conta de quem ficou — apagá-la
+ * tiraria dinheiro do saldo dos outros (ver modules/reserva-familia.js). Mas ela
+ * não é mais uma reserva desta pessoa.
+ *
+ * ⚠️ No HISTÓRICO PATRIMONIAL isso não é cosmético: o valor já voltou para ela
+ * por uma transação de `retirada_reserva`, que o histórico soma. Contar o recibo
+ * junto somaria o MESMO dinheiro duas vezes.
+ *
+ * A exportação LGPD (export-planilha.js) NÃO usa este filtro, e está certo: lá a
+ * pergunta é "o que vocês guardam sobre mim?", e o recibo é guardado.
+ */
+const _reservasAtivas = (lista) =>
+    (Array.isArray(lista) ? lista : []).filter(m => m?.saiu !== true);
+
 // ── Lista de transações do relatório: exibição em duas etapas (Passo 7) ──────
 // Quantas linhas entram no primeiro render. 150 cobre o mês típico inteiro (ou
 // seja: a maioria dos usuários nunca vê o botão), e segura o caso de "todo o
@@ -732,7 +750,7 @@ window.gerarRelatorioCompartilhadoPersonalizado = async function gerarRelatorioC
     const dadosPorPerfil = perfisAtivos.map(perfil => {
         const dadosPerfil = userData.profiles.find(p => String(p.id) === String(perfil.id));
         const transacoesPerfil = Array.isArray(dadosPerfil?.transacoes) ? dadosPerfil.transacoes : [];
-        const metasPerfil = Array.isArray(dadosPerfil?.metas) ? dadosPerfil.metas : [];
+        const metasPerfil = _reservasAtivas(dadosPerfil?.metas);
         const cartoesPerfil = Array.isArray(dadosPerfil?.cartoesCredito) ? dadosPerfil.cartoesCredito : [];
 
         const transacoesPeriodo = transacoesPerfil.filter(t => {
@@ -884,7 +902,7 @@ async function gerarRelatorioIndividual(mes, ano, perfilId) {
     }
 
     const transacoesPerfil    = Array.isArray(dadosPerfil.transacoes)     ? dadosPerfil.transacoes     : [];
-    const metasPerfil         = Array.isArray(dadosPerfil.metas)          ? dadosPerfil.metas          : [];
+    const metasPerfil         = _reservasAtivas(dadosPerfil.metas);
     const cartoesPerfil       = Array.isArray(dadosPerfil.cartoesCredito) ? dadosPerfil.cartoesCredito : [];
     const contasFixasPerfil   = Array.isArray(dadosPerfil.contasFixas)    ? dadosPerfil.contasFixas    : [];
 
@@ -1628,7 +1646,7 @@ async function gerarRelatorioCompartilhado(mes, ano, numPerfis) {
         // CORREÇÃO: === estrito
         const dadosPerfil = userData.profiles.find(p => String(p.id) === String(perfil.id));
         const transacoesPerfil = Array.isArray(dadosPerfil?.transacoes) ? dadosPerfil.transacoes : [];
-        const metasPerfil = Array.isArray(dadosPerfil?.metas) ? dadosPerfil.metas : [];
+        const metasPerfil = _reservasAtivas(dadosPerfil?.metas);
         const cartoesPerfil = Array.isArray(dadosPerfil?.cartoesCredito) ? dadosPerfil.cartoesCredito : [];
         
         const transacoesPeriodo = transacoesPerfil.filter(t => {
@@ -3120,7 +3138,7 @@ function _renderProjecaoPatrimonio(container, mod) {
 
 function gerarHistoricoPatrimonial(container) {
     const tx    = _ctx.transacoes || [];
-    const metas = _ctx.metas      || [];
+    const metas = _reservasAtivas(_ctx.metas);
 
     const _mNomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
                      'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
