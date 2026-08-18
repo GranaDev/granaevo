@@ -2,6 +2,7 @@
 // Requer sessão autenticada (JWT do usuário), não usa anon key como auth principal.
 
 import { checkRate } from './_rate-limit.js'
+import { ipDoCliente } from './_client-ip.js'
 import { logger }    from './_logger.js'
 
 const PATH = '/api/send-guest-invite'
@@ -49,8 +50,7 @@ export default async function handler(req, res) {
   const authHeader = req.headers['authorization'] ?? ''
   if (!authHeader.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' })
 
-  const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
-    .toString().split(',')[0].trim()
+  const ip = ipDoCliente(req)
 
   if (!(await checkRate(`guest-invite:${ip}`, RATE_MAX))) {
     logger.warn('rate_limit', PATH, { ip })

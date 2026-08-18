@@ -157,34 +157,89 @@ async function restoreActiveBackups(db: DB, ownerUserId: string): Promise<number
 
   if (fetchErr || !activeBackups?.length) return 0
 
-  // Restaura perfis da tabela profiles (IDs inteiros)
+  // Restaura perfis da tabela profiles (IDs inteiros).
+  //
+  // SEC-001b (auditoria 2026-08-17): aqui havia um `.update({ is_active: true })`
+  // em lote, direto, SEM consultar limite_de_perfis(). Como excluir_perfil() grava
+  // todo backup já com status='active', bastava excluir e recriar perfis N vezes
+  // (sempre dentro do limite) e depois agendar/reverter um downgrade: este ponto
+  // religava os N de uma vez. Mesmo desfecho do bypass por PATCH, só que por
+  // botões legítimos da interface.
+  //
+  // A regra do limite agora tem UMA autoridade: restaurar_perfis_em_lote(), que
+  // confere a soma final sob o mesmo advisory lock por usuário que
+  // excluir_perfil/restaurar_perfil usam.
   const profileBackups = activeBackups.filter((b: Record<string, unknown>) => b.source_table === 'profiles')
+  let restoredProfileIds: number[] = []
   if (profileBackups.length > 0) {
-    const intIds = profileBackups.map((b: Record<string, unknown>) => parseInt(b.original_member_id as string, 10))
-    await db.from('profiles')
-      .update({ is_active: true, updated_at: new Date().toISOString() })
-      .in('id', intIds)
-      .eq('user_id', ownerUserId)
+    const { data: res, error: rpcErr } = await db.rpc('restaurar_perfis_em_lote', {
+      p_user_id:     ownerUserId,
+      p_profile_ids: profileBackups.map((b: Record<string, unknown>) => String(b.original_member_id)),
+    })
+    if (rpcErr) {
+      console.error('[update-stripe-plan] restaurar_perfis_em_lote:', rpcErr.message)
+      return 0
+    }
+    restoredProfileIds = ((res as Record<string, unknown>)?.ids_restaurados as number[]) ?? []
+    const ignorados = Number((res as Record<string, unknown>)?.ignorados ?? 0)
+    if (ignorados > 0) {
+      console.warn(
+        `[update-stripe-plan] ${ignorados} perfil(s) NAO restaurado(s) — plano cheio. ` +
+        `user: ${ownerUserId.slice(0, 8)}`
+      )
+    }
   }
 
-  // Restaura membros da tabela account_members (UUIDs)
+  // Restaura membros da tabela account_members (UUIDs).
+  //
+  // `updated_at` foi removido daqui: a coluna NÃO EXISTE em account_members
+  // (id, owner_user_id, owner_email, member_user_id, member_email, member_name,
+  //  is_active, invitation_id, invited_at, joined_at, removed_at). O UPDATE devolvia
+  // 42703 e — como o retorno nunca era conferido — falhava em silêncio: o convidado
+  // não voltava, mas o backup era marcado 'restored' logo abaixo e queimava.
+  // Mesmo defeito havia no bloco de `profiles`, que também não tem `updated_at`.
   const memberBackups = activeBackups.filter((b: Record<string, unknown>) => b.source_table === 'account_members')
+  let restoredMemberIds: string[] = []
   if (memberBackups.length > 0) {
-    const uuids = memberBackups.map((b: Record<string, unknown>) => b.original_member_id as string)
-    await db.from('account_members')
-      .update({ is_active: true, updated_at: new Date().toISOString() })
+    const uuids = memberBackups.map((b: Record<string, unknown>) => String(b.original_member_id))
+    const { data: restoredRows, error: memberErr } = await db.from('account_members')
+      .update({ is_active: true })
       .in('id', uuids)
       .eq('owner_user_id', ownerUserId)
+      .select('id')
+    if (memberErr) {
+      console.error('[update-stripe-plan] restore account_members:', memberErr.message)
+    } else {
+      restoredMemberIds = (restoredRows ?? []).map((r: Record<string, unknown>) => String(r.id))
+    }
   }
 
-  // Marca todos os backups como restaurados
-  const backupIds = activeBackups.map((b: Record<string, unknown>) => b.id as string)
-  await db.from('profile_backups')
-    .update({ status: 'restored', updated_at: new Date().toISOString() })
-    .in('id', backupIds)
+  // Marca como 'restored' SÓ o que de fato voltou.
+  //
+  // Antes marcava-se o lote inteiro. Com o teto de plano valendo (SEC-001b), um
+  // backup pode ser recusado por falta de vaga — e marcá-lo como restaurado faria o
+  // usuário perder o direito de restaurá-lo depois, além de deixar o backup fora do
+  // alcance do cron de expiração. O que não coube continua 'active', disponível
+  // enquanto durar a janela de 7 dias.
+  const restoredProfileSet = new Set(restoredProfileIds.map(String))
+  const restoredMemberSet  = new Set(restoredMemberIds)
+  const backupIds = activeBackups
+    .filter((b: Record<string, unknown>) => {
+      const orig = String(b.original_member_id)
+      if (b.source_table === 'profiles')        return restoredProfileSet.has(orig)
+      if (b.source_table === 'account_members') return restoredMemberSet.has(orig)
+      return false
+    })
+    .map((b: Record<string, unknown>) => b.id as string)
 
-  console.log(`[update-stripe-plan] ${activeBackups.length} perfil(s) restaurado(s) — user: ${ownerUserId.slice(0, 8)}`)
-  return activeBackups.length
+  if (backupIds.length > 0) {
+    await db.from('profile_backups')
+      .update({ status: 'restored', updated_at: new Date().toISOString() })
+      .in('id', backupIds)
+  }
+
+  console.log(`[update-stripe-plan] ${backupIds.length} perfil(s) restaurado(s) — user: ${ownerUserId.slice(0, 8)}`)
+  return backupIds.length
 }
 
 // ── Dispara email de confirmação de mudança de plano (fire-and-forget) ────────

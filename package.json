@@ -27,7 +27,8 @@
     "check:css": "node scripts/css-mortas.mjs",
     "check:grants": "node scripts/check-policy-grant.mjs",
     "sitemap:build": "node scripts/build-sitemap.mjs",
-    "critical:build": "node scripts/build-critical-css.mjs"
+    "critical:build": "node scripts/build-critical-css.mjs",
+    "check:columns": "node scripts/check-client-columns.mjs"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^7.2.0",

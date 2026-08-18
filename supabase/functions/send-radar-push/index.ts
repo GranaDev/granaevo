@@ -13,6 +13,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.2";
 import webpush from "npm:web-push@3.6.7";
+import { recusarEndpointPush } from "../_shared/push-endpoint.ts";
 
 // Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS).
 // SEM fallback na legada: as chaves antigas (anon e service_role) foram
@@ -138,10 +139,33 @@ async function processarFila(admin: ReturnType<typeof createClient>) {
     return { ok: false, error: "Erro ao buscar subscriptions" };
   }
 
+  // SEC-002 — ÚLTIMA CAMADA antes do pacote sair.
+  //
+  // Gravar validado não basta: estas linhas podem ter sido gravadas ANTES da regra
+  // existir, ou por um caminho que ainda não mapeamos. Quem faz o fetch confere de
+  // novo, com a mesma função — é aqui que o SSRF aconteceria de fato, então é aqui
+  // que a checagem não pode faltar.
   const subsPorUser = new Map<string, Array<{ id: string; endpoint: string; p256dh: string; auth_key: string }>>();
+  const endpointsRecusados = new Set<string>();
   for (const s of subs ?? []) {
+    const recusa = recusarEndpointPush(s.endpoint);
+    if (recusa !== null) {
+      console.error(`[send-radar-push] endpoint recusado (${recusa}) — sub ${String(s.id).slice(0, 8)}, NAO enviado`);
+      endpointsRecusados.add(s.endpoint);
+      continue;
+    }
     if (!subsPorUser.has(s.user_id)) subsPorUser.set(s.user_id, []);
     subsPorUser.get(s.user_id)!.push(s);
+  }
+
+  // Um endpoint que a regra recusa nunca vai ser entregável. Desativa para não
+  // reprocessar a mesma linha em toda execução do cron.
+  if (endpointsRecusados.size > 0) {
+    const { error } = await admin
+      .from("push_subscriptions")
+      .update({ is_active: false })
+      .in("endpoint", [...endpointsRecusados]);
+    if (error) console.error("[send-radar-push] Falha ao desativar endpoints recusados:", error.message);
   }
 
   // ── 5. Entrega — SILÊNCIO INTELIGENTE (RF-03): 1 push por usuário por rodada ─

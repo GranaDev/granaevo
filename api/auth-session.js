@@ -48,6 +48,7 @@ import { checkRate, checkRateWindow, isIPBlocked,
          bumpCounter, readCounter, isKeyBlocked, blockKey, clearKeys,
          redisDegradado } from './_rate-limit.js'
 import { logger } from './_logger.js'
+import { ipDoCliente } from './_client-ip.js'
 import { turnstileOk } from './_turnstile.js'
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
@@ -432,8 +433,7 @@ export default async function handler(req, res) {
   if (!ct.includes('application/json'))
     return res.status(415).json({ error: 'Content-Type deve ser application/json' })
 
-  const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
-    .toString().split(',')[0].trim()
+  const ip = ipDoCliente(req)
 
   if (await isIPBlocked(ip)) {
     logger.warn('ip_blocked', PATH, { ip })

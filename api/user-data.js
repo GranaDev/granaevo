@@ -11,6 +11,7 @@
 //   POST { action:"push-unsubscribe", endpoint }
 
 import { checkRate, checkRateWindow, isIPBlocked } from './_rate-limit.js'
+import { ipDoCliente } from './_client-ip.js'
 import { verificarJWT } from './_jwt.js'
 import { logger, requestIdDe } from './_logger.js'
 import { timingSafeEqual } from 'node:crypto'
@@ -162,8 +163,7 @@ export default async function handler(req, res) {
             timingSafeEqual(Buffer.from(provided), Buffer.from(PROXY_SECRET));
         if (!okSecret) return res.status(401).json({ error: 'Unauthorized' });
 
-        const ipSec = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
-            .toString().split(',')[0].trim();
+        const ipSec = ipDoCliente(req);
         // Teto próprio: se uma edge entrar em loop de erro, isto não pode virar
         // um amplificador de e-mail nem de escrita no Redis.
         if (!await checkRL(`secevent:${ipSec}`, 60)) return res.status(429).end();
@@ -210,8 +210,7 @@ export default async function handler(req, res) {
     // O vercel.json redireciona /api/csp-report → /api/user-data via rewrite.
     if (req.method === 'POST' && (ct.includes('application/csp-report') || ct.includes('application/reports+json'))) {
         if (req.method !== 'POST') return res.status(405).end();
-        const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
-            .toString().split(',')[0].trim();
+        const ip = ipDoCliente(req);
         if (!await checkRL(`csp-report:${ip}`, 30)) return res.status(429).end();
         let raw = '';
         try {
@@ -261,14 +260,10 @@ export default async function handler(req, res) {
     if ((req.headers['user-agent'] ?? '').length < 10)
         return res.status(403).json({ error: 'Forbidden' });
 
-    // IP real
-    const ip = (
-        typeof req.headers['x-real-ip'] === 'string' && req.headers['x-real-ip'].trim()
-            ? req.headers['x-real-ip'].trim()
-            : typeof req.headers['x-forwarded-for'] === 'string'
-                ? req.headers['x-forwarded-for'].split(',')[0].trim()
-                : req.socket?.remoteAddress ?? 'unknown'
-    );
+    // IP real — derivação única em _client-ip.js (SEC-003). Este ponto alimenta a
+    // blocklist logo abaixo, então pegar o elemento forjável do XFF significava
+    // deixar o atacante escolher QUAL IP seria bloqueado.
+    const ip = ipDoCliente(req);
 
     // Blocklist persistente — IPs bloqueados por atingirem thresholds de ataque
     if (await isIPBlocked(ip)) {

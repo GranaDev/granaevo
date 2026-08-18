@@ -23,6 +23,7 @@ export const config = {
 }
 
 import { checkRateWindow }    from './_rate-limit.js'
+import { ipDoCliente }        from './_client-ip.js'
 import { verificarJWT }       from './_jwt.js'
 import { trackSecurityEvent } from './_alert.js'
 import { logger }             from './_logger.js'
@@ -92,13 +93,10 @@ export default async function handler(req, res) {
   }
 
   // ── 3. IP real ───────────────────────────────────────────────────────────────
-  const realIp = req.headers['x-real-ip']
-  const fwdFor = req.headers['x-forwarded-for']
-  const ip     = (typeof realIp === 'string' && realIp.trim()
-    ? realIp.trim()
-    : typeof fwdFor === 'string'
-      ? fwdFor.split(',')[0].trim()
-      : req.socket?.remoteAddress ?? 'unknown')
+  // A derivação mora em _client-ip.js (SEC-003): a versão que estava aqui pegava
+  // `x-forwarded-for.split(',')[0]` — o primeiro elemento, que é justamente o
+  // pedaço escrito pela ponta, e o único que o atacante controla.
+  const ip = ipDoCliente(req)
 
   // ── 4. Rate limit distribuído por IP + userId (Redis) ────────────────────────
   // Limites distintos: mais restritivo por conta (10) do que por IP (20)

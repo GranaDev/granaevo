@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.2'
+import { recusarEndpointPush } from '../_shared/push-endpoint.ts'
 
 // Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS).
 // SEM fallback na legada: as chaves antigas (anon e service_role) foram
@@ -54,6 +55,18 @@ Deno.serve(async (req: Request) => {
   const { endpoint, p256dh, auth, userAgent } = body
   if (!endpoint || typeof endpoint !== 'string' || !p256dh || !auth) {
     return new Response(JSON.stringify({ error: 'Campos obrigatórios: endpoint, p256dh, auth' }), { status: 400 })
+  }
+
+  // SEC-002: o endpoint precisa ser de um push service DE VERDADE. Antes, qualquer
+  // string não-vazia era aceita — e `send-radar-push` faz POST para o que estiver
+  // gravado, então o campo era o destino de uma requisição de saída do backend.
+  // A regra mora em _shared/push-endpoint.ts porque vale aqui E no envio; copiada
+  // nos dois lugares, ela divergiria.
+  const recusa = recusarEndpointPush(endpoint)
+  if (recusa !== null) {
+    console.warn(`[save-push-subscription] endpoint recusado (${recusa}) — user: ${user.id.slice(0, 8)}`)
+    // Resposta genérica: o motivo vai para o log do servidor, não para quem tentou.
+    return new Response(JSON.stringify({ error: 'endpoint inválido' }), { status: 400 })
   }
 
   // Limite: máximo 10 dispositivos por usuário

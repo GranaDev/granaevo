@@ -79,7 +79,14 @@ const CONSULTA = `
                                 THEN ARRAY['anon','authenticated']
                                 ELSE ARRAY[role] END) AS r(nome)
       WHERE has_table_privilege(r.nome, ('public.' || tablename)::regclass, cmd)
-         OR has_any_column_privilege(r.nome, ('public.' || tablename)::regclass, cmd))
+         -- has_any_column_privilege SO aceita privilegios que existem por
+         -- coluna: SELECT, INSERT, UPDATE, REFERENCES. Passar DELETE levanta
+         -- 22023 unrecognized privilege type e derruba o script inteiro — que
+         -- era o estado em 2026-08-17: a ferramenta nao estava reprovando,
+         -- estava CRASHANDO, e um crash nao e um veredicto. (DELETE e sempre da
+         -- tabela inteira; para ele, has_table_privilege acima ja responde.)
+         OR (cmd IN ('SELECT','INSERT','UPDATE')
+             AND has_any_column_privilege(r.nome, ('public.' || tablename)::regclass, cmd)))
   ORDER BY tablename, policyname`;
 
 const achados = await sql(CONSULTA);

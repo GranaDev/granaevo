@@ -2,6 +2,7 @@
 // Controlado pelo parâmetro `step` no body: "send" | "verify_code" | "reset_password"
 
 import { checkRate } from './_rate-limit.js'
+import { ipDoCliente } from './_client-ip.js'
 import { logger }    from './_logger.js'
 
 const PATH = '/api/reset-password'
@@ -48,8 +49,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST')                         return res.status(405).json({ error: 'Method Not Allowed' })
   if (!SUPABASE_URL || !ANON_KEY || !PROXY_SECRET)   return res.status(503).json({ error: 'Serviço indisponível' })
 
-  const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
-    .toString().split(',')[0].trim()
+  const ip = ipDoCliente(req)
 
   let raw = ''
   try {

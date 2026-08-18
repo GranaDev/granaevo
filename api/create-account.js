@@ -4,6 +4,7 @@
 // via proxy secret. A service_role fica exclusivamente nos secrets do Supabase.
 
 import { checkRateWindow } from './_rate-limit.js'
+import { ipDoCliente } from './_client-ip.js'
 import { logger }          from './_logger.js'
 import { turnstileOk }     from './_turnstile.js'
 
@@ -122,9 +123,7 @@ export default async function handler(req, res) {
   // banco que o e-mail fora verificado sem ninguém ter verificado nada — e 5
   // caminhos do sistema passaram a confiar nesse endereço (auditoria 2026-07-16).
   if (action === 'send-code') {
-    const ipSC = (req.headers['x-real-ip']
-      ?? (req.headers['x-forwarded-for'] ?? '').split(',')[0]
-      ?? 'unknown').toString().trim()
+    const ipSC = ipDoCliente(req)
 
     // Duas dimensões, e as duas importam:
     //  - por IP: varrer muitos e-mails de um ponto só
@@ -201,9 +200,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'codigo_invalido' })
 
   // Rate limit: 3 criações de conta por IP por hora
-  const ip = (req.headers['x-real-ip']
-    ?? (req.headers['x-forwarded-for'] ?? '').split(',')[0]
-    ?? 'unknown').toString().trim()
+  const ip = ipDoCliente(req)
 
   if (!(await checkRateWindow(`create-account:${ip}`, 3, 3600))) {
     logger.warn('rate_limit', PATH, { ip, window: 3600 })

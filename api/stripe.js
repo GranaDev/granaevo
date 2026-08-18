@@ -3,6 +3,7 @@
 // portal:   REQUER JWT — gerenciar assinatura existente
 
 import { checkRate, isIPBlocked } from './_rate-limit.js'
+import { ipDoCliente } from './_client-ip.js'
 import { logger }    from './_logger.js'
 
 const PATH = '/api/stripe'
@@ -132,9 +133,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'membersToRemove inválido' })
   }
 
-  const ip = req.headers['x-real-ip']
-    ?? (req.headers['x-forwarded-for'] ?? '').split(',')[0].trim()
-    ?? 'unknown'
+  const ip = ipDoCliente(req)
 
   // Blocklist persistente — IPs bloqueados por atingirem thresholds de ataque
   if (await isIPBlocked(ip)) {

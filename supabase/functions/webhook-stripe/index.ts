@@ -571,8 +571,13 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
       if (Array.isArray(profileRemovals) && profileRemovals.length > 0 && ownerUserId) {
         const intIds = profileRemovals.map(id => parseInt(id, 10)).filter(n => !isNaN(n))
         if (intIds.length > 0) {
+          // `updated_at` NÃO EXISTE em profiles (id, user_id, name, photo_url,
+          // created_at, is_active). Enviá-lo fazia o PostgREST devolver 42703 e o
+          // downgrade agendado NUNCA desativava perfil nenhum — o usuário descia de
+          // plano e ficava com todos os perfis. O erro ia para o console.error abaixo
+          // e mais nada. Auditoria 2026-08-17 (SEC-001c).
           db.from('profiles')
-            .update({ is_active: false, updated_at: new Date().toISOString() })
+            .update({ is_active: false })
             .in('id', intIds)
             .eq('user_id', ownerUserId)
             .then(({ error: profileErr }) => {
@@ -624,9 +629,12 @@ async function handleSubscriptionUpdated(db: DB, data: Record<string, unknown>) 
               .in('id', memberRemovals)
 
             // Desativa os membros
+            // Mesmo defeito do bloco de perfis: account_members não tem `updated_at`
+            // (tem removed_at, joined_at, invited_at). O UPDATE devolvia 42703 e o
+            // convidado seguia ativo após o downgrade. Auditoria 2026-08-17 (SEC-001c).
             const { error: memberErr } = await db
               .from('account_members')
-              .update({ is_active: false, updated_at: new Date().toISOString() })
+              .update({ is_active: false })
               .eq('owner_user_id', ownerUserId)
               .neq('member_user_id', ownerUserId)
               .in('id', memberRemovals)

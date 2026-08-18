@@ -2,6 +2,7 @@
 // Registra o aceite dos Termos de Uso (LGPD). user_id sempre vem do JWT na EF.
 
 import { checkRate } from './_rate-limit.js'
+import { ipDoCliente } from './_client-ip.js'
 import { logger }    from './_logger.js'
 
 const PATH = '/api/accept-terms'
@@ -48,8 +49,7 @@ export default async function handler(req, res) {
   const authHeader = req.headers['authorization'] ?? ''
   if (!authHeader.startsWith('Bearer '))       return res.status(401).json({ error: 'Unauthorized' })
 
-  const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
-    .toString().split(',')[0].trim()
+  const ip = ipDoCliente(req)
 
   if (!(await checkRate(`accept-terms:${ip}`, RATE_MAX))) {
     logger.warn('rate_limit', PATH, { ip })

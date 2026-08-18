@@ -1,8 +1,9 @@
 // /api/verify-invite.js — Proxy para verify-guest-invite Edge Function
 // Esconde a URL da Edge Function do frontend. Frontend chama /api/verify-invite.
 
-import { checkRate } from './_rate-limit.js'
-import { logger }    from './_logger.js'
+import { checkRate }   from './_rate-limit.js'
+import { logger }      from './_logger.js'
+import { ipDoCliente } from './_client-ip.js'
 
 const PATH = '/api/verify-invite'
 
@@ -45,8 +46,7 @@ export default async function handler(req, res) {
     return res.status(503).json({ error: 'Serviço indisponível' })
   }
 
-  const ip = (req.headers['x-real-ip'] ?? req.headers['x-forwarded-for'] ?? 'unknown')
-    .toString().split(',')[0].trim()
+  const ip = ipDoCliente(req)
 
   if (!(await checkRate(`verify-invite:${ip}`, RATE_MAX))) {
     logger.warn('rate_limit', PATH, { ip })
