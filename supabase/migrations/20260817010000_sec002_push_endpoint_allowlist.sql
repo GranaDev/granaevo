@@ -78,5 +78,5 @@ COMMIT;
 --
 --   6. O painel de dispositivos continua listando e revogando (teste manual na UI).
 --
--- ROLLBACK: ver 20260817010000_sec002_push_endpoint_allowlist.down.sql
+-- ROLLBACK: ver supabase/rollbacks/20260817010000_sec002_push_endpoint_allowlist.down.sql
 -- ============================================================================

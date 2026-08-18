@@ -3,21 +3,45 @@
 ## Regra
 A partir de **2026-05-31**, toda nova migration SQL deve ter um arquivo de rollback correspondente.
 
-## Estrutura de arquivos
+## ⛔ O ROLLBACK NUNCA MORA EM `supabase/migrations/`
 
 ```
 supabase/migrations/
-├── YYYYMMDDHHMMSS_nome_descritivo.sql         ← migration UP (aplicar)
+└── YYYYMMDDHHMMSS_nome_descritivo.sql         ← migration UP (aplicar)
+
+supabase/rollbacks/
 └── YYYYMMDDHHMMSS_nome_descritivo.down.sql    ← migration DOWN (reverter)
 ```
 
+**Por que dois diretórios — e por que isto está em maiúsculas.** O CLI do Supabase
+varre `supabase/migrations/` casando o padrão `<timestamp>_nome.sql`. O arquivo
+`..._nome.down.sql` **casa esse padrão também** — para o CLI, o "nome" é `nome.down`.
+Ou seja: ele trata todo rollback como uma migration a aplicar.
+
+Consequências reais, medidas em 2026-08-17:
+
+- `supabase migration list` mostrava **cada versão duas vezes**;
+- `db push --dry-run` listava `..._user_data_sem_escrita_do_cliente.down.sql`
+  entre os arquivos a aplicar — ou seja, um push reverteria um revoke de segurança;
+- o ledger tem uma linha `20260712120000 | lgpd_redact_legacy_cakto_pii.down`:
+  a versão foi registrada com o nome do arquivo DOWN (que ordena antes do `.sql`),
+  e o UP correspondente nunca entrou no ledger com o nome dele;
+- toda migration NOVA nasce com par UP+DOWN de versão superior à do remoto, então
+  os dois seriam aplicados — o DOWN primeiro.
+
+Esta separação foi decidida em **2026-06-01** (commit `2cb9f0d`, "evita conflito com
+db push") e **regrediu**: este documento continuou ensinando o layout antigo, e os
+60 rollbacks seguintes foram para `migrations/`. Restaurada em 2026-08-17.
+Se você for "simplificar" juntando os dois diretórios de novo, é este parágrafo que
+você está contrariando.
+
 ## Como criar uma nova migration
 
-### 1. Arquivo UP (obrigatório)
+### 1. Arquivo UP (obrigatório) — em `supabase/migrations/`
 ```sql
 -- YYYYMMDDHHMMSS_minha_feature.sql
 -- GranaEvo — Migration: descrição clara do que faz
--- Rollback: ver YYYYMMDDHHMMSS_minha_feature.down.sql
+-- Rollback: ver supabase/rollbacks/YYYYMMDDHHMMSS_minha_feature.down.sql
 
 -- Seu SQL aqui
 CREATE TABLE ...;
@@ -25,7 +49,7 @@ ALTER TABLE ...;
 CREATE INDEX ...;
 ```
 
-### 2. Arquivo DOWN (obrigatório)
+### 2. Arquivo DOWN (obrigatório) — em `supabase/rollbacks/`
 ```sql
 -- YYYYMMDDHHMMSS_minha_feature.down.sql
 -- GranaEvo — Rollback: YYYYMMDDHHMMSS_minha_feature.sql

@@ -65,7 +65,7 @@ BEGIN
 
     IF auth.uid() IS NOT NULL THEN
         RAISE EXCEPTION
-          '[SEGURANCA] is_active de um perfil so muda por excluir_perfil/restaurar_perfil';
+          '[SEGURANCA] is_active de um perfil so muda por desativar_perfil/restaurar_perfil';
     END IF;
 
     RETURN NEW;
@@ -201,5 +201,5 @@ COMMIT;
 --      SELECT public.restaurar_perfis_em_lote('<uid>', ARRAY['<id1>','<id2>','<id3>']);
 --      → restaurados <= vagas; 'ignorados' > 0 quando o plano já está cheio.
 --
--- ROLLBACK: ver 20260817000000_sec001_is_active_autoridade_unica.down.sql
+-- ROLLBACK: ver supabase/rollbacks/20260817000000_sec001_is_active_autoridade_unica.down.sql
 -- ============================================================================

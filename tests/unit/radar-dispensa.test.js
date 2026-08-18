@@ -107,7 +107,7 @@ describe('purga — não pode apagar a dispensa antes do evento morrer', () => {
   })
 
   test('a migration tem rollback e preserva o search_path endurecido', () => {
-    ler('supabase', 'migrations', '20260807000000_purge_preserva_dispensadas.down.sql')
+    ler('supabase', 'rollbacks', '20260807000000_purge_preserva_dispensadas.down.sql')
     assert.match(sql, /SET search_path TO 'public', 'extensions', 'pg_temp'/,
       'reescrever a função com o search_path original (só `public`) desfaria em ' +
       'silêncio um hardening de segurança aplicado depois da migration original.')

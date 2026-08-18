@@ -455,7 +455,7 @@ describe('[SEC-001] migration que fecha o EXECUTE público', () => {
     })
 
     test('existe o rollback correspondente', () => {
-        const down = ler('supabase', 'migrations', '20260811000000_revoke_purge_definer_publico.down.sql')
+        const down = ler('supabase', 'rollbacks', '20260811000000_revoke_purge_definer_publico.down.sql')
         assert.match(down, /GRANT EXECUTE ON FUNCTION public\.purge_guest_invitations\(\)\s+TO PUBLIC/)
         assert.match(down, /GRANT EXECUTE ON FUNCTION public\.purge_profile_backups_terminal\(\)\s+TO PUBLIC/)
     })
@@ -506,7 +506,7 @@ describe('[SEC-009] user_data não é escrita pelo cliente', () => {
     })
 
     test('existe o rollback correspondente', () => {
-        const down = ler('supabase', 'migrations', '20260811020000_user_data_sem_escrita_do_cliente.down.sql')
+        const down = ler('supabase', 'rollbacks', '20260811020000_user_data_sem_escrita_do_cliente.down.sql')
         assert.match(down, /GRANT INSERT, UPDATE, DELETE ON public\.user_data TO authenticated/)
     })
 })
@@ -570,7 +570,7 @@ describe('[SEC-008] o reset de senha encerra as sessões antigas', () => {
     })
 
     test('existe o rollback correspondente', () => {
-        const down = ler('supabase', 'migrations', '20260811010000_revogar_sessoes_no_reset.down.sql')
+        const down = ler('supabase', 'rollbacks', '20260811010000_revogar_sessoes_no_reset.down.sql')
         assert.match(down, /DROP FUNCTION IF EXISTS public\.revogar_sessoes_usuario\(uuid\)/)
     })
 
