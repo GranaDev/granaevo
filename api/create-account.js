@@ -5,6 +5,7 @@
 
 import { checkRateWindow } from './_rate-limit.js'
 import { ipDoCliente } from './_client-ip.js'
+import { bloquearOrigemDireta } from './_origin-guard.js'
 import { logger }          from './_logger.js'
 import { turnstileOk }     from './_turnstile.js'
 
@@ -30,6 +31,7 @@ const VALID_PLANS = new Set(['individual', 'casal', 'familia'])
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/
 
 export default async function handler(req, res) {
+  if (bloquearOrigemDireta(req, res, '/api/create-account')) return
   const origin = req.headers['origin'] ?? ''
 
   res.setHeader('Cache-Control', 'no-store')

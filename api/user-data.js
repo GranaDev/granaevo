@@ -12,6 +12,7 @@
 
 import { checkRate, checkRateWindow, isIPBlocked } from './_rate-limit.js'
 import { ipDoCliente } from './_client-ip.js'
+import { bloquearOrigemDireta } from './_origin-guard.js'
 import { verificarJWT } from './_jwt.js'
 import { logger, requestIdDe } from './_logger.js'
 import { timingSafeEqual } from 'node:crypto'
@@ -66,6 +67,7 @@ async function checkRL(key, max, windowSecs = 60) {
 
 // ── Handler principal ─────────────────────────────────────────
 export default async function handler(req, res) {
+  if (bloquearOrigemDireta(req, res, '/api/user-data')) return
     // Passo 27 — id de correlacao: mesma requisicao, mesmo id no proxy e na edge.
     // Ecoado na resposta para o usuario poder citar o id ao relatar um problema.
     const _rid = requestIdDe(req);

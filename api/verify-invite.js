@@ -4,6 +4,7 @@
 import { checkRate }   from './_rate-limit.js'
 import { logger }      from './_logger.js'
 import { ipDoCliente } from './_client-ip.js'
+import { bloquearOrigemDireta } from './_origin-guard.js'
 
 const PATH = '/api/verify-invite'
 
@@ -24,6 +25,7 @@ const MAX_BODY_BYTES = 8192
 const RATE_MAX       = 3
 
 export default async function handler(req, res) {
+  if (bloquearOrigemDireta(req, res, '/api/verify-invite')) return
   const origin     = req.headers['origin'] ?? ''
   const corsOrigin = ALLOWED_ORIGINS.has(origin) ? origin : [...ALLOWED_ORIGINS][0]
 

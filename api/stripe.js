@@ -4,6 +4,7 @@
 
 import { checkRate, isIPBlocked } from './_rate-limit.js'
 import { ipDoCliente } from './_client-ip.js'
+import { bloquearOrigemDireta } from './_origin-guard.js'
 import { logger }    from './_logger.js'
 
 const PATH = '/api/stripe'
@@ -34,6 +35,7 @@ const EF_URLS       = {
 }
 
 export default async function handler(req, res) {
+  if (bloquearOrigemDireta(req, res, '/api/stripe')) return
   const origin = req.headers['origin'] ?? ''
 
   res.setHeader('Cache-Control', 'no-store')

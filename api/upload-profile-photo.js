@@ -24,6 +24,7 @@ export const config = {
 
 import { checkRateWindow }    from './_rate-limit.js'
 import { ipDoCliente }        from './_client-ip.js'
+import { bloquearOrigemDireta } from './_origin-guard.js'
 import { verificarJWT }       from './_jwt.js'
 import { trackSecurityEvent } from './_alert.js'
 import { logger }             from './_logger.js'
@@ -52,6 +53,7 @@ const MAX_BYTES     = 6 * 1024 * 1024
 // sem verificar assinatura. A identidade agora vem de `verificarJWT` (api/_jwt.js).
 
 export default async function handler(req, res) {
+  if (bloquearOrigemDireta(req, res, '/api/upload-profile-photo')) return
   const origin  = req.headers['origin'] ?? ''
   const allowed = ALLOWED_ORIGINS.has(origin)
 

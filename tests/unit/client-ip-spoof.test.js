@@ -192,6 +192,42 @@ describe('o valor vira CHAVE de Redis — precisa ser um IP', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
+describe('a origem só atende quem veio pela Cloudflare', () => {
+  // SEC-003, segunda metade. Medido em 17/08: apontar www.granaevo.com para um IP
+  // da borda da Vercel devolve 200 sem passar pela Cloudflare. Toda rota de api/
+  // precisa consultar a guarda ANTES de qualquer lógica — uma rota esquecida é a
+  // porta que continua aberta.
+  const rotas = readdirSync(join(RAIZ, 'api'))
+    .filter((f) => f.endsWith('.js') && !f.startsWith('_'))
+
+  test('há rotas para verificar (o teste não pode passar por lista vazia)', () => {
+    assert.ok(rotas.length >= 10, `esperava >=10 rotas, achei ${rotas.length}`)
+  })
+
+  test('TODA rota chama bloquearOrigemDireta como primeira coisa do handler', () => {
+    const faltando = []
+    for (const f of rotas) {
+      const src = semComentarios(readFileSync(join(RAIZ, 'api', f), 'utf8'))
+      if (!/from\s+['"]\.\/_origin-guard\.js['"]/.test(src)) { faltando.push(`${f} (sem import)`); continue }
+
+      const m = src.match(/export default async function handler\(req, res\) \{\s*\n([^\n]*)/)
+      if (!m) { faltando.push(`${f} (handler não encontrado)`); continue }
+      if (!/bloquearOrigemDireta\(req, res/.test(m[1])) {
+        faltando.push(`${f} (a guarda não é a 1ª linha)`)
+      }
+    }
+    assert.deepEqual(faltando, [], 'estas rotas atendem a origem direta sem checar')
+  })
+
+  test('a guarda usa o IP do PAR, não um header que o cliente escolhe', () => {
+    const g = semComentarios(readFileSync(join(RAIZ, 'api/_origin-guard.js'), 'utf8'))
+    assert.match(g, /identidadeDeRede/,
+      'a decisão tem de vir da mesma autoridade que já valida o par')
+    assert.ok(!/headers\[\s*['"]cf-/.test(g),
+      'a guarda não pode ler cf-* direto: esse header é forjável na origem')
+  })
+})
+
 describe('a regra tem UMA autoridade', () => {
   test('nenhuma rota em api/ deriva IP na mão', () => {
     const arquivos = readdirSync(join(RAIZ, 'api')).filter((f) => f.endsWith('.js'))

@@ -49,6 +49,7 @@ import { checkRate, checkRateWindow, isIPBlocked,
          redisDegradado } from './_rate-limit.js'
 import { logger } from './_logger.js'
 import { ipDoCliente } from './_client-ip.js'
+import { bloquearOrigemDireta } from './_origin-guard.js'
 import { turnstileOk } from './_turnstile.js'
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 
@@ -399,6 +400,7 @@ function sessionPayload(grant) {
 }
 
 export default async function handler(req, res) {
+  if (bloquearOrigemDireta(req, res, '/api/auth-session')) return
   const origin  = req.headers['origin'] ?? ''
   const allowed = ALLOWED_ORIGINS.has(origin)
 

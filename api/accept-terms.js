@@ -3,6 +3,7 @@
 
 import { checkRate } from './_rate-limit.js'
 import { ipDoCliente } from './_client-ip.js'
+import { bloquearOrigemDireta } from './_origin-guard.js'
 import { logger }    from './_logger.js'
 
 const PATH = '/api/accept-terms'
@@ -25,6 +26,7 @@ const ALLOWED_ORIGINS = new Set([
 const RATE_MAX = 5 // por minuto por IP — ação de baixa frequência
 
 export default async function handler(req, res) {
+  if (bloquearOrigemDireta(req, res, '/api/accept-terms')) return
   const origin  = req.headers['origin'] ?? ''
   const allowed = ALLOWED_ORIGINS.has(origin)
   const corsOrigin = allowed ? origin : [...ALLOWED_ORIGINS][0]

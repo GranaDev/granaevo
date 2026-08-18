@@ -3,6 +3,7 @@
 
 import { checkRate } from './_rate-limit.js'
 import { ipDoCliente } from './_client-ip.js'
+import { bloquearOrigemDireta } from './_origin-guard.js'
 import { logger }    from './_logger.js'
 
 const PATH = '/api/reset-password'
@@ -29,6 +30,7 @@ const ENDPOINTS = {
 const RATE_LIMITS = { send: 3, verify_code: 10, reset_password: 5 }
 
 export default async function handler(req, res) {
+  if (bloquearOrigemDireta(req, res, '/api/reset-password')) return
   const origin     = req.headers['origin'] ?? ''
   const allowed    = ALLOWED_ORIGINS.has(origin)
   const corsOrigin = allowed ? origin : [...ALLOWED_ORIGINS][0]

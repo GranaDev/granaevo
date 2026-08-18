@@ -6,6 +6,7 @@
 
 import { checkRate }          from './_rate-limit.js'
 import { ipDoCliente }        from './_client-ip.js'
+import { bloquearOrigemDireta } from './_origin-guard.js'
 import { trackSecurityEvent } from './_alert.js'
 import { logger }             from './_logger.js'
 
@@ -25,6 +26,7 @@ const ALLOWED_ORIGINS = [
 ].filter(Boolean)
 
 export default async function handler(req, res) {
+  if (bloquearOrigemDireta(req, res, '/api/check-user-access')) return
   const origin        = req.headers['origin'] ?? ''
   const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : null
 
