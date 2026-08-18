@@ -111,7 +111,7 @@ export default async function handler(req, res) {
                     'x-request-id':   _rid,
             },
             body:   '{}',
-            signal: AbortSignal.timeout(12_000),
+            signal: AbortSignal.timeout(15_000),
         });
         try {
             const results = await Promise.allSettled(cronTargets.map(fire));
@@ -349,7 +349,19 @@ export default async function handler(req, res) {
                     'x-proxy-secret':  PROXY_SECRET,
                     'x-request-id':   _rid,
                 },
-                signal: AbortSignal.timeout(15_000),
+                // 12s, NÃO 15s. O cliente (`RPC_TIMEOUT_MS` no data-manager) aborta
+                // em 15s; enquanto este timeout era TAMBÉM 15s, os dois corriam
+                // empatados e o cliente desistia junto — o 504 abaixo nunca chegava
+                // a ser enviado, e o motivo real da falha (edge lenta, banco lento,
+                // rede) se perdia. Um login que "carrega 15 segundos e não entra"
+                // não é lentidão: é este timeout estourando mudo.
+                //
+                // 12s deixa 3s de folga para o 504 viajar e o cliente registrá-lo,
+                // custando 3s de teto num caminho cuja função mais lenta medida em
+                // produção leva 2,9s (check-user-access). Margem de 4×.
+                //
+                // MANTER MENOR que RPC_TIMEOUT_MS de src/scripts/modules/data-manager.js.
+                signal: AbortSignal.timeout(12_000),
             });
         } catch (e) {
             const code = e.name === 'TimeoutError' || e.name === 'AbortError' ? 504 : 502;
