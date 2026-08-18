@@ -15,27 +15,6 @@ function getSecretKey(): string {
 }
 
 // ---------------------------------------------------------------------------
-// checkNeedsTermsAcceptance — verifica se o usuário aceitou a versão corrente
-// dos Termos de Uso. Fail-open: erro de banco não bloqueia acesso.
-// ---------------------------------------------------------------------------
-async function checkNeedsTermsAcceptance(
-  admin: ReturnType<typeof createClient>,
-  userId: string,
-): Promise<boolean> {
-  try {
-    const { data } = await admin
-      .from('terms_acceptance')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('terms_version', CURRENT_TERMS_VERSION)
-      .maybeSingle()
-    return !data // true = ainda precisa aceitar
-  } catch {
-    return false // fail-open: não bloqueia acesso em caso de erro de DB
-  }
-}
-
-// ---------------------------------------------------------------------------
 // timing-safe compare (prevents timing oracle on proxy secret)
 // [GOD-TSE] Sem early-return em length — codifica divergência via XOR
 // ---------------------------------------------------------------------------
@@ -132,157 +111,84 @@ Deno.serve(async (req: Request) => {
     const userEmail = (user.email ?? '').toLowerCase().trim()
     console.log('[check-user-access] Verificando acesso para user_id:', userId.slice(0, 8))
 
-    // ── 5. Verificar lockout progressivo ─────────────────────────────────────
-    // Verifica se o email está em lockout por tentativas falhas anteriores.
-    // O IP é extraído do header x-forwarded-for (injetado pelo proxy Vercel).
+    // ── 5. Decisão de acesso: UMA ida ao banco ───────────────────────────────
+    //
+    // Este bloco fazia até 6 idas SEQUENCIAIS — check_login_lockout,
+    // stripe_subscriptions, account_members, stripe_subscriptions do dono,
+    // terms_acceptance e clear_login_lockout — uma esperando a outra. Os logs de
+    // produção mediam 2,0–2,9s nesta função em TODAS as amostras, enquanto as
+    // outras Edge Functions ficam em 70–120ms. Era o maior custo isolado do login.
+    //
+    // `acesso_do_usuario` faz o mesmo numa ida. Ela NÃO é a `get_user_access_data`:
+    // aquela filtra `current_period_end` dentro do WHERE e concederia onde este
+    // caminho nega. A nova replica a semântica DESTE arquivo, literalmente, e a
+    // equivalência foi provada contra todos os usuários reais (7/7) antes da troca.
+    //
+    // O que NÃO desceu para o banco: `auth.getUser` acima — é a fronteira de
+    // identidade. O banco recebe um user_id já provado e nunca decide quem chama.
     const clientIp = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'unknown'
 
+    const { data: acesso, error: acessoErr } = await supabaseAdmin.rpc('acesso_do_usuario', {
+      p_user_id:       userId,
+      p_email:         userEmail,
+      p_terms_version: CURRENT_TERMS_VERSION,
+    })
+
+    // ⚠️ O `error` É CONFERIDO. A versão anterior fazia
+    // `const { data: lockData } = await ...rpc('check_login_lockout')` e descartava
+    // o erro — e como aquela função levantava 42702 em toda chamada (ambiguidade
+    // de `locked_until`, corrigida na migration 20260818020000), o gate de lockout
+    // nunca aplicou, em silêncio, por meses. Falha de decisão de acesso nega.
+    if (acessoErr) {
+      console.error('[check-user-access] acesso_do_usuario falhou:', acessoErr.message)
+      return deny(500)
+    }
+
+    if (acesso?.estado === 'locked') {
+      const levelMap = ['', '15 minutos', '1 hora', '24 horas']
+      const level    = acesso.lockout_level ?? 1
+      console.warn(`[check-user-access] Conta em lockout nível ${level} para: ${userId.slice(0, 8)}`)
+      return json({
+        hasAccess:     false,
+        locked:        true,
+        locked_until:  acesso.locked_until,
+        lockout_level: level,
+        message:       `Conta bloqueada temporariamente por ${levelMap[level] ?? 'tempo determinado'} devido a múltiplas tentativas.`,
+      }, 429, corsHeaders)
+    }
+
+    if (acesso?.estado !== 'ok') {
+      console.log('[check-user-access] Sem acesso para:', userId.slice(0, 8))
+      return deny()
+    }
+
+    // Limpeza do lockout é EFEITO, não decisão: dispara sem await para não somar
+    // um round-trip ao caminho feliz.
     if (userEmail) {
-      const { data: lockData } = await supabaseAdmin.rpc('check_login_lockout', {
-        p_identifier:      userEmail,
-        p_identifier_type: 'email',
-      })
-      const lockEntry = lockData?.[0]
-      if (lockEntry?.is_locked) {
-        const until    = lockEntry.locked_until ? new Date(lockEntry.locked_until).toISOString() : 'unknown'
-        const levelMap = ['', '15 minutos', '1 hora', '24 horas']
-        const level    = lockEntry.lockout_level ?? 1
-        console.warn(`[check-user-access] Conta em lockout nível ${level} para: ${userId.slice(0, 8)} até ${until}`)
-        return json({
-          hasAccess:    false,
-          locked:       true,
-          locked_until: lockEntry.locked_until,
-          lockout_level: level,
-          message:      `Conta bloqueada temporariamente por ${levelMap[level] ?? 'tempo determinado'} devido a múltiplas tentativas.`,
-        }, 429, corsHeaders)
-      }
+      supabaseAdmin
+        .rpc('clear_login_lockout', { p_identifier: userEmail, p_identifier_type: 'email' })
+        .then(() => {}, () => {})
     }
 
-    // ── 6. Verificar subscription ativa (stripe_subscriptions) ──────────────
-    // Cakto users foram migrados para stripe_subscriptions com status='active'
-    // e current_period_end='2099-12-31'. Não há mais tabela `subscriptions`.
-    const { data: stripeSub, error: stripeErr } = await supabaseAdmin
-      .from('stripe_subscriptions')
-      .select('id, status, current_period_end, plan_name')
-      .eq('user_id', userId)
-      .in('status', ['active', 'trialing'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (stripeErr) {
-      console.error('[check-user-access] Erro ao consultar stripe_subscriptions:', stripeErr.message)
-      return deny()
-    }
-
-    if (!stripeSub) {
-      // ── 9. REMOVIDO: auto-vinculação de assinatura por e-mail ───────────────
-      // Havia aqui um bloco que, não achando assinatura por `user_id`, procurava
-      // uma com `user_id IS NULL` e o MESMO E-MAIL do JWT, vinculava e concedia
-      // acesso. Era tomada de conta (account pre-hijacking), explorável assim:
-      //
-      //   1. /api/create-account chama admin.createUser({ email_confirm: true }):
-      //      a conta nasce CONFIRMADA, sem link de verificação e sem checagem de
-      //      pagamento — qualquer e-mail, de qualquer um.
-      //   2. login imediato → JWT legítimo com o e-mail da vítima.
-      //   3. este bloco casava o e-mail e entregava a assinatura dela.
-      //   4. e a vítima real nunca mais conseguia se cadastrar (409 email_exists).
-      //
-      // Não era falha de JWT: o JWT é honesto. O erro era tratar o e-mail como
-      // PROVA DE POSSE quando o cadastro nunca provou posse nenhuma.
-      //
-      // Por que dá para simplesmente remover: nenhuma compra nova precisa disto.
-      // O fluxo de planos.js SEMPRE cria a conta antes do checkout
-      // (iniciarCheckout → SignupModal → _checkoutComSessao com JWT), então o
-      // webhook já grava `user_id` via metadata. Este caminho só servia ao legado
-      // Cakto que nunca criou conta — hoje 1 pessoa, que é vinculada à mão.
-      //
-      // Se um dia existir compra anônima de verdade, a reclamação tem que ser por
-      // link/código assinado enviado AO E-MAIL — nunca por casar string.
-      // Ver migration 20260716200000 (mesma remoção em get_user_access_data).
-
-      // ── 10. Verificar se é usuário convidado (account_members) ──────────────
-      // Convidados não têm subscription própria — o acesso deles depende de
-      // estarem ativos em account_members E o dono ter subscription vigente.
-      const { data: memberEntry } = await supabaseAdmin
-        .from('account_members')
-        .select('id, owner_user_id, owner_email')
-        .eq('member_user_id', userId)
-        .eq('is_active', true)
-        .maybeSingle()
-
-      if (memberEntry?.owner_user_id) {
-        const ownerUserId = memberEntry.owner_user_id
-
-        // Verifica subscription do dono (todos os planos agora em stripe_subscriptions)
-        const { data: ownerStripe } = await supabaseAdmin
-          .from('stripe_subscriptions')
-          .select('id, status, current_period_end, plan_name')
-          .eq('user_id', ownerUserId)
-          .in('status', ['active', 'trialing'])
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle()
-
-        // O convidado herda o acesso do titular, então herda o mesmo rigor:
-        // sem period_end, o titular não tem acesso — e o convidado também não.
-        const ownerStripeOk = ownerStripe
-          ? (!!ownerStripe.current_period_end && new Date(ownerStripe.current_period_end) >= new Date())
-          : false
-
-        if (ownerStripeOk) {
-          console.log('[check-user-access] Acesso concedido (convidado) para:', userId.slice(0, 8))
-          const needsTerms2 = await checkNeedsTermsAcceptance(supabaseAdmin, userId)
-          return json({
-            hasAccess:            true,
-            needsTermsAcceptance: needsTerms2,
-            isGuest:              true,
-            ownerId:              ownerUserId,
-            planName:             ownerStripe?.plan_name ?? 'individual',
-            ownerEmail:           memberEntry.owner_email ?? null,
-          }, 200, corsHeaders)
-        }
-
-        console.log('[check-user-access] Convidado bloqueado — dono sem subscription ativa:', userId.slice(0, 8))
-        return deny()
-      }
-
-      console.log('[check-user-access] Sem subscription ativa para:', userId.slice(0, 8))
-      return deny()
-    }
-
-    // Proteção extra: valida current_period_end mesmo com status 'active'
-    // (o webhook pode ter atrasado a atualização do status).
-    // A checagem de AUSENTE vem primeiro e nega: antes, `stripeSub.current_period_end &&`
-    // fazia o null escapar deste if inteiro e cair no "acesso concedido" logo
-    // abaixo — que era exatamente o furo do acesso vitalício de graça.
-    if (!stripeSub.current_period_end) {
-      console.log('[check-user-access] Assinatura sem period_end (dado quebrado) — negado:', userId.slice(0, 8))
-      return deny()
-    }
-    if (new Date(stripeSub.current_period_end) < new Date()) {
-      console.log('[check-user-access] Período Stripe expirado para:', userId.slice(0, 8))
-      return deny()
-    }
-
-    // Acesso concedido via Stripe
-    if (userEmail) {
-      try {
-        await supabaseAdmin.rpc('clear_login_lockout', {
-          p_identifier:      userEmail,
-          p_identifier_type: 'email',
-        })
-      } catch { /* falha silenciosa */ }
+    if (acesso.isGuest === true) {
+      console.log('[check-user-access] Acesso concedido (convidado) para:', userId.slice(0, 8))
+      return json({
+        hasAccess:            true,
+        needsTermsAcceptance: acesso.needsTerms,
+        isGuest:              true,
+        ownerId:              acesso.ownerId,
+        planName:             acesso.planName,
+        ownerEmail:           acesso.ownerEmail ?? null,
+      }, 200, corsHeaders)
     }
 
     console.log('[check-user-access] Acesso concedido (Stripe) para:', userId.slice(0, 8))
-    const needsTerms3 = await checkNeedsTermsAcceptance(supabaseAdmin, userId)
-    // Retorna o plano do TITULAR (raw) — o frontend normaliza. Sem isto, o dono
-    // cairia em 'Individual' e o convite/2º perfil de planos Casal/Família travaria.
+    // Plano do TITULAR (raw) — o frontend normaliza. Sem isto, o dono cairia em
+    // 'Individual' e o convite/2º perfil de Casal/Família travaria.
     return json({
       hasAccess:            true,
-      needsTermsAcceptance: needsTerms3,
-      planName:             stripeSub.plan_name ?? 'individual',
+      needsTermsAcceptance: acesso.needsTerms,
+      planName:             acesso.planName,
     }, 200, corsHeaders)
 
   } catch (error: any) {
