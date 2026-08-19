@@ -147,3 +147,63 @@ describe('chat — a cadeia de timeouts está na ordem certa', () => {
       + 'desiste antes de a IA poder responder ou falhar de forma tratada.');
   });
 });
+
+describe('chat — o teto de custo da IA falha FECHADO', () => {
+  // Auditoria de 2026-08-18. O backstop de 200/dia no banco era
+  // `if (!capErr && allowed === false)`: qualquer erro da RPC fazia o teto
+  // SUMIR em silêncio. A justificativa registrada — "o proxy Vercel segue como
+  // defesa" — não se sustentava, porque as duas camadas caem pelos mesmos
+  // motivos: o teto do proxy vive no Upstash (que degrada para um Map POR
+  // INSTÂNCIA) e só é aplicado quando o JWT é verificável (`if (userId && …)`).
+  //
+  // O recurso protegido é dinheiro real (tokens da Anthropic) e não há terceira
+  // camada. Estes testes travam o fail-closed.
+
+  // Recorta SÓ o bloco do backstop. Sem isto, `EDGE.includes('capErr')` passaria
+  // por causa do comentário — e o teste ficaria verde com o código removido.
+  const bloco = (() => {
+    const i = EDGE.indexOf("rpc('chat_parse_bump'");
+    assert.ok(i > 0, 'Não achei a chamada de chat_parse_bump na edge.');
+    // Do começo do `try` que a envolve até o fim do `catch` correspondente.
+    const ini = EDGE.lastIndexOf('try {', i);
+    const fim = EDGE.indexOf('\n  }', EDGE.indexOf('catch', i));
+    assert.ok(ini > 0 && fim > ini, 'Não consegui delimitar o bloco do backstop.');
+    return EDGE.slice(ini, fim);
+  })();
+
+  test('erro da RPC RECUSA — não pode cair no caminho feliz', () => {
+    // A forma exata importa: `if (capErr)` seguido de um return de recusa.
+    assert.match(bloco, /if\s*\(\s*capErr\s*\)[\s\S]{0,400}?return\s+json\([^)]*\}\s*,\s*429/,
+      'Um `capErr` precisa devolver 429. Sem isto, falha da RPC (função dropada, '
+      + 'EXECUTE revogado) desliga o único teto de custo que sobrevive ao vazamento '
+      + 'do PROXY_SECRET.');
+  });
+
+  test('o catch também recusa — exceção não é permissão', () => {
+    const catchDoBloco = bloco.slice(bloco.indexOf('catch'));
+    assert.match(catchDoBloco, /return\s+json\([^)]*\}\s*,\s*429/,
+      'O catch precisa recusar. Um catch vazio aqui é fail-open com outro nome.');
+  });
+
+  test('o padrão fail-open antigo não voltou', () => {
+    assert.doesNotMatch(bloco, /!\s*capErr\s*&&/,
+      '`!capErr &&` é exatamente o fail-open que a auditoria de 2026-08-18 fechou: '
+      + 'ele exige que a RPC tenha dado CERTO para o teto valer, ou seja, qualquer '
+      + 'erro libera a chamada à Anthropic.');
+  });
+
+  test('o cap do banco continua ACIMA do teto do proxy (é backstop, não o teto)', () => {
+    // Se o cap do banco descesse até o do proxy, ele passaria a disparar em uso
+    // normal — e com fail-closed isso viraria recusa visível para o usuário.
+    const capBanco = Number(bloco.match(/p_cap:\s*(\d+)/)?.[1]);
+    const PROXY = ler('api', 'user-data.js');
+    const iChat = PROXY.indexOf("action === 'chat-parse'");
+    const capProxy = Number(PROXY.slice(iChat, iChat + 3000)
+      .match(/chatparse:uid:\$\{userId\}:day`,\s*(\d+)/)?.[1]);
+    assert.ok(capBanco && capProxy, `Não li os caps (banco=${capBanco}, proxy=${capProxy}).`);
+    assert.ok(capBanco > capProxy,
+      `O cap do banco (${capBanco}) precisa ser MAIOR que o do proxy (${capProxy}). `
+      + 'Igual ou menor, o backstop vira o teto efetivo e passa a recusar usuário '
+      + 'legítimo — com fail-closed, isso é uma indisponibilidade, não uma proteção.');
+  });
+});

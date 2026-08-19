@@ -378,16 +378,48 @@ Deno.serve(async (req: Request) => {
   // usuário/dia no banco sobrevive a um eventual vazamento do PROXY_SECRET: mesmo
   // que alguém chame esta função direto com um JWT válido, o teto continua valendo.
   // Cap folgado (acima do teto do proxy) → nunca dispara em uso normal, só quando
-  // o proxy é contornado. Fail-open: se a RPC falhar, o proxy segue como defesa.
+  // o proxy é contornado.
+  //
+  // ── FAIL-CLOSED desde 2026-08-18 (auditoria) ─────────────────────────────
+  // Era `if (!capErr && allowed === false)`: qualquer erro da RPC fazia o teto
+  // SUMIR. A justificativa registrada era "o proxy Vercel segue como defesa" —
+  // e ela não se sustenta, por dois motivos:
+  //
+  //   1. O teto do proxy vive no Upstash, que degrada para um `Map` POR
+  //      INSTÂNCIA serverless quando o Redis falha (ver api/_rate-limit.js).
+  //      Os dois controles de custo caem juntos, não um de cada vez.
+  //   2. O teto por usuário do proxy só é aplicado quando o JWT é verificável
+  //      (`if (userId && …)`). Identidade desconhecida já dispensa aquele teto.
+  //
+  // O recurso protegido aqui é dinheiro real (tokens da Anthropic), e não há
+  // terceira camada. Fechar é a resposta certa.
+  //
+  // POR QUE ISTO NÃO DERRUBA O ASSISTENTE NA PRÁTICA: `auth.getUser(token)`
+  // roda LOGO ACIMA e teve de dar certo para chegar aqui — ou seja, banco e
+  // Auth estão de pé. Um `capErr` neste ponto não é "o banco caiu", é falha
+  // específica desta RPC (função dropada, EXECUTE revogado, tipo mudado):
+  // justamente o caso em que se quer recusar, não liberar.
+  //
+  // A resposta é o MESMO `{ok:false, error:'rate'}` 429 que o cliente já trata
+  // (cai no fallback "não entendi" com template). Inventar um código novo aqui
+  // criaria um caminho de erro não testado no cliente para ganhar nada.
   try {
     const { data: allowed, error: capErr } = await supabaseAdmin.rpc('chat_parse_bump', {
       p_user_id: user.id,
       p_cap: 200,
     })
-    if (!capErr && allowed === false) {
+    if (capErr) {
+      console.error('[chat-parse] chat_parse_bump falhou — recusando por segurança de custo:', capErr.message)
       return json({ ok: false, error: 'rate' }, 429, cors)
     }
-  } catch { /* fail-open — o proxy Vercel é a defesa primária de rate limit */ }
+    if (allowed === false) {
+      return json({ ok: false, error: 'rate' }, 429, cors)
+    }
+  } catch (e) {
+    console.error('[chat-parse] chat_parse_bump lançou — recusando por segurança de custo:',
+                  e instanceof Error ? e.message : String(e))
+    return json({ ok: false, error: 'rate' }, 429, cors)
+  }
 
   // Contexto do turno (rótulos + data de hoje, p/ lembrete_data) fica DEPOIS do
   // system fixo → não quebra o cache do prompt.
