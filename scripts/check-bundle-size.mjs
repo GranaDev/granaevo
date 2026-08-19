@@ -93,6 +93,36 @@ const BUDGETS_KB = {
   'db-relatorios-export.js': 16,
   'main.css':            14,
   'convidados.css':      20,
+
+  // ── Cobertura ampliada (auditoria 2026-08-18) ────────────────────────────
+  // O guard vigiava 7 dos 86 assets do dist. O SEGUNDO maior chunk do projeto
+  // — `assistente.js`, 45,9 KB gzip, MAIOR que o dashboard — não tinha teto
+  // nenhum: podia dobrar de tamanho sem que nada reprovasse. Um guard que só
+  // olha para onde já se olhou não é guard, é hábito.
+  //
+  // POR QUE A FOLGA É DE ~20% E NÃO DOS ~15% DOS TETOS ACIMA:
+  // aqueles nasceram de um trabalho de redução e são apertados de propósito
+  // (3 estão em 95-96%). Estes nascem de uma MEDIÇÃO, sem trabalho de redução
+  // atrás, e o objetivo aqui é outro: pegar regressão SILENCIOSA — um vendor
+  // entrando por engano, um import estático onde era dinâmico — que dobra ou
+  // triplica o arquivo. Um teto colado no tamanho atual reprovaria crescimento
+  // legítimo de feature, e build reprovado congela a produção em silêncio
+  // (o mesmo modo de falha da 13ª função na Vercel). Folga generosa pega o que
+  // importa sem criar um novo jeito de travar o deploy.
+  //
+  // Medidos em 2026-08-18 (gzip): assistente 45,9 · db-metas 26,5 ·
+  // db-transacoes 21,5 · db-configuracoes 17,6 · db-cartoes 14,7 ·
+  // vendor-realtime 14,5.
+  //
+  // ⚠️ NÃO adicionar aqui `graficos.js` nem `chart.umd.min.js`: eles moram em
+  // dist/scripts/, e este guard só varre dist/assets. Orçamento sem arquivo
+  // correspondente REPROVA (linha ~137) — a entrada quebraria o build.
+  'assistente.js':        55,
+  'db-metas.js':          32,
+  'db-transacoes.js':     26,
+  'db-configuracoes.js':  21,
+  'db-cartoes.js':        18,
+  'vendor-realtime.js':   18,
 };
 
 function gzipKB(file) {

@@ -4859,26 +4859,16 @@ function pararAutoSave() {
 window.iniciarAutoSave = iniciarAutoSave;
 window.pararAutoSave = pararAutoSave;
 
-// ========== VALIDAÇÕES ADICIONAIS ==========
-
 // ========== FORMATAÇÕES ADICIONAIS ==========
 
-// Formata número de telefone
-function formatarTelefone(tel) {
-    tel = tel.replace(/\D/g, '');
-    if(tel.length === 11) {
-        return tel.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-    } else if(tel.length === 10) {
-        return tel.replace(/(\d{2})(\d{4})(\d{4})/, '($1) $2-$3');
-    }
-    return tel;
-}
-
-// Formata CPF
-function formatarCPF(cpf) {
-    cpf = cpf.replace(/\D/g, '');
-    return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-}
+// `formatarTelefone` e `formatarCPF` foram removidas em 2026-08-18 (auditoria):
+// zero referências em src/ e em todo HTML, e o app não coleta nem telefone nem
+// CPF em lugar nenhum — eram sobra de um formulário que não existe. Saíram do
+// `dashboard.js` de propósito: é o arquivo mais apertado do projeto (36,4 de
+// 38 KB gzip), onde peso morto custa folga de orçamento.
+//
+// Se um dia entrar um campo de telefone/CPF, ele nasce com sanitização e
+// validação SERVER-SIDE junto — formatador de tela nunca foi validação.
 
 // Converte número para extenso (útil para cheques)
 function numeroParaExtenso(numero) {
