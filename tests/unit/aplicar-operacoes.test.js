@@ -159,9 +159,25 @@ describe('37.2b — idempotência por construção, sem livro-caixa', () => {
       { p: 'p1', c: 'transacoes', op: 'add', apos: 'b', r: tx('c') },
       { p: 'p1', op: 'set', k: 'nome', v: 'Novo' },
     ]
+    // ⏱️ Carimbo FIXO nas duas aplicações (flake corrigido em 2026-08-19).
+    //
+    // `aplicarOperacoes` grava `p.lastUpdate = agoraISO`, e o default é
+    // `new Date().toISOString()`. Sem fixar, as duas chamadas caem em
+    // milissegundos diferentes sempre que o relógio vira entre elas — e o
+    // deepEqual reprovava por 1 ms, ~1 vez a cada 6 rodadas.
+    //
+    // Fixar não enfraquece a asserção: o que este teste prova é que as
+    // OPERAÇÕES são idempotentes (reenviar a mesma remessa não duplica
+    // transação), não que o relógio é. O carimbo mudar entre dois instantes
+    // diferentes é o comportamento CORRETO — compará-lo aqui era medir a
+    // coisa errada.
+    //
+    // O ponto de injeção já existia no wrapper `aplicar(perfis, ops, agora)`;
+    // este teste só não o usava. Mesmo remédio de assistente-query.test.js.
+    const AGORA = '2026-08-07T09:00:00.000Z'
     const base = [perfil({ transacoes: [tx('a'), tx('b')] })]
-    const uma = aplicar(base, ops)
-    const duas = aplicar(uma.valor.profiles, ops)
+    const uma = aplicar(base, ops, AGORA)
+    const duas = aplicar(uma.valor.profiles, ops, AGORA)
     assert.deepEqual(uma.valor.profiles, duas.valor.profiles)
   })
 })
