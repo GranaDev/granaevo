@@ -751,6 +751,74 @@ export default async function handler(req, res) {
                   .send(await daRes.text());
     }
 
+    // ── POST { action:"change-password" }: trocar a senha na conta autenticada ─
+    //
+    // ⚠️ NÃO é o "Esqueci a senha" — aquele é `verify-and-reset-password`, e prova
+    // posse por código de e-mail. Aqui a prova é a SENHA ATUAL.
+    //
+    // Mora como `action` e não como api/change-password.js porque o plano Hobby da
+    // Vercel aceita 12 Serverless Functions e o repositório usa 10; a 13ª congela o
+    // deploy em silêncio (2026-07-25). Mesmo motivo de push-subscribe/chat-parse.
+    //
+    // O proxy NÃO decide nada: quem confere a senha atual, roda o HIBP e troca é a
+    // Edge. Aqui só se aplica rate limit e se valida a FORMA — e o corpo é
+    // reconstruído do zero, então nenhum campo extra do cliente atravessa.
+    if (parsed?.action === 'change-password') {
+        if (!SUPABASE_URL) return res.status(503).json({ error: 'Serviço indisponível' });
+
+        // Teto apertado: cada tentativa carrega um palpite da senha ATUAL, então
+        // este endpoint é um oráculo de senha se ficar solto. 5/h por IP e 5/h por
+        // usuário. Trocar a senha é ação rara — 5 cobre erro de digitação com folga.
+        // (A Edge tem o próprio backstop no banco, para o caso de vazar o
+        // PROXY_SECRET e alguém falar com ela direto.)
+        if (!await checkRL(`chpwd:ip:${ip}`, 5, 3_600)) {
+            res.setHeader('Retry-After', '3600');
+            return res.status(429).json({ error: 'Muitas tentativas. Aguarde 1 hora.' });
+        }
+        if (userId && !await checkRL(`chpwd:uid:${userId}`, 5, 3_600)) {
+            res.setHeader('Retry-After', '3600');
+            return res.status(429).json({ error: 'Muitas tentativas. Aguarde 1 hora.' });
+        }
+
+        // Validação de FORMA apenas. A regra de senha de verdade (8+, maiúscula,
+        // dígito, HIBP) é revalidada na Edge — repeti-la aqui criaria uma segunda
+        // fonte que um dia divergiria da primeira.
+        if (typeof parsed?.currentPassword !== 'string' || parsed.currentPassword.length < 6) {
+            return res.status(400).json({ error: 'Informe sua senha atual.' });
+        }
+        if (typeof parsed?.newPassword !== 'string' || parsed.newPassword.length < 8) {
+            return res.status(400).json({ error: 'A nova senha deve ter pelo menos 8 caracteres.' });
+        }
+
+        let cpRes2;
+        try {
+            cpRes2 = await fetch(`${SUPABASE_URL}/functions/v1/change-password`, {
+                method:  'POST',
+                headers: {
+                    'Content-Type':    'application/json',
+                    'Authorization':   `Bearer ${token}`,
+                    'apikey':          SUPABASE_ANON_KEY,
+                    'x-forwarded-for': ip,
+                    'x-proxy-secret':  PROXY_SECRET,
+                    'x-request-id':    _rid,
+                },
+                // Allow-list explícita — as senhas são repassadas, nunca logadas.
+                body: JSON.stringify({
+                    currentPassword: parsed.currentPassword.slice(0, 200),
+                    newPassword:     parsed.newPassword.slice(0, 200),
+                }),
+                signal: AbortSignal.timeout(15_000),
+            });
+        } catch (e) {
+            const code = e.name === 'TimeoutError' || e.name === 'AbortError' ? 504 : 502;
+            return res.status(code).json({ error: code === 504 ? 'Gateway Timeout' : 'Bad Gateway' });
+        }
+
+        return res.status(cpRes2.status)
+                  .setHeader('Content-Type', 'application/json')
+                  .send(await cpRes2.text());
+    }
+
     // ── POST { action:"login-notify" }: alerta de login em aparelho novo ──────
     // Chamado pelo login.js após autenticar. Repassa à edge notify-login com o
     // user-agent ORIGINAL (x-original-ua) — o fetch do proxy tem UA próprio.

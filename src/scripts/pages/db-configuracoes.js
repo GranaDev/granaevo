@@ -805,12 +805,44 @@ async function removerConvidado(memberId, memberName) {
 
 window.removerConvidado = removerConvidado;
 
+// ========== ALTERAR SENHA (conta autenticada) ==========
+//
+// ⚠️ NÃO confundir com "Esqueci a senha" (login.js → verify-and-reset-password).
+// A diferença é a PROVA DE POSSE:
+//   Aqui           → prova = a senha ATUAL, que o usuário sabe.
+//   Esqueci a senha → prova = código no e-mail. Pedir a senha atual lá seria
+//                     absurdo: ele não a sabe. Por isso são dois fluxos.
+//
+// ── POR QUE ISTO DEIXOU DE FALAR COM O GoTrue DIRETO (auditoria 2026-08-19) ──
+// Antes: `supabase.auth.updateUser({ password })`, do browser. Três defeitos:
+//
+// 1. BUG REAL, e o mais grave. O projeto tem
+//    `security_update_password_require_reauthentication = true`, e a doc do
+//    Supabase diz que sem reautenticação a troca só funciona com sessão criada
+//    nas ÚLTIMAS 24 HORAS. Passando disso, o GoTrue exige um `nonce` que este
+//    código nunca produziu → falhava com "Não foi possível alterar a senha.
+//    Tente novamente." e tentar de novo NUNCA resolvia, porque a sessão
+//    continuava velha. Num PWA a sessão dura dias: era o caso comum.
+//
+// 2. Sem checagem de senha vazada. O `_shared/hibp.ts` já rodava no cadastro e
+//    no reset; este era o terceiro caminho e o único sem ele.
+//
+// 3. Sem prova de posse. Quem pegasse uma sessão trocava a senha e expulsava o
+//    dono da própria conta.
+//
+// Agora vai por `/api/user-data` → Edge `change-password`, que confere a senha
+// atual, roda o HIBP e troca por `admin.updateUserById` (operação
+// administrativa: não esbarra na regra das 24h).
+//
+// As validações abaixo continuam aqui por UX — resposta imediata, sem ida ao
+// servidor. Elas NÃO são a fronteira de segurança: a Edge revalida todas.
 function abrirAlterarSenha() {
     _ctx.criarPopup(`
         <h3>🔒 Alterar Senha</h3>
-        <div class="small">Preencha os campos abaixo</div>
-        <input type="password" id="novaSenha"          class="form-input" placeholder="Nova senha (mín. 8 caracteres)">
-        <input type="password" id="confirmarNovaSenha" class="form-input" placeholder="Confirme a nova senha">
+        <div class="small">Confirme sua senha atual e escolha a nova</div>
+        <input type="password" id="senhaAtual"         class="form-input" placeholder="Senha atual" autocomplete="current-password">
+        <input type="password" id="novaSenha"          class="form-input" placeholder="Nova senha (mín. 8 caracteres)" autocomplete="new-password">
+        <input type="password" id="confirmarNovaSenha" class="form-input" placeholder="Confirme a nova senha" autocomplete="new-password">
         <button class="btn-primary"  id="concluirSenha">Concluir</button>
         <button class="btn-cancelar" id="cancelarSenha">Cancelar</button>
     `);
@@ -818,10 +850,11 @@ function abrirAlterarSenha() {
     document.getElementById('cancelarSenha').addEventListener('click', _ctx.fecharPopup);
 
     document.getElementById('concluirSenha').addEventListener('click', async () => {
+        const senhaAtual     = document.getElementById('senhaAtual').value;
         const novaSenha      = document.getElementById('novaSenha').value;
         const confirmarSenha = document.getElementById('confirmarNovaSenha').value;
 
-        if (!novaSenha || !confirmarSenha) {
+        if (!senhaAtual || !novaSenha || !confirmarSenha) {
             _ctx.mostrarNotificacao('Por favor, preencha todos os campos.', 'error');
             return;
         }
@@ -837,25 +870,61 @@ function abrirAlterarSenha() {
             _ctx.mostrarNotificacao('A senha deve conter ao menos uma letra maiúscula e um número.', 'error');
             return;
         }
+        if (senhaAtual === novaSenha) {
+            _ctx.mostrarNotificacao('A nova senha precisa ser diferente da atual.', 'error');
+            return;
+        }
 
         const btn = document.getElementById('concluirSenha');
         btn.disabled = true;
         btn.textContent = '⏳ Aguarde...';
+        const restaurarBotao = () => { btn.disabled = false; btn.textContent = 'Concluir'; };
+
+        let token = null;
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            token = session?.access_token ?? null;
+        } catch { /* ignore */ }
+
+        if (!token) {
+            _ctx.mostrarNotificacao('Sessão expirada. Faça login novamente.', 'error');
+            restaurarBotao();
+            return;
+        }
 
         try {
-            // Supabase Auth cuida do hash — a senha nunca é armazenada no cliente
-            const { error } = await supabase.auth.updateUser({ password: novaSenha });
-            if (error) throw error;
+            const resp = await fetch('/api/user-data', {
+                method: 'POST',
+                headers: {
+                    'Content-Type':  'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    action:          'change-password',
+                    currentPassword: senhaAtual,
+                    newPassword:     novaSenha,
+                }),
+            });
+            const result = await resp.json().catch(() => ({}));
+
+            if (!resp.ok || !result?.ok) {
+                // A mensagem do servidor é a útil ("Senha atual incorreta",
+                // "Essa senha já apareceu em vazamentos..."). Só cai no genérico
+                // quando não veio nenhuma.
+                throw new Error(result?.message || result?.error || `HTTP ${resp.status}`);
+            }
 
             _ctx.fecharPopup();
-            _ctx.mostrarNotificacao('Senha alterada com sucesso!', 'success');
+            _ctx.mostrarNotificacao(
+                result.sessoesEncerradas
+                    ? 'Senha alterada! Os outros aparelhos precisarão entrar de novo.'
+                    : 'Senha alterada com sucesso!',
+                'success');
 
         } catch (error) {
-            // ✅ CORREÇÃO: _log.error em vez de log.error
             _ctx._log.error('SENHA_001', error);
-            _ctx.mostrarNotificacao('Não foi possível alterar a senha. Tente novamente.', 'error');
-            btn.disabled = false;
-            btn.textContent = 'Concluir';
+            _ctx.mostrarNotificacao(error?.message || 'Não foi possível alterar a senha. Tente novamente.', 'error');
+            restaurarBotao();
         }
     });
 }
