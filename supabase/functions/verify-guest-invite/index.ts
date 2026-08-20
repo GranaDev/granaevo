@@ -16,6 +16,7 @@
 
 import { createClient }         from 'https://esm.sh/@supabase/supabase-js@2.49.2'
 import { CURRENT_TERMS_VERSION } from '../_shared/terms.ts'
+import { isPasswordPwned }       from '../_shared/hibp.ts'
 
 // Secret key nova (sb_secret_, injetada pela plataforma em SUPABASE_SECRET_KEYS).
 // SEM fallback na legada: as chaves antigas (anon e service_role) foram
@@ -216,6 +217,14 @@ Deno.serve(async (req) => {
 
             if (!password || password.length < PASSWORD_MIN || password.length > PASSWORD_MAX) {
                 return respond(err(cors, `A senha deve ter entre ${PASSWORD_MIN} e ${PASSWORD_MAX} caracteres.`))
+            }
+            // HIBP: o convidado define senha AQUI — era o único dos 4 pontos de
+            // criação/troca de senha sem a checagem de vazamento (create-user-account,
+            // change-password e verify-and-reset-password já tinham). Fail-open por
+            // design (ver _shared/hibp.ts): indisponibilidade do HIBP não trava o
+            // onboarding. Auditoria god-eyes 2026-08-20 (LOW/HIBP).
+            if (await isPasswordPwned(password)) {
+                return respond(err(cors, 'Essa senha apareceu em vazamentos de dados conhecidos. Escolha outra, por segurança.'))
             }
             if (!acceptedTerms) {
                 return respond(err(cors, 'Aceite os Termos de Uso para continuar.'))

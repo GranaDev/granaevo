@@ -68,6 +68,62 @@ describe('S-1 — limite de perfis não pode voltar a ser burlável por lote', (
 })
 
 // ═══════════════════════════════════════════════════════════════════════════
+describe('SEC-001d — account_members.is_active não pode ser REATIVADO pelo cliente', () => {
+  const mig = ler('supabase', 'migrations', '20260819010000_account_members_guard_reativar.sql')
+
+  test('o trigger existe e é BEFORE UPDATE em account_members', () => {
+    assert.match(mig, /CREATE TRIGGER account_members_guard_reativar\s+BEFORE UPDATE ON public\.account_members/i,
+      'Sem o trigger, o dono faz PATCH is_active:false→true direto no PostgREST e '
+      + 'reativa convidados desativados por downgrade — burla do limite de convidados.')
+  })
+
+  test('a guarda é ASSIMÉTRICA: bloqueia só a transição PARA true', () => {
+    const fn = mig.match(/CREATE OR REPLACE FUNCTION public\.trg_account_members_guard_reativar[\s\S]*?\$\$;/)
+    assert.ok(fn, 'A função-trigger sumiu da migration.')
+    assert.match(fn[0], /IF\s+NEW\.is_active\s+IS\s+NOT\s+TRUE\s+THEN[\s\S]{0,80}RETURN NEW/i,
+      'Ir para false/NULL (remover convidado — o caminho da UI) tem de PASSAR. Diferente '
+      + 'de profiles, aqui o cliente PRECISA desativar; por isso não se revoga o grant.')
+    assert.match(fn[0], /OLD\.is_active\s+IS\s+NOT\s+DISTINCT\s+FROM\s+NEW\.is_active[\s\S]{0,80}RETURN NEW/i,
+      'is_active inalterado (ex.: renomear convidado com is_active true→true) tem de PASSAR.')
+  })
+
+  test('reativar por cliente (auth.uid() NOT NULL) é recusado; service_role passa', () => {
+    const fn = mig.match(/CREATE OR REPLACE FUNCTION public\.trg_account_members_guard_reativar[\s\S]*?\$\$;/)[0]
+    assert.match(fn, /IF\s+auth\.uid\(\)\s+IS\s+NOT\s+NULL\s+THEN[\s\S]{0,200}RAISE EXCEPTION/i,
+      'auth.uid() NULL = service_role (verify-guest-invite reconvite, update-stripe-plan '
+      + 'restore, cron). É a MESMA convenção de trg_profiles_guard_is_active, provada em prod.')
+  })
+
+  test('NÃO revoga o grant de is_active — a UI ainda desativa convidado', () => {
+    assert.doesNotMatch(mig, /REVOKE\s+UPDATE[\s\S]{0,60}is_active[\s\S]{0,60}account_members/i,
+      'Revogar UPDATE(is_active) quebraria removerConvidado() na interface, que faz um '
+      + 'UPDATE direto. A defesa é o trigger de DIREÇÃO, não a revogação do grant.')
+    const js = ler('src', 'scripts', 'pages', 'db-configuracoes.js')
+    assert.match(js, /\.from\('account_members'\)\s*\n?\s*\.update\(\s*\{\s*is_active:\s*false/,
+      'Se a UI parar de usar UPDATE is_active:false, o trigger assimétrico vira cruft e a '
+      + 'remoção de convidado precisa migrar para uma RPC service_role.')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('HIBP — TODO ponto que define/troca senha checa vazamento (LOW/god-eyes 2026-08-20)', () => {
+  // O advisor "leaked password protection disabled" é mitigado na aplicação, mas
+  // só vale se cobrir os QUATRO caminhos. verify-guest-invite era o furo: validava
+  // só comprimento. Se qualquer um parar de chamar isPasswordPwned, a mitigação
+  // vira meia-mitigação e o gap volta em silêncio.
+  for (const edge of ['create-user-account', 'change-password',
+                      'verify-and-reset-password', 'verify-guest-invite']) {
+    test(`${edge} importa e chama isPasswordPwned`, () => {
+      const src = ler('supabase', 'functions', edge, 'index.ts')
+      assert.match(src, /import\s*\{\s*isPasswordPwned\s*\}\s*from\s*'\.\.\/_shared\/hibp\.ts'/,
+        `${edge} define/troca senha e precisa checar HIBP — o GoTrue do plano Free não faz.`)
+      assert.match(src, /isPasswordPwned\(/,
+        `${edge} importa mas não chama isPasswordPwned — a checagem existe e não protege nada.`)
+    })
+  }
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
 describe('A-2 — o X da caixa de entrada do sino precisa continuar funcionando', () => {
   test('existe GRANT UPDATE (dismissed_at) e ele é POR COLUNA', () => {
     contemNasMigrations(/GRANT\s+UPDATE\s*\(\s*dismissed_at\s*\)\s+ON\s+public\.radar_notifications/i,
