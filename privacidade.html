@@ -108,7 +108,10 @@
                 <p class="page-subtitle">
                     Como coletamos, usamos e protegemos seus dados pessoais — conforme a LGPD (Lei nº 13.709/2018)
                 </p>
-                <p class="last-update">Última atualização: <strong id="updateDate">Julho de 2026</strong></p>
+                <!-- A VERSÃO precisa aparecer: é ela que `terms_acceptance.version` grava.
+                     Sem ela na página, o titular não consegue amarrar o que aceitou ao
+                     texto que leu (achado A-5 da auditoria LGPD de 2026-08-21). -->
+                <p class="last-update">Versão <strong id="termsVersion">1.3</strong> — última atualização: <strong id="updateDate">Agosto de 2026</strong></p>
             </div>
 
             <div class="terms-content">
@@ -269,6 +272,7 @@
                                 <li><strong>ImprovMX:</strong> recebimento dos e-mails enviados para os endereços <em>@granaevo.com</em> (privacidade, suporte, contato). Se você nos escrever, a mensagem passa por eles antes de chegar até nós — portanto recebem <strong>o que você mesmo escrever no e-mail</strong>, incluindo seu endereço de remetente. Não têm acesso à sua conta nem aos seus dados financeiros. Política: <em>improvmx.com/privacy</em>.</li>
                                 <li><strong>Resend (Plus Five Five, Inc.):</strong> envio de e-mails transacionais (boas-vindas, confirmação de conta, redefinição de senha, avisos de assinatura). Recebe seu <strong>e-mail e nome</strong> para entregar a mensagem — <strong>sem dados financeiros</strong>. Política: <em>resend.com/legal/privacy-policy</em>.</li>
                                 <li><strong>Upstash:</strong> limitação de requisições (rate limiting) para proteção contra abuso e ataques. Pode processar seu <strong>endereço IP</strong> de forma efêmera. Política: <em>upstash.com/trust/privacy.pdf</em>.</li>
+                                <li><strong>Serviços de notificação push do seu aparelho — Google (Firebase Cloud Messaging), Mozilla, Apple ou Microsoft:</strong> só entram em cena <strong>se você ativar as notificações</strong>, e qual deles é usado depende do navegador e do sistema do seu aparelho, não de uma escolha nossa. Eles recebem o <strong>endereço técnico de entrega do seu dispositivo</strong> (gerado pelo próprio navegador) e o momento do envio. <strong>Não conseguem ler o conteúdo da notificação:</strong> ele viaja criptografado de ponta a ponta, com chaves que só o seu aparelho possui. Ao desativar as notificações no aplicativo, esse endereço é apagado do nosso banco. Políticas: <em>firebase.google.com/support/privacy</em>, <em>mozilla.org/privacy</em>, <em>apple.com/legal/privacy</em>, <em>privacy.microsoft.com</em>.</li>
                             </ul>
                         </div>
 
@@ -291,7 +295,8 @@
                                 <li><strong>Anthropic</strong> (assistente por IA, EUA) — recebe apenas o texto pseudonimizado das mensagens do assistente;</li>
                                 <li><strong>Sentry</strong> (diagnóstico de erros, EUA);</li>
                                 <li><strong>ImprovMX</strong> (recebimento dos e-mails <em>@granaevo.com</em>, França — União Europeia);</li>
-                                <li><strong>Resend</strong> (envio de e-mails, EUA) e <strong>Upstash</strong> (proteção contra abuso, EUA).</li>
+                                <li><strong>Resend</strong> (envio de e-mails, EUA) e <strong>Upstash</strong> (proteção contra abuso, EUA);</li>
+                                <li><strong>Google, Mozilla, Apple ou Microsoft</strong> (entrega das notificações push, EUA) — <strong>somente se você ativar as notificações</strong>. Recebem o endereço técnico de entrega do aparelho e o momento do envio; o conteúdo vai criptografado de ponta a ponta e não é legível por eles.</li>
                             </ul>
                         </div>
                         <p>Essas transferências são realizadas com as salvaguardas previstas no <strong>art. 33 da LGPD</strong>: os operadores adotam padrões equivalentes de proteção (GDPR, SOC 2, ISO 27001) e o tratamento é regido por <strong>cláusulas contratuais padrão</strong> constantes dos acordos de proteção de dados (DPA) firmados com cada um.</p>

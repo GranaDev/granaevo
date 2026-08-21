@@ -105,7 +105,10 @@
                 <p class="page-subtitle">
                     Leia atentamente antes de utilizar a plataforma GranaEvo
                 </p>
-                <p class="last-update">Última atualização: <strong id="updateDate">Julho de 2026</strong></p>
+                <!-- A VERSÃO precisa aparecer: é ela que `terms_acceptance.version` grava.
+                     Sem ela na página, o titular não consegue amarrar o que aceitou ao
+                     texto que leu (achado A-5 da auditoria LGPD de 2026-08-21). -->
+                <p class="last-update">Versão <strong id="termsVersion">1.3</strong> — última atualização: <strong id="updateDate">Agosto de 2026</strong></p>
             </div>
 
             <div class="terms-content">
@@ -232,7 +235,11 @@
                             <li>Acesso aos dados pessoais armazenados;</li>
                             <li>Correção de dados incompletos ou desatualizados;</li>
                             <li>Portabilidade dos dados em formato estruturado;</li>
-                            <li>Solicitação de exclusão antecipada, mediante requisição a <a href="mailto:suporte@granaevo.com">suporte@granaevo.com</a>;</li>
+                            <!-- Exclusão de dados é direito do titular (LGPD art. 18, VI), não
+                                 atendimento comercial: o canal tem de ser o do Encarregado, o
+                                 mesmo que a Política de Privacidade informa. Canais divergentes
+                                 entre os dois documentos era o achado A-11 (auditoria 2026-08-21). -->
+                            <li>Solicitação de exclusão antecipada, mediante requisição ao nosso Encarregado de Proteção de Dados em <a href="mailto:privacidade@granaevo.com">privacidade@granaevo.com</a> — ou, a qualquer momento, pelo próprio aplicativo, em <strong>Configurações → Excluir conta</strong>;</li>
                             <li>Revogação de consentimento a qualquer momento.</li>
                         </ul>
 
@@ -343,8 +350,16 @@
                             <li><strong>Stripe:</strong> processamento de pagamentos e gestão de assinaturas;</li>
                             <li><strong>Supabase:</strong> banco de dados e autenticação;</li>
                             <li><strong>Vercel:</strong> hospedagem e infraestrutura de rede;</li>
-                            <li><strong>Cloudflare:</strong> proteção contra ataques e CDN.</li>
+                            <li><strong>Cloudflare:</strong> proteção contra ataques e CDN;</li>
+                            <li><strong>Cloudflare Turnstile:</strong> verificação de que você é uma pessoa, e não um robô, nas telas de login, cadastro e redefinição de senha;</li>
+                            <li><strong>Anthropic PBC:</strong> modelo de Inteligência Artificial que interpreta as mensagens do assistente — recebe apenas o texto da mensagem, sem seu nome, e-mail ou dados financeiros;</li>
+                            <li><strong>Sentry:</strong> monitoramento e diagnóstico de erros técnicos da aplicação;</li>
+                            <li><strong>Resend:</strong> envio dos e-mails da plataforma (boas-vindas, confirmação, redefinição de senha, avisos de assinatura);</li>
+                            <li><strong>ImprovMX:</strong> recebimento dos e-mails enviados para os endereços <em>@granaevo.com</em>;</li>
+                            <li><strong>Upstash:</strong> limitação de requisições para proteção contra abuso.</li>
                         </ul>
+                        <p>Caso você <strong>ative as notificações no seu aparelho</strong>, o envio depende ainda do serviço de push do fabricante do seu navegador ou sistema — <strong>Google (Firebase Cloud Messaging), Mozilla, Apple ou Microsoft</strong>, conforme o dispositivo que você usar. O conteúdo da notificação viaja <strong>criptografado de ponta a ponta</strong>: esses serviços entregam a mensagem sem conseguir lê-la.</p>
+                        <p>A lista completa e detalhada de cada operador, com a descrição exata do que recebe e o país onde opera, está na <a href="/privacidade">Política de Privacidade</a>.</p>
                         <p>O usuário deve consultar os termos e políticas de privacidade de cada um desses serviços, pois estão sujeitos a suas próprias condições independentes.</p>
                     </div>
                 </article>

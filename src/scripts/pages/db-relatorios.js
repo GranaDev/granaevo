@@ -97,6 +97,12 @@ const sanitizeNumber = (...a) => _ctx.sanitizeNumber(...a);
 const sanitizeDate        = (...a) => _ctx.sanitizeDate(...a);
 const dataParaISO         = (...a) => _ctx.dataParaISO(...a);
 const _sanitizeText       = (...a) => _ctx._sanitizeText(...a);
+
+// Rede de segurança para quando `_ctx.sanitizeHTML` não estiver disponível. Não
+// substitui o sanitizador do dashboard — só garante que o CAMINHO DE FALHA escape
+// em vez de devolver a string crua. Ver uso em _renderLinhas.
+const _ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const _escapaHTMLBasico = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => _ESC_MAP[c]);
 const safeCategorias      = (...a) => _ctx.safeCategorias(...a);
 const sanitizarHTMLPopup  = (...a) => _ctx.sanitizarHTMLPopup(...a);
 
@@ -3413,7 +3419,13 @@ function gerarHistoricoPatrimonial(container) {
             const delta = l._prev != null ? l.patrimonio - l._prev : 0;
             const corD  = delta > 0 ? 'var(--success)' : delta < 0 ? 'var(--danger)' : 'var(--text-muted)';
             const icD   = delta > 0 ? 'arrow-up' : delta < 0 ? 'arrow-down' : 'minus';
-            const mesEsc = _ctx.sanitizeHTML ? _ctx.sanitizeHTML(l.label) : l.label;
+            // O fallback de um escape tem de ESCAPAR. Antes era `: l.label` — cru.
+            // `_ctx` é acoplamento invisível entre chunks: se ele se perdesse num
+            // split futuro, o "sanitizador" viraria passthrough silencioso e este
+            // é o único dos 7 call-sites do módulo que não estouraria alto.
+            // Hoje `l.label` é rótulo de período gerado (não dado do usuário), então
+            // isto é defesa em profundidade, não correção de furo. (Auditoria 2026-08-21)
+            const mesEsc = (_ctx.sanitizeHTML ?? _escapaHTMLBasico)(l.label);
             return `<tr class="rel-patr-row">
                 <td class="rel-patr-mes">${mesEsc}</td>
                 <td style="color:var(--success)">${fmt(l.entradas)}</td>

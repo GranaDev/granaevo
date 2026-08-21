@@ -44,11 +44,29 @@ vulnerabilidade, ou falha que exponha dados de um usuário a outro.
 - **Backups/recuperação:** snapshots diários cifrados (`user_data_snapshots`, 5d) + backups de perfil (90d).
 
 ## Registro de Incidentes (append-only)
+> ⚠️ **Este registro é versionado no git, num repositório público.** Não escreva aqui
+> e-mail, `user_id`, CPF ou qualquer identificador direto de titular — registrar um
+> incidente de privacidade criando uma exposição nova é o pior desfecho possível.
+> Use uma referência interna e mantenha a identificação fora do repositório.
+
 | Data/hora | Detectado por | Descrição | Dados/titulares | Gravidade | ANPD notificada? | Titulares notificados? | Correção | Status |
 |---|---|---|---|---|---|---|---|---|
-| _(sem incidentes registrados)_ | | | | | | | | |
+| 2026-06-23 | Titular afetado (relato direto ao desenvolvedor) | **Perda de dados (wipe), não vazamento.** `loadUserData()` devolvia estrutura vazia em qualquer falha transitória (token/HTTP/timeout/rede); o auto-save de 30s e o POST de `beforeunload` então gravavam o perfil VAZIO por cima do banco. O guard antigo só barrava "zero perfis", não perfil esvaziado. Restaurar backup não resolvia: restaurava → recarregava → load falhava → reapagava. | **1 titular.** Dados financeiros próprios (transações, contas fixas, cartões, metas). **Sem acesso por terceiro em nenhum momento** — nenhum dado saiu do ambiente. | **Relevante** — perda total de disponibilidade e integridade para o titular | ⏳ **avaliação pendente** — ver nota abaixo | ✅ Sim — o titular foi quem reportou e acompanhou toda a recuperação | **1)** Guard anti-wipe no cliente (`e3daa82`). **2)** Como o navegador do titular rodava bundle/Service Worker antigo e reapagou, foi necessário guard **autoritativo no servidor** em `save-user-data`, que decifra o registro atual e rejeita com `409 WIPE_BLOCKED` qualquer save que esvaziaria perfil com dados (`abc2c33`) — imune à versão do cliente. **3)** Restauração pelo snapshot cifrado de 2026-06-20 (22.091 bytes; o vivo estava em 1.231). | ✅ **Fechado** — dados recuperados e confirmados pelo titular |
+
+> **Nota sobre a notificação à ANPD (art. 48) — pendente de decisão do controlador.**
+> O incidente foi de **disponibilidade/integridade**, não de confidencialidade: não houve
+> acesso não autorizado e nenhum dado saiu do ambiente. O art. 48 exige comunicação
+> quando o incidente "possa acarretar risco ou dano relevante aos titulares" — e a perda
+> total dos dados de um titular é dano relevante, ainda que ele tenha sido recuperado
+> integralmente no mesmo dia e acompanhado o processo.
+>
+> O registro fica com a avaliação **explicitamente em aberto** em vez de marcada como
+> "não aplicável": a decisão é do controlador, e um registro que afirma uma conclusão
+> jurídica que ninguém tomou vale menos do que um que admite a lacuna.
+> Registrado retroativamente em 2026-08-21, na auditoria LGPD (achado A-10).
 
 ## Histórico de revisões
 | Data | Versão | Mudança |
 |---|---|---|
 | 2026-07-07 | 1.0 | Criação (God Eyes / remediação LGPD). |
+| 2026-08-21 | 1.1 | Registro retroativo do incidente de perda de dados de 2026-06-23 (achado A-10: o registro estava vazio apesar de um incidente conhecido e já corrigido). Aviso de PII no topo do registro — o arquivo é versionado em repositório público. |

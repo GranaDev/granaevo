@@ -47,14 +47,37 @@ audit log imutável; rate limiting; CSP estrito; upload com validação de assin
 
 ## 6. Ciclo de vida / descarte
 Purga automática (pg_cron): contas canceladas 90d, não-pagas, abandonadas; snapshots 5d; backups 90d;
-audit log 6m. Todas com FK ON DELETE CASCADE para auth.users, exceto os legados da Cakto (integração
+audit log 6m. **As tabelas** têm FK ON DELETE CASCADE para auth.users, exceto os legados da Cakto (integração
 encerrada em 2026-05-21), agora **sem PII**: `subscriptions_cakto_archive` (e-mail/nome/CPF/telefone
 anonimizados) e `payment_events` (payloads de webhook redigidos; cron mensal `granaevo-purge-payment-events-pii`).
 Não há novos registros nessas tabelas.
 
+> ⚠️ **O que a cascata NÃO alcança — corrigido em 2026-08-21, registrado para não repetir.**
+>
+> Até esta data esta seção dizia "**Todas** com FK ON DELETE CASCADE para auth.users". A
+> frase era verdadeira para tabelas e **falsa para o produto**: as **fotos de perfil** ficam
+> em `storage.objects`, que **não tem FK** para `auth.users` — o vínculo com o dono é o
+> *nome do arquivo* (`<user_id>/<timestamp>.ext`). Cascata não segue nome de arquivo.
+>
+> O efeito medido em 2026-08-21: **35 de 44 objetos**, em **14 de 16 pastas**, pertenciam a
+> titulares já excluídos — o mais antigo havia **7 meses**, enquanto `termos.html` prometia
+> que a exclusão removia "inclusive fotografias".
+>
+> Eram **quatro** os caminhos que apagavam usuário e nenhum tocava o bucket: a edge
+> `delete-account` (corrigida e publicada, v12) e os três crons de purga — que são **SQL
+> puro e não conseguem chamar a Storage API**. Para os crons, a varredura por
+> `public.listar_fotos_orfas()` não é rede de segurança: é o único caminho possível.
+>
+> **A regra que fica:** ao afirmar cobertura de descarte, diga de qual *tipo de repositório*
+> a garantia vale. `ON DELETE CASCADE` é propriedade do **tipo tabela**; todo dado que não
+> é linha — objeto de Storage, chave em cache, arquivo em bucket, registro num SaaS externo
+> — fica de fora por construção, e a checagem "as FKs estão certas?" passa em verde para
+> sempre sem nunca olhar para ele.
+
 ## 7. Histórico de revisões
 | Data | Versão | Mudança |
 |---|---|---|
+| 2026-08-21 | 1.3 | **Auditoria God Mode + God Eyes.** §6: corrigida a afirmação de que "todas" as tabelas têm CASCADE — verdadeira para tabelas, mas as **fotos de perfil** vivem em `storage.objects`, sem FK, e nenhum dos 4 caminhos de exclusão as alcançava (35 objetos órfãos de 14 titulares, o mais antigo de 09/01). Documentada a regra de método para não repetir. Publicados também nos documentos ao titular os operadores que já constavam aqui mas faltavam em `termos.html` (6 dos 10) e os **serviços de push**, que constavam na atividade nº 10 e em nenhum documento público. |
 | 2026-07-07 | 1.0 | Criação. Inclui assistente IA (Anthropic) e diagnóstico (Sentry). |
 | 2026-07-31 | 1.2 | **Turnstile substitui o Google reCAPTCHA** (nº 12 — o Google deixa de ser operador). Duas atividades que existiam no código e faltavam aqui: **nº 13 aparelhos reconhecidos** (`user_devices`, base do alerta de login novo) e **nº 14 recebimento de e-mails** (ImprovMX, França/UE — 1º operador fora dos EUA). Corrigido também que **não usamos o Cloudflare Insights**: a análise de tráfego é bloqueada pela CSP do próprio site, e estava declarada como se acontecesse. |
 | 2026-07-12 | 1.1 | DPAs firmados (com SCCs); DPO "Equipe GranaEvo"; canais privacidade@/suporte@/contato@; retenção Anthropic confirmada (30d); redação de PII legada Cakto (`payment_events` + `subscriptions_cakto_archive`); Resend/Upstash na política. Pós-auditoria /god-mode. |

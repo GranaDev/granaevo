@@ -31,4 +31,21 @@
 // reCAPTCHA em 2026-07-27, e o Google seguia listado como operador) e ImprovMX
 // (recebe os e-mails de @granaevo.com). Ver privacidade.html e
 // docs/compliance/RoPA.md §7.
-export const CURRENT_TERMS_VERSION = '1.2'
+
+// 1.3 (2026-08-21) — auditoria LGPD do God Mode. Mesmo padrão do 1.2: tratamento
+// que JÁ acontecia e não estava declarado no documento que o titular efetivamente
+// aceita.
+//   · `termos.html` §12 listava 4 operadores; a `privacidade.html` já listava 10.
+//     Quem aceita os Termos via quatro nomes e concordava com dez (achado A-2).
+//   · Os SERVIÇOS DE PUSH (Google/FCM, Mozilla, Apple, Microsoft) não estavam em
+//     NENHUM dos dois documentos, nem na seção de transferência internacional —
+//     e são acionados sempre que o usuário liga as notificações (achado A-3).
+//   · A página passou a exibir a VERSÃO, não só o mês: é a versão que
+//     `terms_acceptance.version` grava, e sem ela o titular não consegue amarrar o
+//     que aceitou ao texto que leu (achado A-5).
+//
+// ⚠️ Subir esta constante FORÇA re-aceite de todos os usuários no próximo acesso.
+// É o comportamento correto e o mesmo precedente do 1.2 — mas confirme que
+// `aceitar-termos.html` está no ar antes de publicar, senão o app trava todo mundo
+// numa tela que não existe.
+export const CURRENT_TERMS_VERSION = '1.3'

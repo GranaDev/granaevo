@@ -181,6 +181,36 @@ Deno.serve(async (req: Request) => {
     return json({ ok: false, error: 'delete_failed', message: 'Não foi possível excluir a conta agora. Tente novamente ou contate o suporte.' }, 500, cors)
   }
 
+  // ── 6. Apaga as fotos do Storage — a cascata de FK NÃO alcança o bucket ──────
+  //
+  // ARMADILHA (auditoria 2026-08-21): o passo 5 confia nas 25 FKs ON DELETE CASCADE,
+  // e elas de fato limpam as 16 tabelas. Mas `storage.objects` não tem FK para
+  // `auth.users` — o vínculo é o NOME do arquivo (`${user_id}/${ts}.ext`, ver
+  // upload-profile-photo:351). Sem este bloco a foto sobrevive à exclusão da conta:
+  // em 2026-08-21 havia 35 de 44 arquivos em 14 pastas de usuários inexistentes,
+  // o mais antigo de 2026-01-09. Isso contraria termos.html:219-225 ("incluindo
+  // Perfis e fotografias") e o art. 16 da LGPD.
+  //
+  // ORDEM: DEPOIS do deleteUser, nunca antes. Se apagássemos a foto primeiro e o
+  // deleteUser falhasse, destruiríamos dado de uma conta VIVA. Apagando depois, o
+  // pior caso é um órfão — que o backstop varre. Falha aqui não reverte a exclusão:
+  // a conta já não existe e devolver erro faria o usuário tentar de novo à toa.
+  try {
+    const { data: arquivos, error: listErr } = await supabaseAdmin
+      .storage.from('profile-photos').list(user.id, { limit: 100 })
+    if (listErr) {
+      console.error(`[delete-account][rid=${rid}] storage_list_falhou ${listErr.message}`)
+    } else if (arquivos?.length) {
+      const caminhos = arquivos.map((a) => `${user.id}/${a.name}`)
+      const { error: rmErr } = await supabaseAdmin
+        .storage.from('profile-photos').remove(caminhos)
+      if (rmErr) console.error(`[delete-account][rid=${rid}] storage_remove_falhou n=${caminhos.length} ${rmErr.message}`)
+      else       console.log(`[delete-account][rid=${rid}] storage_fotos_removidas n=${caminhos.length}`)
+    }
+  } catch (e) {
+    console.error(`[delete-account][rid=${rid}] storage_remove_excecao ${(e as Error).message}`)
+  }
+
   console.log(`[delete-account][rid=${rid}] Conta excluída — user: ${user.id.slice(0, 8)} guest: ${!!guestRow} tinha_sub_ativa: ${!!sub}`)
   return json({
     ok: true,

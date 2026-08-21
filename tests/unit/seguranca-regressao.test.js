@@ -288,6 +288,63 @@ describe('M-4 — purgas não podem apagar convidado ativo', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════════════════
+describe('LGPD-A1 — a exclusão de conta precisa alcançar o Storage', () => {
+  // Achado da auditoria 2026-08-21: `delete-account` confiava só nas FKs
+  // ON DELETE CASCADE. `storage.objects` NÃO tem FK para auth.users — o vínculo é
+  // o nome do arquivo (`${user_id}/…`). Resultado medido em produção: 35 de 44
+  // arquivos em 14 pastas de usuários inexistentes, o mais antigo de 2026-01-09,
+  // contrariando termos.html ("incluindo Perfis e fotografias") e o art. 16.
+  //
+  // Comentários são removidos antes de asserir: um teste sobre o FONTE que aceita
+  // comentário passa com o código apagado e a intenção só descrita.
+  const semComentarios = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const da = semComentarios(ler('supabase', 'functions', 'delete-account', 'index.ts'))
+
+  test('remove os objetos do bucket profile-photos', () => {
+    assert.match(da, /storage\s*\.\s*from\(\s*['"]profile-photos['"]\s*\)[\s\S]{0,200}?\.remove\(/,
+      'Sem esta remoção a foto do titular sobrevive à exclusão da conta. A cascata de '
+      + 'FK limpa as 16 tabelas e NÃO toca no bucket — não há FK para alcançar.')
+  })
+
+  test('a remoção vem DEPOIS do deleteUser, nunca antes', () => {
+    const iDel = da.search(/auth\.admin\.deleteUser\(/)
+    const iRm  = da.search(/from\(\s*['"]profile-photos['"]\s*\)[\s\S]{0,200}?\.remove\(/)
+    assert.ok(iDel > -1 && iRm > -1, 'Um dos dois passos sumiu do arquivo.')
+    assert.ok(iRm > iDel,
+      'ORDEM É SEGURANÇA: apagando a foto ANTES, um deleteUser que falhe destrói dado '
+      + 'de uma conta VIVA. Depois, o pior caso é um órfão — recuperável por varredura.')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
+describe('Cache — o immutable dos assets com hash não pode ser sobrescrito', () => {
+  // Na Vercel a ÚLTIMA regra de header que casa vence. O genérico /(.*)\.js
+  // estava DEPOIS de /assets/(.*)\.js e anulava o immutable — provado por
+  // comportamento em produção (2026-08-21): /assets/dashboard-COI3enXc.js
+  // respondia max-age=3600. Delimito por índice de regra, não por posição de
+  // caractere: teste com janela fixa apodrece quando o arquivo engorda.
+  const vc = JSON.parse(ler('vercel.json'))
+  const idxDe = (src) => vc.headers.findIndex((h) => h.source === src)
+
+  test('os padrões genéricos vêm ANTES dos de /assets/', () => {
+    for (const ext of ['js', 'css']) {
+      const generico   = idxDe(`/(.*)\\.${ext}`)
+      const especifico = idxDe(`/assets/(.*)\\.${ext}`)
+      assert.ok(generico > -1 && especifico > -1, `Regra de .${ext} sumiu do vercel.json.`)
+      assert.ok(especifico > generico,
+        `/assets/(.*).${ext} precisa vir DEPOIS de /(.*).${ext}, senão o genérico vence `
+        + 'e os arquivos com hash de conteúdo perdem o immutable.')
+    }
+  })
+
+  test('o bloco do service worker continua sendo o último a casar .js', () => {
+    const sw = vc.headers.findIndex((h) => /\(sw\|/.test(h.source ?? ''))
+    assert.ok(sw > idxDe('/(.*)\\.js'),
+      'O sw.js precisa vencer o genérico — é o que fecha a janela pós-deploy do PWA.')
+  })
+})
+
+// ═══════════════════════════════════════════════════════════════════════════
 describe('Assistente — a IA continua sendo função, nunca interlocutor', () => {
   const cp = ler('supabase', 'functions', 'chat-parse', 'index.ts')
 

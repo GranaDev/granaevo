@@ -436,6 +436,19 @@ verify_jwt = false
 [functions.delete-account]
 verify_jwt = false
 
+# change-password: troca de senha com re-autenticação (corrige a "parede das 24h").
+# Auth própria: x-proxy-secret (index.ts:129) + auth.getUser (index.ts:143).
+#
+# ⚠️ A ARMADILHA DA LINHA 458 PEGOU ESTA FUNÇÃO DE VERDADE (achado 2026-08-21).
+# Ela foi publicada SEM bloco aqui, então herdou o default verify_jwt=true do CLI e
+# ficou sendo a ÚNICA das 36 edges com `true`. O gateway valida o JWT com o segredo
+# HS256 LEGADO; como os tokens deste projeto são ES256, ele devolveria 401 ANTES do
+# código rodar. Como o FRONT ainda não subiu, ninguém tinha exercitado o caminho —
+# a quebra estava agendada para o dia do lançamento, com a causa escondida no
+# gateway (o log da função nem apareceria, porque ela nunca seria invocada).
+[functions.change-password]
+verify_jwt = false
+
 # send-guest-invite: auth própria (x-proxy-secret + auth.getUser ES256). O verify_jwt
 # do gateway só valida o secret HS256 LEGADO — com tokens ES256 ele devolveria 401
 # antes do código e QUEBRARIA convites no próximo deploy (em prod já rodava false).
